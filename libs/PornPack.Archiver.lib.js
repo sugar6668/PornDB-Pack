@@ -148,7 +148,7 @@ window.PornArchiver = class PornArchiver {
         if (item.coverUrl) {
             if (this.updateBtnUI) this.updateBtnUI(item.hash, `🖼️ 上传封面...`, '#f39c12');
             try {
-                const coverRes = await this.req115.handleCover(item.coverUrl, finalCid, `${item.matchPrefix || 'cover'}.jpg`);
+                const coverRes = await this.req115.handleCover(item.coverUrl, finalCid, item.coverName || 'cover.jpg');
                 if (coverRes?.data?.file_id || coverRes?.data?.fileid) {
                     await this.sleep(1500);
                     await this.req115.filesEdit(finalCid, coverRes.data.file_id || coverRes.data.fileid);
@@ -234,7 +234,7 @@ window.PornArchiver = class PornArchiver {
 
         // 原生封面挂载
         if (details.coverUrl) {
-            const coverRes = await this.req115.handleCover(details.coverUrl, targetCid, `${details.matchPrefix || 'cover'}.jpg`);
+            const coverRes = await this.req115.handleCover(details.coverUrl, targetCid, `${details.maker}.${details.dateStr}.jpg`);
             if (coverRes?.data?.fileid || coverRes?.data?.file_id) {
                 await this.req115.filesEdit(targetCid, coverRes.data.fileid || coverRes.data.file_id);
             }
