@@ -17,7 +17,7 @@ window.PornParser = class PornParser {
     }
 
     /**
-     * 解析英文日期字符串（如 Jan 5, 2024）为 2024.01.05
+     * 解析英文日期字符串（如 Jan 5, 2024）为两位数年份：24.01.05
      */
     static parseDate(str) {
         const months = { jan: '01', feb: '02', mar: '03', apr: '04', may: '05', jun: '06', jul: '07', aug: '08', sep: '09', oct: '10', nov: '11', dec: '12' };
@@ -26,7 +26,8 @@ window.PornParser = class PornParser {
             const mm = months[m[1].toLowerCase().substring(0, 3)];
             if (!mm) return '';
             const dd = m[2].padStart(2, '0');
-            return `${m[3]}.${mm}.${dd}`;
+            // 🌟 核心修改：利用 slice(-2) 直接截取年份 m[3] 的最后两位
+            return `${m[3].slice(-2)}.${mm}.${dd}`;
         }
         return '';
     }
