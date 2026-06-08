@@ -23,11 +23,11 @@ window.PornArchiver = class PornArchiver {
         try {
             const success = await this.executePipeline(item);
             if (!success) {
-                if (this.updateBtnUI) this.updateBtnUI(item.hash, `❌ 验证失败/超时`, '#dc3545');
+                if (this.updateBtnUI) this.updateBtnUI(item.hash, `验证失败/超时`, '#dc3545');
             }
         } catch (e) {
             console.error("离线高级链路执行异常:", e);
-            if (this.updateBtnUI) this.updateBtnUI(item.hash, `❌ 执行异常`, '#dc3545');
+            if (this.updateBtnUI) this.updateBtnUI(item.hash, `执行异常`, '#dc3545');
         }
     }
 
@@ -55,10 +55,10 @@ window.PornArchiver = class PornArchiver {
                     file_id = String(task.file_id);
                     break;
                 } else if (task.status === -1) {
-                    if (this.updateBtnUI) this.updateBtnUI(item.hash, `❌ 离线报错`, '#dc3545');
+                    if (this.updateBtnUI) this.updateBtnUI(item.hash, `离线报错`, '#dc3545');
                     return false;
                 } else if (task.status === 1) {
-                    if (this.updateBtnUI) this.updateBtnUI(item.hash, `⬇️ 下载 ${Math.floor(task.percent)}%`, '#f39c12');
+                    if (this.updateBtnUI) this.updateBtnUI(item.hash, `下载 ${Math.floor(task.percent)}%`, '#f39c12');
                 }
             }
         }
@@ -66,7 +66,7 @@ window.PornArchiver = class PornArchiver {
         if (!file_id) return false;
 
         // 提取视频文件 (强制过滤 > 100MB，保留多集)
-        if (this.updateBtnUI) this.updateBtnUI(item.hash, `⏳ 提取视频...`, '#f39c12');
+        if (this.updateBtnUI) this.updateBtnUI(item.hash, `提取视频...`, '#f39c12');
         for (let i = 0; i < 10; i++) {
             await this.sleep(1000);
             const { data } = await this.req115.filesAllVideos(file_id);
@@ -105,13 +105,13 @@ window.PornArchiver = class PornArchiver {
         // ==========================================
         // 步骤 2：handleClean (调用原生清理组件，秒杀广告和空壳)
         // ==========================================
-        if (this.updateBtnUI) this.updateBtnUI(item.hash, `🧹 清理杂质...`, '#f39c12');
+        if (this.updateBtnUI) this.updateBtnUI(item.hash, `清理杂质...`, '#f39c12');
         await this.req115.handleClean(keepFiles, file_id);
 
         // ==========================================
         // 步骤 3：handleRename (调用原生重命名组件，含多集编号和中文后缀)
         // ==========================================
-        if (this.updateBtnUI) this.updateBtnUI(item.hash, `📝 智能重命名...`, '#f39c12');
+        if (this.updateBtnUI) this.updateBtnUI(item.hash, `智能重命名...`, '#f39c12');
         
         // 严谨的中文标识判断机制
         const checkZh = (name) => {
@@ -138,7 +138,7 @@ window.PornArchiver = class PornArchiver {
         // ==========================================
         // 步骤 4：物理转移到最终演员目录，并彻底销毁 BT 空壳
         // ==========================================
-        if (this.updateBtnUI) this.updateBtnUI(item.hash, `📦 转移归档...`, '#f39c12');
+        if (this.updateBtnUI) this.updateBtnUI(item.hash, `转移归档...`, '#f39c12');
         await this.req115.filesMove(keepFiles.map(f => f.fid), finalCid);
         await this.req115.rbDelete([file_id], item.cid);
 
@@ -146,7 +146,7 @@ window.PornArchiver = class PornArchiver {
         // 步骤 5：handleCover (调用原生封面组件)
         // ==========================================
         if (item.coverUrl) {
-            if (this.updateBtnUI) this.updateBtnUI(item.hash, `🖼️ 上传封面...`, '#f39c12');
+            if (this.updateBtnUI) this.updateBtnUI(item.hash, `上传封面...`, '#f39c12');
             try {
                 const coverRes = await this.req115.handleCover(item.coverUrl, finalCid, item.coverName || 'cover.jpg');
                 if (coverRes?.data?.file_id || coverRes?.data?.fileid) {
@@ -159,7 +159,7 @@ window.PornArchiver = class PornArchiver {
         // ==========================================
         // 步骤 6：全链路完成，触发界面刷新
         // ==========================================
-        if (this.updateBtnUI) this.updateBtnUI(item.hash, `🎉 刮削完成`, '#8e44ad');
+        if (this.updateBtnUI) this.updateBtnUI(item.hash, `刮削完成`, '#8e44ad');
         if (this.triggerAutoMatch) setTimeout(() => this.triggerAutoMatch(), 2500);
 
         return true;
@@ -187,7 +187,7 @@ window.PornArchiver = class PornArchiver {
             video = fbVideos[0];
         }
 
-        if (!video) throw new Error("❌ 归档中止：115中未找到该影片！");
+        if (!video) throw new Error("归档中止：115中未找到该影片！");
 
         const sourceCid = video.cid;
         const sourceFid = video.fid;

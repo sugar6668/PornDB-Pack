@@ -57,9 +57,9 @@ class MagnetSearcher {
             }
 
             const extraHtml = `<div style="font-size:11.5px; margin-top:6px; display:inline-flex; gap:12px; background:#f4f4f5; padding:4px 10px; border-radius:4px; border:1px solid #e4e7ed;">
-                ${age ? `<span style="color:#606266; font-weight:bold;" title="Age">🕒 ${age}</span>` : ''}
-                ${files ? `<span style="color:#198754; font-weight:bold;" title="Files">📁 ${files.replace('files', '文件')}</span>` : ''}
-                ${size ? `<span style="color:#0dcaf0; font-weight:bold;" title="Size">💾 ${size}</span>` : ''}
+                ${age ? `<span style="color:#606266; font-weight:bold;" title="Age">时间 ${age}</span>` : ''}
+                ${files ? `<span style="color:#198754; font-weight:bold;" title="Files">文件 ${files.replace('files', '文件')}</span>` : ''}
+                ${size ? `<span style="color:#0dcaf0; font-weight:bold;" title="Size">大小 ${size}</span>` : ''}
             </div>${excerptHtml}`;
 
             return {
@@ -91,11 +91,11 @@ class MagnetSearcher {
                 const dateStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 
                 const extraHtml = `<div style="font-size:11.5px; margin-top:6px; display:inline-flex; gap:12px; background:#f4f4f5; padding:4px 10px; border-radius:4px; border:1px solid #e4e7ed;">
-                    <span style="color:#606266; font-weight:bold;" title="收录时间">🕒 ${dateStr}</span>
-                    ${item.num_files && item.num_files !== '0' ? `<span style="color:#198754; font-weight:bold;" title="文件数">📁 ${item.num_files} 文件</span>` : ''}
-                    <span style="color:#198754; font-weight:bold;" title="做种数(Seeders)">⬆做种 ${item.seeders}</span>
-                    <span style="color:#dc3545; font-weight:bold;" title="下载数(Leechers)">⬇下载 ${item.leechers}</span>
-                    ${item.username && item.username !== 'Anonymous' ? `<span style="color:#888; font-weight:bold;" title="上传者">👤 ${item.username}</span>` : ''}
+                    <span style="color:#606266; font-weight:bold;" title="收录时间">时间 ${dateStr}</span>
+                    ${item.num_files && item.num_files !== '0' ? `<span style="color:#198754; font-weight:bold;" title="文件数">文件 ${item.num_files} 文件</span>` : ''}
+                    <span style="color:#198754; font-weight:bold;" title="做种数(Seeders)">做种 ${item.seeders}</span>
+                    <span style="color:#dc3545; font-weight:bold;" title="下载数(Leechers)">下载 ${item.leechers}</span>
+                    ${item.username && item.username !== 'Anonymous' ? `<span style="color:#888; font-weight:bold;" title="上传者">上传者 ${item.username}</span>` : ''}
                 </div>`;
 
                 return {

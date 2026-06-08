@@ -50,7 +50,7 @@ window.PornBookmark = class PornBookmark {
         const btn = document.createElement('button');
         btn.id = this.BTN_ID;
         btn.className = 'west-engine-btn';
-        btn.innerHTML = '⬇️ 导出书签';
+        btn.innerHTML = '导出书签';
         
         btn.style.cssText = `
             background: #e6a23c;
@@ -108,7 +108,7 @@ window.PornBookmark = class PornBookmark {
             const btn = document.getElementById(this.BTN_ID);
             const originalText = btn.innerHTML;
             
-            btn.innerHTML = `✅ 已导出 (${validBookmarksCount})`;
+            btn.innerHTML = `已导出 (${validBookmarksCount})`;
             btn.style.backgroundColor = '#67c23a';
             btn.style.borderColor = '#67c23a';
             
