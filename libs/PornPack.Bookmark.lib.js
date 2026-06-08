@@ -83,7 +83,8 @@ window.PornBookmark = class PornBookmark {
 
     // 5. 抓取时间轴与格式转换逻辑
     static handleExport() {
-        let pbfContent = "[Bookmark]\n";
+        // 关键修复 1：使用 Windows 原生换行符 \r\n
+        let pbfContent = "[Bookmark]\r\n";
         let validBookmarksCount = 0;
 
         const timelineContainer = document.querySelector('div.flex.flex-wrap.gap-y-5.gap-x-2');
@@ -116,7 +117,8 @@ window.PornBookmark = class PornBookmark {
                 }
 
                 if (!isNaN(ms) && ms >= 0 && timeText !== "") {
-                     pbfContent += `${validBookmarksCount}=${ms}*${titleText}\n`;
+                     // 关键修复 2：在末尾追加一个 '*'，让 PotPlayer 解析引擎认为缩略图部分为空，而不是格式错误
+                     pbfContent += `${validBookmarksCount}=${ms}*${titleText}*\r\n`;
                      validBookmarksCount++;
                 }
             }
@@ -126,15 +128,13 @@ window.PornBookmark = class PornBookmark {
             const finalName = this.getStandardizedFilename();
             this.downloadFile(pbfContent, `${finalName}.pbf`);
             
-            // 按钮状态更新为“成功”，融入控制台风格
             const btn = document.getElementById(this.BTN_ID);
             const originalText = btn.innerHTML;
             
             btn.innerHTML = `✅ 已导出 (${validBookmarksCount})`;
-            btn.style.backgroundColor = '#67c23a'; // 成功绿
+            btn.style.backgroundColor = '#67c23a';
             btn.style.borderColor = '#67c23a';
             
-            // 3秒后恢复原状
             setTimeout(() => {
                 btn.innerHTML = originalText;
                 btn.style.backgroundColor = '#e6a23c';
@@ -146,9 +146,21 @@ window.PornBookmark = class PornBookmark {
         }
     }
 
-    // 6. 触发本地文件下载机制
+    // 6. 触发本地文件下载机制 (强制 UTF-16 LE 编码)
     static downloadFile(content, filename) {
-        const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+        // 关键修复 3：将 JS 原生字符串转换为 UTF-16 LE ArrayBuffer
+        const buffer = new ArrayBuffer(content.length * 2);
+        const view = new Uint16Array(buffer);
+        for (let i = 0; i < content.length; i++) {
+            view[i] = content.charCodeAt(i);
+        }
+        
+        // 关键修复 4：在文件头部追加 UTF-16 LE 专用的 BOM (Byte Order Mark: 0xFF 0xFE)
+        const bom = new Uint8Array([0xFF, 0xFE]);
+        
+        // 将 BOM 和转码后的数据合并成二进制 Blob
+        const blob = new Blob([bom, buffer], { type: 'application/octet-stream' });
+        
         const link = document.createElement('a');
         link.href = URL.createObjectURL(blob);
         link.download = filename;
