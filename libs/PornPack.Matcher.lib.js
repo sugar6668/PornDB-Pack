@@ -11,8 +11,6 @@ window.PornMatcher = class PornMatcher {
 
     /**
      * 计算视频文件名与页面抓取详情的匹配度得分
-     * @param {string} videoName - 离线/搜索出的视频文件名
-     * @param {Object} details - 刮削到的影片详细信息对象
      */
     static getMatchScore(videoName, details) {
         const n = String(videoName || '').toLowerCase();
@@ -21,11 +19,14 @@ window.PornMatcher = class PornMatcher {
         let score = 0;
         let hasDate = false, hasMaker = false, hasTitle = false, hasActor = false;
 
-        // 检查日期
+        // 🌟 修改点 1：清理了会引发 Bug 的短日期截取，直接用天然包含特性进行比对
         if (details.dateStr) {
-            const cleanDate = details.dateStr.replace(/\./g, '');
-            const shortDate = details.dateStr.substring(2);
-            if (n.includes(details.dateStr) || n.includes(cleanDate) || n.includes(shortDate) || n.includes(details.dateStr.replace(/\./g, '-'))) {
+            const cleanDate = details.dateStr.replace(/\./g, ''); // 240105
+            const dashDate = details.dateStr.replace(/\./g, '-'); // 24-01-05
+            
+            // 只要网盘文件名包含 24.01.05 或 24-01-05 或 240105 就算匹配成功。
+            // 完美兼容网盘里旧的 2024.01.05 格式 (因为 2024 包含 24)
+            if (n.includes(details.dateStr) || n.includes(cleanDate) || n.includes(dashDate)) {
                 hasDate = true;
             }
         }
@@ -63,8 +64,6 @@ window.PornMatcher = class PornMatcher {
 
     /**
      * 给“默认云下载目录”里的候选项打分 (秒传兜底算法)
-     * @param {string} name - 候选文件/目录名
-     * @param {object} item - renameQ 当前任务项
      */
     static getOfflineRescueScore(name, item) {
         const raw = String(name || '').toLowerCase();
@@ -75,39 +74,26 @@ window.PornMatcher = class PornMatcher {
         let hasMaker = false;
         let actorHits = 0;
 
-        // 1) 日期匹配
+        // 🌟 修改点 2：秒传兜底打分的日期逻辑也做同样的精简
         const dateStr = String(item.dateStr || '').trim();
         if (dateStr) {
-            const dotDate = dateStr;
             const cleanDate = dateStr.replace(/\./g, '');
             const dashDate = dateStr.replace(/\./g, '-');
 
-            const parts = dateStr.split('.');
-            let shortDotDate = '', shortCleanDate = '', shortDashDate = '';
-
-            if (parts.length === 3) {
-                shortDotDate = `${parts[0].slice(-2)}.${parts[1]}.${parts[2]}`;
-                shortCleanDate = `${parts[0].slice(-2)}${parts[1]}${parts[2]}`;
-                shortDashDate = `${parts[0].slice(-2)}-${parts[1]}-${parts[2]}`;
-            }
-
-            if (raw.includes(dotDate) || raw.includes(cleanDate) || raw.includes(dashDate) ||
-                (shortDotDate && raw.includes(shortDotDate)) ||
-                (shortCleanDate && raw.includes(shortCleanDate)) ||
-                (shortDashDate && raw.includes(shortDashDate))) {
+            if (raw.includes(dateStr) || raw.includes(cleanDate) || raw.includes(dashDate)) {
                 hasDate = true;
                 score += 120;
             }
         }
 
-        // 2) 厂牌匹配
+        // 厂牌匹配
         const maker = String(item.baseAlpha || '').toLowerCase().replace(/[^a-z0-9]/g, '');
         if (maker && maker !== 'unknown' && rawNorm.includes(maker)) {
             hasMaker = true;
             score += 70;
         }
 
-        // 3) 演员匹配
+        // 演员匹配
         const actors = Array.isArray(item.actors) ? item.actors : [];
         actors.forEach((actor) => {
             const ac = String(actor || '').toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -118,13 +104,13 @@ window.PornMatcher = class PornMatcher {
             }
         });
 
-        // 4) 组合加权
+        // 组合加权
         if (hasMaker && hasDate) score += 120;
         if (hasDate && actorHits > 0) score += 60;
         if (hasMaker && actorHits > 0) score += 40;
         if (actorHits >= 2) score += 50;
 
-        // 5) 分辨率微调
+        // 分辨率微调
         if (/2160p|1080p|4k/.test(raw)) score += 10;
 
         return score;
