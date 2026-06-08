@@ -1,35 +1,34 @@
 /**
  * @name         PornPack Bookmark Library
- * @description  PornDB 时间轴导出为 PotPlayer 书签核心模块 (控制台 UI 融合版)
- * @version      1.0.0
+ * @description  PornDB 时间轴导出为 PotPlayer 书签核心模块 (下拉双年份切换版)
+ * @version      1.1.0
  */
 
 window.PornBookmark = class PornBookmark {
     static BTN_ID = 'export-pbf-btn';
+    static GROUP_ID = 'export-pbf-group'; // 容器 ID
 
     // 1. 模块初始化入口
     static init() {
         this.ensureButtonExists();
-        // 监听动态页面切换与控制台渲染延迟
         setInterval(() => this.ensureButtonExists(), 1500);
     }
 
-    // 2. 寻找注入锚点并注入按钮
+    // 2. 寻找注入锚点并注入下拉按钮组
     static ensureButtonExists() {
         if (!location.href.includes('/scenes/')) return;
-
-        // 目标锚点：寻找磁力控制台中的“复制词条”按钮
         const targetAnchor = document.getElementById('btn-copy-kw');
         
-        // 如果磁力控制台已渲染，且书签按钮尚未注入
-        if (targetAnchor && !document.getElementById(this.BTN_ID)) {
+        // 确保容器不存在时才注入，防止重复生成
+        if (targetAnchor && !document.getElementById(this.GROUP_ID)) {
             this.createExportButton(targetAnchor);
         }
     }
 
-    // 3. 核心：获取标准化文件名 (完美复刻主脚本命名逻辑)
-    static getStandardizedFilename() {
+    // 3. 核心：获取标准化文件名，根据 yearMode (4或2) 智能处理年份
+    static getStandardizedFilename(yearMode = 4) {
         try {
+            let finalName = "";
             if (window.PornParser) {
                 const details = window.PornParser.parseWestDetails(document);
                 if (details && details.isValid) {
@@ -40,50 +39,102 @@ window.PornBookmark = class PornBookmark {
                         cleanRawTitle = cleanRawTitle.substring(maker.length).replace(/^[^a-zA-Z0-9\u4e00-\u9fa5]+/, '').trim();
                     }
                     
-                    let cleanNewName = details.matchPrefix 
+                    finalName = details.matchPrefix 
                         ? `${details.matchPrefix} ${cleanRawTitle}` 
                         : (details.fullTitle || cleanRawTitle);
-                    
-                    cleanNewName = cleanNewName.replace(/[\\/:*?"<>|]/g, '').replace(/\s+/g, ' ').trim();
-                    return cleanNewName || "视频时间轴书签";
                 }
             }
-            return document.title.replace(/[\\/:*?"<>|]/g, "_").replace(/\s+/g, ' ').trim();
+            
+            // 如果解析失败，走兜底
+            if (!finalName) {
+                finalName = document.title;
+            }
+
+            // 🌟 核心处理：如果需要两位数年份，进行正则替换
+            if (yearMode === 2) {
+                // 精准匹配： 19或20开头 + 两位数年份 + 分隔符(.-) + 月份 + 分隔符 + 日期
+                // 例如将 2024.01.05 替换为 24.01.05
+                finalName = finalName.replace(/(?:19|20)(\d{2})([.-])(0[1-9]|1[0-2])\2(0[1-9]|[12]\d|3[01])/g, "$1$2$3$2$4");
+            }
+
+            return finalName.replace(/[\\/:*?"<>|]/g, '').replace(/\s+/g, ' ').trim() || "视频时间轴书签";
+            
         } catch (e) {
             console.error("命名逻辑执行失败:", e);
             return "视频时间轴书签";
         }
     }
 
-    // 4. 创建融入控制台 UI 的按钮
+    // 4. 创建带下拉菜单的分体式按钮
     static createExportButton(targetAnchor) {
-        const btn = document.createElement('button');
-        btn.id = this.BTN_ID;
-        // 关键点：复用主脚本定义的 UI 样式类
-        btn.className = 'west-engine-btn';
-        btn.innerHTML = '⬇️ 导出书签';
-        
-        // 增加专属颜色（使用橘黄色，与现有的绿、白按钮区分开），并设置左侧间距
-        btn.style.cssText = `
-            background: #e6a23c;
-            border-color: #e6a23c;
-            color: #fff;
-            margin-left: 4px;
-        `;
-        
-        // 覆盖默认样式的 hover 颜色
-        btn.onmouseover = () => btn.style.backgroundColor = '#ebb563';
-        btn.onmouseout = () => btn.style.backgroundColor = '#e6a23c';
-        
-        btn.addEventListener('click', () => this.handleExport());
-        
-        // 关键点：将其插入到“复制词条”按钮之后
-        targetAnchor.insertAdjacentElement('afterend', btn);
+        // --- 外层容器 ---
+        const group = document.createElement('div');
+        group.id = this.GROUP_ID;
+        group.style.cssText = 'display: inline-flex; position: relative; margin-left: 4px; align-items: center;';
+
+        // --- 左侧：主按钮（默认4位年份导出）---
+        const mainBtn = document.createElement('button');
+        mainBtn.id = this.BTN_ID;
+        mainBtn.className = 'west-engine-btn';
+        mainBtn.innerHTML = '⬇️ 导出书签';
+        mainBtn.style.cssText = 'background: #e6a23c; border-color: #e6a23c; color: #fff; border-top-right-radius: 0; border-bottom-right-radius: 0;';
+        mainBtn.onmouseover = () => mainBtn.style.backgroundColor = '#ebb563';
+        mainBtn.onmouseout = () => mainBtn.style.backgroundColor = '#e6a23c';
+        mainBtn.onclick = () => this.handleExport(4); 
+
+        // --- 右侧：下拉触发按钮 ---
+        const toggleBtn = document.createElement('button');
+        toggleBtn.className = 'west-engine-btn';
+        toggleBtn.innerHTML = '▼';
+        // 利用半透明白色做出分割线效果
+        toggleBtn.style.cssText = 'background: #e6a23c; border-color: #e6a23c; color: #fff; border-left: 1px solid rgba(255,255,255,0.4); border-top-left-radius: 0; border-bottom-left-radius: 0; padding: 6px 8px;';
+        toggleBtn.onmouseover = () => toggleBtn.style.backgroundColor = '#ebb563';
+        toggleBtn.onmouseout = () => toggleBtn.style.backgroundColor = '#e6a23c';
+
+        // --- 下拉菜单面板 ---
+        const menu = document.createElement('div');
+        menu.style.cssText = 'display: none; position: absolute; top: 100%; right: 0; margin-top: 6px; background: #fff; border: 1px solid #e4e7ed; border-radius: 6px; box-shadow: 0 4px 16px rgba(0,0,0,.15); z-index: 99999; flex-direction: column; min-width: 140px; overflow: hidden;';
+
+        // 菜单项 1：完整年份
+        const item4 = document.createElement('div');
+        item4.innerHTML = '✅ 完整年份 (YYYY)';
+        item4.style.cssText = 'padding: 10px 14px; font-size: 13px; font-weight: 500; color: #606266; cursor: pointer; transition: background 0.2s;';
+        item4.onmouseover = () => item4.style.backgroundColor = '#f5f7fa';
+        item4.onmouseout = () => item4.style.backgroundColor = 'transparent';
+        item4.onclick = () => { menu.style.display = 'none'; this.handleExport(4); };
+
+        // 菜单项 2：两位数年份
+        const item2 = document.createElement('div');
+        item2.innerHTML = '✂️ 两位年份 (YY)';
+        item2.style.cssText = 'padding: 10px 14px; font-size: 13px; font-weight: 500; color: #606266; cursor: pointer; transition: background 0.2s; border-top: 1px solid #ebeef5;';
+        item2.onmouseover = () => item2.style.backgroundColor = '#f5f7fa';
+        item2.onmouseout = () => item2.style.backgroundColor = 'transparent';
+        item2.onclick = () => { menu.style.display = 'none'; this.handleExport(2); };
+
+        menu.appendChild(item4);
+        menu.appendChild(item2);
+
+        // --- 事件绑定 ---
+        toggleBtn.onclick = (e) => {
+            e.stopPropagation(); // 阻止冒泡，防止触发下面的全局关闭
+            menu.style.display = menu.style.display === 'none' ? 'flex' : 'none';
+        };
+
+        // 点击页面其他区域自动关闭菜单
+        document.addEventListener('click', () => {
+            if (menu.style.display === 'flex') menu.style.display = 'none';
+        });
+
+        // --- 拼装 ---
+        group.appendChild(mainBtn);
+        group.appendChild(toggleBtn);
+        group.appendChild(menu);
+
+        targetAnchor.insertAdjacentElement('afterend', group);
     }
 
-    // 5. 抓取时间轴与格式转换逻辑
-    static handleExport() {
-        // 关键修复 1：使用 Windows 原生换行符 \r\n
+    // 5. 抓取时间轴与格式转换逻辑 (接收 yearMode)
+    static handleExport(yearMode = 4) {
         let pbfContent = "[Bookmark]\r\n";
         let validBookmarksCount = 0;
 
@@ -117,7 +168,6 @@ window.PornBookmark = class PornBookmark {
                 }
 
                 if (!isNaN(ms) && ms >= 0 && timeText !== "") {
-                     // 关键修复 2：在末尾追加一个 '*'，让 PotPlayer 解析引擎认为缩略图部分为空，而不是格式错误
                      pbfContent += `${validBookmarksCount}=${ms}*${titleText}*\r\n`;
                      validBookmarksCount++;
                 }
@@ -125,20 +175,22 @@ window.PornBookmark = class PornBookmark {
         });
 
         if (validBookmarksCount > 0) {
-            const finalName = this.getStandardizedFilename();
+            // 透传 yearMode 给命名函数
+            const finalName = this.getStandardizedFilename(yearMode);
             this.downloadFile(pbfContent, `${finalName}.pbf`);
             
-            const btn = document.getElementById(this.BTN_ID);
-            const originalText = btn.innerHTML;
+            // UI 反馈
+            const mainBtn = document.getElementById(this.BTN_ID);
+            const originalText = mainBtn.innerHTML;
             
-            btn.innerHTML = `✅ 已导出 (${validBookmarksCount})`;
-            btn.style.backgroundColor = '#67c23a';
-            btn.style.borderColor = '#67c23a';
+            mainBtn.innerHTML = `✅ 成功 (${validBookmarksCount})`;
+            mainBtn.style.backgroundColor = '#67c23a';
+            mainBtn.style.borderColor = '#67c23a';
             
             setTimeout(() => {
-                btn.innerHTML = originalText;
-                btn.style.backgroundColor = '#e6a23c';
-                btn.style.borderColor = '#e6a23c';
+                mainBtn.innerHTML = originalText;
+                mainBtn.style.backgroundColor = '#e6a23c';
+                mainBtn.style.borderColor = '#e6a23c';
             }, 3000);
             
         } else {
@@ -146,19 +198,15 @@ window.PornBookmark = class PornBookmark {
         }
     }
 
-    // 6. 触发本地文件下载机制 (强制 UTF-16 LE 编码)
+    // 6. 触发本地文件下载机制 (强制 UTF-16 LE 编码，完美兼容 PotPlayer)
     static downloadFile(content, filename) {
-        // 关键修复 3：将 JS 原生字符串转换为 UTF-16 LE ArrayBuffer
         const buffer = new ArrayBuffer(content.length * 2);
         const view = new Uint16Array(buffer);
         for (let i = 0; i < content.length; i++) {
             view[i] = content.charCodeAt(i);
         }
         
-        // 关键修复 4：在文件头部追加 UTF-16 LE 专用的 BOM (Byte Order Mark: 0xFF 0xFE)
         const bom = new Uint8Array([0xFF, 0xFE]);
-        
-        // 将 BOM 和转码后的数据合并成二进制 Blob
         const blob = new Blob([bom, buffer], { type: 'application/octet-stream' });
         
         const link = document.createElement('a');
