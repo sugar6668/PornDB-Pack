@@ -78,6 +78,15 @@ window.PornParser = class PornParser {
                 details.fullTitle = this.slugify(`${details.maker}.${details.dateStr} ${cleanTitle}`);
             }
 
+            if (details.actor) {
+                // 以左括号 "(" 为界限切割字符串，只保留前半部分，并去除两端多余空格
+                details.actor = details.actor.split('(')[0].trim();
+            }
+            if (Array.isArray(details.actors) && details.actors.length > 0) {
+                // 如果有多个演员构成的数组，用同样的方法批量清洗
+                details.actors = details.actors.map(a => a.split('(')[0].trim());
+            }
+            
             return details;
         } catch (e) { return details; }
     }
@@ -172,6 +181,15 @@ window.PornParser = class PornParser {
                 cleanTitle = cleanTitle.replace(/^[^a-zA-Z0-9\u4e00-\u9fa5]+/, '').trim();
             }
             details.fullTitle = this.slugify(`${details.maker}.${details.dateStr} ${cleanTitle}`);
+
+            if (details.actor) {
+                // 以左括号 "(" 为界限切割字符串，只保留前半部分，并去除两端多余空格
+                details.actor = details.actor.split('(')[0].trim();
+            }
+            if (Array.isArray(details.actors) && details.actors.length > 0) {
+                // 如果有多个演员构成的数组，用同样的方法批量清洗
+                details.actors = details.actors.map(a => a.split('(')[0].trim());
+            }
 
             return details;
         } catch (e) { return details; }
