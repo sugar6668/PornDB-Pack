@@ -103,7 +103,7 @@ window.PornQuickView = class PornQuickView {
         `;
 
         const closeBtn = document.createElement('button');
-        closeBtn.innerHTML = '✖';
+        closeBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-x-icon lucide-x"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>';
         closeBtn.style.cssText = `
             position: absolute; top: 15px; right: 25px; background: rgba(0,0,0,0.6); border: none;
             width: 38px; height: 38px; border-radius: 50%; display: flex; justify-content: center; align-items: center;
