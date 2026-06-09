@@ -1,81 +1,109 @@
 /**
  * @name         PornPack Quick View Library
- * @description  瀑布流卡片小窗预览模块
+ * @description  原生 Iframe 级小窗预览
  * @version      1.0.0
  */
 
 window.PornQuickView = class PornQuickView {
     constructor(options) {
-        this.magnetUI = options.magnetUI;
-        this.doAutoMatch = options.doAutoMatch;
+        // 由于使用 Iframe 原生加载，底层的 doAutoMatch 和 magnetUI 会由主脚本在 Iframe 内自动实例化并执行
+        // 这里保留 constructor 只是为了兼容主脚本的调用格式，不报错
     }
 
     ensureButtons(doc) {
-        // 🌟 性能核心修复：通过 :not(.qv-injected) 过滤，避免重复遍历
-        const cards = doc.querySelectorAll('.w-scene-card:not(.qv-injected)');
-        if (!cards.length) return;
+        // 【核心安全锁】：如果当前已经是在 Iframe 小窗里了，就不再生成按钮（禁止套娃）
+        if (window.self !== window.top) return;
 
-        cards.forEach(card => {
-            card.classList.add('qv-injected'); // 打上已处理标记，下次不再遍历
+        // 确保全局只初始化一次悬浮按钮，绝不重复绑定
+        if (window._qvFloatingBtnInited) return;
+        window._qvFloatingBtnInited = true;
 
-            const a = card.querySelector('a[href*="/scenes/"]');
-            if (!a) return;
+        // 1. 创建全局唯一的高性能幽灵悬浮按钮 (直接挂载在 body 上，Vue 无法干涉)
+        const btn = document.createElement('button');
+        btn.innerHTML = '预览';
+        btn.style.cssText = `
+            position: absolute; z-index: 999999;
+            padding: 4px 10px; border-radius: 4px; border: none;
+            background: rgba(123, 94, 167, 0.95); color: #fff;
+            font-size: 12px; font-weight: bold; cursor: pointer;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.4); transition: background 0.2s;
+            display: none; pointer-events: auto;
+        `;
+        btn.onmouseover = () => btn.style.background = 'rgba(123, 94, 167, 1)';
+        btn.onmouseout = () => btn.style.background = 'rgba(123, 94, 167, 0.95)';
+        document.body.appendChild(btn);
 
-            // 🌟 性能核心修复：坚决不使用 getComputedStyle 导致强制回流，直接盲写样式
-            card.style.position = 'relative';
+        let currentUrl = '';
+        let hideTimeout;
 
-            const btn = document.createElement('button');
-            btn.className = 'west-quick-view-btn';
-            btn.innerHTML = '预览';
-
-            btn.style.cssText = `
-                position: absolute; top: 6px; left: 6px; z-index: 99;
-                padding: 4px 10px; border-radius: 4px; border: none;
-                background: rgba(123, 94, 167, 0.9); color: #fff;
-                font-size: 12px; font-weight: bold; cursor: pointer;
-                box-shadow: 0 2px 6px rgba(0,0,0,0.4); transition: all 0.2s;
-            `;
-            btn.onmouseover = () => btn.style.background = 'rgba(123, 94, 167, 1)';
-            btn.onmouseout = () => btn.style.background = 'rgba(123, 94, 167, 0.9)';
-
-            btn.onclick = (e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                this.openModal(card, a.href);
-            };
-            card.appendChild(btn);
+        // 2. 鼠标追踪系统（性能消耗极低）：鼠标移到哪，按钮跟到哪
+        document.addEventListener('mouseover', (e) => {
+            const card = e.target.closest('.w-scene-card');
+            if (card) {
+                clearTimeout(hideTimeout);
+                const a = card.querySelector('a[href*="/scenes/"]');
+                if (a) {
+                    currentUrl = a.href;
+                    const rect = card.getBoundingClientRect();
+                    // 将按钮精准定位到当前鼠标悬浮的卡片左上角
+                    btn.style.top = `${window.scrollY + rect.top + 6}px`;
+                    btn.style.left = `${window.scrollX + rect.left + 6}px`;
+                    btn.style.display = 'block';
+                }
+            } else if (e.target !== btn) {
+                // 离开卡片且没碰到按钮时，稍微延迟后隐藏按钮
+                hideTimeout = setTimeout(() => { btn.style.display = 'none'; }, 100);
+            }
         });
+
+        // 3. 点击按钮，唤出原生 Iframe 小窗
+        btn.onclick = (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            btn.style.display = 'none';
+            if (currentUrl) this.openIframeModal(currentUrl);
+        };
     }
 
-    openModal(card, url) {
+    openIframeModal(url) {
         const overlayId = 'west-quick-view-modal';
         if (document.getElementById(overlayId)) document.getElementById(overlayId).remove();
 
+        // 锁定背景网页的滚动
         const originalOverflow = document.body.style.overflow;
         document.body.style.overflow = 'hidden';
 
+        // 建立全屏黑灰色遮罩
         const overlay = document.createElement('div');
         overlay.id = overlayId;
         overlay.style.cssText = `
             position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
-            background: rgba(0,0,0,0.85); z-index: 999999;
+            background: rgba(0,0,0,0.85); z-index: 9999999;
             display: flex; justify-content: center; align-items: center;
         `;
 
+        // 加载提示文字
+        const loading = document.createElement('div');
+        loading.innerHTML = '正在加载原生详情页...';
+        loading.style.cssText = 'position:absolute; color:#fff; font-size:16px; font-weight:bold; z-index:1;';
+        overlay.appendChild(loading);
+
+        // 创建 Iframe 容器白板
         const box = document.createElement('div');
         box.style.cssText = `
-            width: 95%; max-width: 850px; max-height: 90vh;
-            background: #fdfdfd; border-radius: 12px; overflow-y: auto; overflow-x: hidden;
+            width: 95%; max-width: 1200px; height: 90vh;
+            background: #fdfdfd; border-radius: 12px; overflow: hidden;
             box-shadow: 0 10px 40px rgba(0,0,0,0.6); position: relative;
-            padding: 20px; transform: translateZ(0); will-change: transform;
+            transform: translateZ(0); z-index: 2; opacity: 0; transition: opacity 0.3s;
         `;
 
+        // 弹窗关闭按钮
         const closeBtn = document.createElement('button');
         closeBtn.innerHTML = '✖';
         closeBtn.style.cssText = `
-            position: absolute; top: 15px; right: 15px; background: rgba(0,0,0,0.5); border: none;
-            width: 32px; height: 32px; border-radius: 50%; display: flex; justify-content: center; align-items: center;
-            font-size: 16px; color: #fff; cursor: pointer; z-index: 10; transition: background 0.2s;
+            position: absolute; top: 15px; right: 25px; background: rgba(0,0,0,0.5); border: none;
+            width: 36px; height: 36px; border-radius: 50%; display: flex; justify-content: center; align-items: center;
+            font-size: 18px; color: #fff; cursor: pointer; z-index: 10; transition: background 0.2s;
         `;
         closeBtn.onmouseover = () => closeBtn.style.background = '#ff4d4f';
         closeBtn.onmouseout = () => closeBtn.style.background = 'rgba(0,0,0,0.5)';
@@ -87,99 +115,36 @@ window.PornQuickView = class PornQuickView {
         closeBtn.onclick = closeModal;
         overlay.onclick = (e) => { if (e.target === overlay) closeModal(); };
 
-        document.body.appendChild(overlay);
+        // 核心武器：嵌套真实的详情页 Iframe
+        const iframe = document.createElement('iframe');
+        iframe.src = url;
+        iframe.style.cssText = 'width: 100%; height: 100%; border: none;';
+
+        // Iframe 页面加载完毕后的“魔法隐藏”操作
+        iframe.onload = () => {
+            try {
+                // 获取 Iframe 内部的 DOM 文档
+                const iDoc = iframe.contentDocument || iframe.contentWindow.document;
+                
+                // 注入一段 CSS：隐藏掉无用的顶部导航栏、底部版权，把主要内容顶上去
+                const style = iDoc.createElement('style');
+                style.innerHTML = `
+                    header, nav, footer, .sidebar, aside { display: none !important; }
+                    body { padding-top: 0 !important; background: #fff !important; min-height: auto !important; }
+                    .mt-24 { margin-top: 20px !important; } /* 消除原有的顶部留白 */
+                `;
+                iDoc.head.appendChild(style);
+                
+                // 页面改造完毕，瞬间显示给用户（视觉上就像弹出了一个小窗，其实是一个完整的网页）
+                box.style.opacity = '1';
+            } catch (e) {
+                box.style.opacity = '1';
+            }
+        };
+
+        box.appendChild(closeBtn);
+        box.appendChild(iframe);
         overlay.appendChild(box);
-
-        try {
-            const details = window.PornParser.parseWaterfallDetails(card);
-
-            // 1. 获取缩略图，并升频为官方原尺寸大图
-            const img = card.querySelector('img');
-            let thumbSrc = img ? (img.src || img.getAttribute('data-src') || '') : '';
-            // ThePornDB 魔法替换：把 300x 这种压缩标记替换成 full，拿到高清海报
-            let highResSrc = thumbSrc.replace(/\/\d+x\//g, '/full/').replace(/thumbnails|thumbs/g, 'covers');
-            details.coverUrl = highResSrc;
-
-            // 2. 🌟 修复演员解析显示数字 Bug
-            if (!details.actor || details.actor === 'Unknown_Actor') {
-                if (location.href.includes('/performers/')) {
-                    const h1 = document.querySelector('h1');
-                    if (h1) {
-                        details.actor = h1.textContent.trim().split('(')[0].trim();
-                        details.actors = [details.actor];
-                    }
-                } else {
-                    const perfTags = Array.from(card.querySelectorAll('a[href*="/performers/"]'));
-                    // 核心过滤：剔除 isNaN 判断为纯数字的角标，只保留真实的英文名字
-                    const validActors = perfTags.map(a => a.textContent.trim()).filter(txt => txt && isNaN(Number(txt)) && txt.length > 1);
-                    if (validActors.length) {
-                        details.actors = validActors;
-                        details.actor = details.actors.join(' & ');
-                    }
-                }
-            }
-
-            if (details.maker && details.titlePart.toLowerCase().startsWith(details.maker.toLowerCase())) {
-                let cleanT = details.titlePart.substring(details.maker.length).trim();
-                details.fullTitle = window.PornParser.slugify(`${details.maker}.${details.dateStr} ${cleanT}`);
-            }
-            details.url = url;
-            details.isValid = !!(details.dateStr && details.titlePart);
-
-            box.appendChild(closeBtn);
-
-            // 🌟 视觉重塑：官方同款底层虚化大图 + 锐化海报
-            const contentHtml = `
-                <div style="position: relative; width: 100%; height: 350px; border-radius: 8px; margin-bottom: 20px; display: flex; justify-content: center; align-items: center; overflow: hidden; box-shadow: 0 4px 15px rgba(0,0,0,0.1); background: #111;">
-                    <div style="position: absolute; top: -20px; left: -20px; right: -20px; bottom: -20px; background-image: url('${highResSrc}'); background-size: cover; background-position: center; filter: blur(20px) brightness(0.6); z-index: 1;"></div>
-                    <img src="${highResSrc}" style="position: relative; max-width: 95%; max-height: 95%; object-fit: contain; z-index: 2; border-radius: 6px; box-shadow: 0 8px 25px rgba(0,0,0,0.5);" onerror="this.onerror=null; this.src='${thumbSrc}'">
-                </div>
-
-                <div style="display: flex; flex-direction: column; align-items: center; gap: 8px; margin-bottom: 25px; padding-bottom: 20px; border-bottom: 1px dashed #e4e7ed;">
-                    <h2 style="font-size: 22px; margin: 0; color: #303133; line-height: 1.4; text-align: center; max-width: 90%; word-break: break-all;">${details.titlePart}</h2>
-                    
-                    <div style="display: flex; justify-content: center; gap: 15px; flex-wrap: wrap; color: #606266; font-size: 14px; margin-top: 8px; background: #f4f4f5; padding: 10px 20px; border-radius: 6px;">
-                        <span><strong style="color:#909399;">厂商:</strong> ${details.maker}</span>
-                        <span style="color:#dcdfe6;">|</span>
-                        <span><strong style="color:#909399;">日期:</strong> ${details.dateStr}</span>
-                        <span style="color:#dcdfe6;">|</span>
-                        <span><strong style="color:#909399;">演员:</strong> ${details.actor}</span>
-                        <span style="color:#dcdfe6;">|</span>
-                        <span><strong style="color:#909399;">番号:</strong> <span style="color:#e74c3c; font-weight:bold; letter-spacing: 1px;">${details.matchPrefix || '未生成'}</span></span>
-                    </div>
-
-                    <div style="margin-top: 15px;">
-                        <a href="${url}" target="_blank" style="display:inline-flex; align-items:center; gap:6px; padding:8px 24px; background:#7b5ea7; color:#fff; text-decoration:none; border-radius:20px; font-size:14px; font-weight:bold; box-shadow: 0 4px 10px rgba(123, 94, 167, 0.3); transition:all 0.2s;" onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 6px 15px rgba(123, 94, 167, 0.4)';" onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 4px 10px rgba(123, 94, 167, 0.3)';">
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
-                            访问完整详情页
-                        </a>
-                    </div>
-                </div>
-
-                <div class="x-west-wrap" id="qv-west-wrap" style="border:none; padding:0!important; background:transparent; margin-bottom: 0;">
-                    <div style="font-weight: bold; font-size: 16px; margin-bottom: 12px; display:flex; align-items:center; color:#303133;">
-                        <span style="display:inline-block; width:4px; height:16px; background:#19c5b7; margin-right:8px; border-radius:2px;"></span>
-                        115 智能控制台
-                        <span class="west-match-status" style="font-size:12px; color:#909399; margin-left:12px; font-weight: normal; background: #f4f4f5; padding: 2px 8px; border-radius: 10px;">等待搜索...</span>
-                    </div>
-                    <div class="west-match-list" style="width:100%; display:flex; flex-direction:column;"></div>
-                    <div class="west-magnet-slot" style="margin-top: 15px;"></div>
-                </div>
-            `;
-            box.insertAdjacentHTML('beforeend', contentHtml);
-
-            const wrap = box.querySelector('#qv-west-wrap');
-            wrap.WESTDETAILS = details;
-
-            const magnetSlot = wrap.querySelector('.west-magnet-slot');
-            const widget = this.magnetUI.createMagnetWidget(details);
-            magnetSlot.appendChild(widget);
-
-            this.doAutoMatch(wrap, details);
-
-        } catch (e) {
-            box.innerHTML = `<div style="text-align:center; padding: 60px; color: #dc3545; font-size: 16px; font-weight:bold;">抱歉，解析该卡片失败: ${e.message}</div>`;
-            box.appendChild(closeBtn);
-        }
+        document.body.appendChild(overlay);
     }
 };
