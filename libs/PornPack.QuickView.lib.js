@@ -11,13 +11,18 @@ window.PornQuickView = class PornQuickView {
     }
 
     ensureButtons(doc) {
-        doc.querySelectorAll('.w-scene-card').forEach(card => {
-            if (card.querySelector('.west-quick-view-btn')) return;
+        // 🌟 性能核心修复：通过 :not(.qv-injected) 过滤，避免重复遍历
+        const cards = doc.querySelectorAll('.w-scene-card:not(.qv-injected)');
+        if (!cards.length) return;
+
+        cards.forEach(card => {
+            card.classList.add('qv-injected'); // 打上已处理标记，下次不再遍历
 
             const a = card.querySelector('a[href*="/scenes/"]');
             if (!a) return;
 
-            if (getComputedStyle(card).position === 'static') card.style.position = 'relative';
+            // 🌟 性能核心修复：坚决不使用 getComputedStyle 导致强制回流，直接盲写样式
+            card.style.position = 'relative';
 
             const btn = document.createElement('button');
             btn.className = 'west-quick-view-btn';
@@ -26,12 +31,12 @@ window.PornQuickView = class PornQuickView {
             btn.style.cssText = `
                 position: absolute; top: 6px; left: 6px; z-index: 99;
                 padding: 4px 10px; border-radius: 4px; border: none;
-                background: rgba(123, 94, 167, 0.95); color: #fff;
+                background: rgba(123, 94, 167, 0.9); color: #fff;
                 font-size: 12px; font-weight: bold; cursor: pointer;
                 box-shadow: 0 2px 6px rgba(0,0,0,0.4); transition: all 0.2s;
             `;
             btn.onmouseover = () => btn.style.background = 'rgba(123, 94, 167, 1)';
-            btn.onmouseout = () => btn.style.background = 'rgba(123, 94, 167, 0.95)';
+            btn.onmouseout = () => btn.style.background = 'rgba(123, 94, 167, 0.9)';
 
             btn.onclick = (e) => {
                 e.preventDefault();
@@ -46,7 +51,6 @@ window.PornQuickView = class PornQuickView {
         const overlayId = 'west-quick-view-modal';
         if (document.getElementById(overlayId)) document.getElementById(overlayId).remove();
 
-        // 🌟 性能优化 1：冻结背景网页的滚动和重绘
         const originalOverflow = document.body.style.overflow;
         document.body.style.overflow = 'hidden';
 
@@ -59,7 +63,6 @@ window.PornQuickView = class PornQuickView {
         `;
 
         const box = document.createElement('div');
-        // 🌟 性能优化 2：强制开启 GPU 硬件加速 (translateZ 和 will-change)
         box.style.cssText = `
             width: 95%; max-width: 850px; max-height: 90vh;
             background: #fdfdfd; border-radius: 12px; overflow-y: auto; overflow-x: hidden;
@@ -79,7 +82,6 @@ window.PornQuickView = class PornQuickView {
         
         const closeModal = () => {
             overlay.remove();
-            // 恢复背景滚动
             document.body.style.overflow = originalOverflow;
         };
         closeBtn.onclick = closeModal;
@@ -89,15 +91,16 @@ window.PornQuickView = class PornQuickView {
         overlay.appendChild(box);
 
         try {
-            // 本地极速提取数据
             const details = window.PornParser.parseWaterfallDetails(card);
 
-            // 提取封面 (尝试替换 URL 获取更高清的版本，如果失败回退到原图)
+            // 1. 获取缩略图，并升频为官方原尺寸大图
             const img = card.querySelector('img');
-            let coverSrc = img ? (img.src || img.getAttribute('data-src') || '') : '';
-            // 简单清洗：有时候缩略图带有尺寸参数，去掉它能拿到大图
-            details.coverUrl = coverSrc;
+            let thumbSrc = img ? (img.src || img.getAttribute('data-src') || '') : '';
+            // ThePornDB 魔法替换：把 300x 这种压缩标记替换成 full，拿到高清海报
+            let highResSrc = thumbSrc.replace(/\/\d+x\//g, '/full/').replace(/thumbnails|thumbs/g, 'covers');
+            details.coverUrl = highResSrc;
 
+            // 2. 🌟 修复演员解析显示数字 Bug
             if (!details.actor || details.actor === 'Unknown_Actor') {
                 if (location.href.includes('/performers/')) {
                     const h1 = document.querySelector('h1');
@@ -107,8 +110,10 @@ window.PornQuickView = class PornQuickView {
                     }
                 } else {
                     const perfTags = Array.from(card.querySelectorAll('a[href*="/performers/"]'));
-                    if (perfTags.length) {
-                        details.actors = perfTags.map(a => a.textContent.trim());
+                    // 核心过滤：剔除 isNaN 判断为纯数字的角标，只保留真实的英文名字
+                    const validActors = perfTags.map(a => a.textContent.trim()).filter(txt => txt && isNaN(Number(txt)) && txt.length > 1);
+                    if (validActors.length) {
+                        details.actors = validActors;
                         details.actor = details.actors.join(' & ');
                     }
                 }
@@ -123,10 +128,11 @@ window.PornQuickView = class PornQuickView {
 
             box.appendChild(closeBtn);
 
-            // 🌟 UI 重构：大封面置顶，信息居中
+            // 🌟 视觉重塑：官方同款底层虚化大图 + 锐化海报
             const contentHtml = `
-                <div style="width: 100%; height: 350px; background: #000; border-radius: 8px; margin-bottom: 20px; display: flex; justify-content: center; align-items: center; overflow: hidden; box-shadow: inset 0 0 20px rgba(0,0,0,0.8);">
-                    <img src="${details.coverUrl}" style="max-width: 100%; max-height: 100%; object-fit: contain; filter: drop-shadow(0 4px 12px rgba(0,0,0,0.5));" onerror="this.style.display='none'">
+                <div style="position: relative; width: 100%; height: 350px; border-radius: 8px; margin-bottom: 20px; display: flex; justify-content: center; align-items: center; overflow: hidden; box-shadow: 0 4px 15px rgba(0,0,0,0.1); background: #111;">
+                    <div style="position: absolute; top: -20px; left: -20px; right: -20px; bottom: -20px; background-image: url('${highResSrc}'); background-size: cover; background-position: center; filter: blur(20px) brightness(0.6); z-index: 1;"></div>
+                    <img src="${highResSrc}" style="position: relative; max-width: 95%; max-height: 95%; object-fit: contain; z-index: 2; border-radius: 6px; box-shadow: 0 8px 25px rgba(0,0,0,0.5);" onerror="this.onerror=null; this.src='${thumbSrc}'">
                 </div>
 
                 <div style="display: flex; flex-direction: column; align-items: center; gap: 8px; margin-bottom: 25px; padding-bottom: 20px; border-bottom: 1px dashed #e4e7ed;">
