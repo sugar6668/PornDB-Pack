@@ -11,48 +11,57 @@ window.PornQuickView = class PornQuickView {
     }
 
     ensureButtons(doc) {
-        // 【核心安全锁】：如果当前已经是在 Iframe 小窗里了，就不再生成按钮（禁止套娃）
+        // 【核心安全锁】：如果当前已经是在 Iframe 小窗里了，就不再生成按钮
         if (window.self !== window.top) return;
 
-        // 确保全局只初始化一次悬浮按钮，绝不重复绑定
+        // 确保全局只初始化一次悬浮按钮
         if (window._qvFloatingBtnInited) return;
         window._qvFloatingBtnInited = true;
 
-        // 1. 创建全局唯一的高性能幽灵悬浮按钮 (直接挂载在 body 上，Vue 无法干涉)
+        // 1. 创建全局唯一的幽灵悬浮按钮
         const btn = document.createElement('button');
-        btn.innerHTML = '预览';
+        btn.innerHTML = '原生预览';
         btn.style.cssText = `
             position: absolute; z-index: 999999;
-            padding: 6px 10px; border-radius: 4px; border: none;
-            background: rgba(34, 178, 235, 0.95); color: #fff;
+            padding: 4px 10px; border-radius: 4px; border: none;
+            background: rgba(123, 94, 167, 0.95); color: #fff;
             font-size: 12px; font-weight: bold; cursor: pointer;
             box-shadow: 0 2px 6px rgba(0,0,0,0.4); transition: background 0.2s;
             display: none; pointer-events: auto;
         `;
-        btn.onmouseover = () => btn.style.background = 'rgba(34, 178, 235, 1)';
-        btn.onmouseout = () => btn.style.background = 'rgba(34, 178, 235, 0.95)';
+        btn.onmouseover = () => btn.style.background = 'rgba(123, 94, 167, 1)';
+        btn.onmouseout = () => btn.style.background = 'rgba(123, 94, 167, 0.95)';
         document.body.appendChild(btn);
 
         let currentUrl = '';
+        let currentCard = null; // 🌟 性能核武器：记录当前高亮的卡片
         let hideTimeout;
 
-        // 2. 鼠标追踪系统（性能消耗极低）：鼠标移到哪，按钮跟到哪
+        // 2. 鼠标追踪系统（已修复冒泡计算炸弹）
         document.addEventListener('mouseover', (e) => {
             const card = e.target.closest('.w-scene-card');
+            
             if (card) {
                 clearTimeout(hideTimeout);
-                const a = card.querySelector('a[href*="/scenes/"]');
-                if (a) {
-                    currentUrl = a.href;
-                    const rect = card.getBoundingClientRect();
-                    // 将按钮精准定位到当前鼠标悬浮的卡片左上角
-                    btn.style.top = `${window.scrollY + rect.top + 10}px`;
-                    btn.style.left = `${window.scrollX + rect.left + 10}px`;
-                    btn.style.display = 'block';
+                // 🌟 关键拦截：只有当鼠标进入一张【全新】的卡片时，才执行计算和移动！
+                if (card !== currentCard) {
+                    currentCard = card;
+                    const a = card.querySelector('a[href*="/scenes/"]');
+                    if (a) {
+                        currentUrl = a.href;
+                        // getBoundingClientRect 是引发 CPU 计算的重灾区，现在每张卡片只计算1次
+                        const rect = card.getBoundingClientRect();
+                        btn.style.top = `${window.scrollY + rect.top + 6}px`;
+                        btn.style.left = `${window.scrollX + rect.left + 6}px`;
+                        btn.style.display = 'block';
+                    }
                 }
             } else if (e.target !== btn) {
-                // 离开卡片且没碰到按钮时，稍微延迟后隐藏按钮
-                hideTimeout = setTimeout(() => { btn.style.display = 'none'; }, 100);
+                // 当鼠标离开卡片，并且没有碰到按钮时，隐藏按钮并重置记录
+                hideTimeout = setTimeout(() => { 
+                    btn.style.display = 'none'; 
+                    currentCard = null; // 🌟 离开后必须清空记录
+                }, 100);
             }
         });
 
