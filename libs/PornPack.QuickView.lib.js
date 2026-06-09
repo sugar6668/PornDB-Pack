@@ -23,14 +23,14 @@ window.PornQuickView = class PornQuickView {
         btn.innerHTML = '预览';
         btn.style.cssText = `
             position: absolute; z-index: 999999;
-            padding: 4px 10px; border-radius: 4px; border: none;
-            background: rgba(123, 94, 167, 0.95); color: #fff;
+            padding: 10px 10px; border-radius: 4px; border: none;
+            background: rgba(34, 178, 235, 0.95); color: #fff;
             font-size: 12px; font-weight: bold; cursor: pointer;
             box-shadow: 0 2px 6px rgba(0,0,0,0.4); transition: background 0.2s;
             display: none; pointer-events: auto;
         `;
-        btn.onmouseover = () => btn.style.background = 'rgba(123, 94, 167, 1)';
-        btn.onmouseout = () => btn.style.background = 'rgba(123, 94, 167, 0.95)';
+        btn.onmouseover = () => btn.style.background = 'rgba(34, 178, 235, 1)';
+        btn.onmouseout = () => btn.style.background = 'rgba(34, 178, 235, 0.95)';
         document.body.appendChild(btn);
 
         let currentUrl = '';
@@ -69,11 +69,9 @@ window.PornQuickView = class PornQuickView {
         const overlayId = 'west-quick-view-modal';
         if (document.getElementById(overlayId)) document.getElementById(overlayId).remove();
 
-        // 锁定背景网页的滚动
         const originalOverflow = document.body.style.overflow;
         document.body.style.overflow = 'hidden';
 
-        // 建立全屏黑灰色遮罩
         const overlay = document.createElement('div');
         overlay.id = overlayId;
         overlay.style.cssText = `
@@ -82,22 +80,20 @@ window.PornQuickView = class PornQuickView {
             display: flex; justify-content: center; align-items: center;
         `;
 
-        // 加载提示文字
         const loading = document.createElement('div');
         loading.innerHTML = '正在加载原生详情页...';
         loading.style.cssText = 'position:absolute; color:#fff; font-size:16px; font-weight:bold; z-index:1;';
         overlay.appendChild(loading);
 
-        // 创建 Iframe 容器白板
         const box = document.createElement('div');
+        // 🌟 宽度优化：把 max-width 放大到了 1500px，宽度占比提高到 98%，让整个弹窗变得更宽
         box.style.cssText = `
-            width: 95%; max-width: 1200px; height: 90vh;
+            width: 98%; max-width: 1500px; height: 92vh;
             background: #fdfdfd; border-radius: 12px; overflow: hidden;
             box-shadow: 0 10px 40px rgba(0,0,0,0.6); position: relative;
             transform: translateZ(0); z-index: 2; opacity: 0; transition: opacity 0.3s;
         `;
 
-        // 弹窗关闭按钮
         const closeBtn = document.createElement('button');
         closeBtn.innerHTML = '✖';
         closeBtn.style.cssText = `
@@ -115,27 +111,40 @@ window.PornQuickView = class PornQuickView {
         closeBtn.onclick = closeModal;
         overlay.onclick = (e) => { if (e.target === overlay) closeModal(); };
 
-        // 核心武器：嵌套真实的详情页 Iframe
         const iframe = document.createElement('iframe');
         iframe.src = url;
         iframe.style.cssText = 'width: 100%; height: 100%; border: none;';
 
-        // Iframe 页面加载完毕后的“魔法隐藏”操作
         iframe.onload = () => {
             try {
-                // 获取 Iframe 内部的 DOM 文档
                 const iDoc = iframe.contentDocument || iframe.contentWindow.document;
                 
-                // 注入一段 CSS：隐藏掉无用的顶部导航栏、底部版权，把主要内容顶上去
                 const style = iDoc.createElement('style');
+                // 🌟 魔法注入区：控制 Iframe 内真实的网页长什么样
                 style.innerHTML = `
+                    /* 1. 隐藏无用组件 */
                     header, nav, footer, .sidebar, aside { display: none !important; }
+                    
+                    /* 2. 强制原生内容区撑满整个屏幕，消灭左右大白边 */
+                    .container, .max-w-7xl, .max-w-screen-xl { 
+                        max-width: 100% !important; 
+                        padding-left: 30px !important; 
+                        padding-right: 30px !important; 
+                    }
+                    
+                    /* 3. 基础版式优化 */
                     body { padding-top: 0 !important; background: #fff !important; min-height: auto !important; }
-                    .mt-24 { margin-top: 20px !important; } /* 消除原有的顶部留白 */
+                    .mt-24 { margin-top: 20px !important; }
+                    
+                    /* 4. 隐藏你指定的三个内容区块 */
+                    .flex.flex-wrap.gap-1,
+                    .w-full.bg-white.shadow-sm.rounded-sm.overflow-hidden.p-4.mb-5,
+                    .n-tabs.n-tabs--card-type.n-tabs--medium-size.n-tabs--top { 
+                        display: none !important; 
+                    }
                 `;
                 iDoc.head.appendChild(style);
                 
-                // 页面改造完毕，瞬间显示给用户（视觉上就像弹出了一个小窗，其实是一个完整的网页）
                 box.style.opacity = '1';
             } catch (e) {
                 box.style.opacity = '1';
