@@ -9,7 +9,6 @@ window.PornBookmark = class PornBookmark {
 
     static init() {
         this.ensureButtonExists();
-        setInterval(() => this.ensureButtonExists(), 1500);
     }
 
     static ensureButtonExists() {
