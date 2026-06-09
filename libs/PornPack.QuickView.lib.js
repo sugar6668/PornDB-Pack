@@ -18,7 +18,7 @@ window.PornQuickView = class PornQuickView {
             btn.innerHTML = '原生预览';
             btn.style.cssText = `
                 position: absolute; z-index: 999999;
-                padding: 5px 12px; border-radius: 20px; border: none;
+                padding: 5px 12px; border-radius: 4px; border: none;
                 background: rgba(123, 94, 167, 0.95); color: #fff;
                 font-size: 12px; font-weight: bold; cursor: pointer;
                 box-shadow: 0 3px 8px rgba(0,0,0,0.4); transition: background 0.2s, transform 0.1s;
@@ -59,8 +59,8 @@ window.PornQuickView = class PornQuickView {
                 if (a) {
                     window._qvCurrentUrl = a.href;
                     const rect = card.getBoundingClientRect();
-                    window._qvFloatingBtn.style.top = `${window.scrollY + rect.top + 15}px`;
-                    window._qvFloatingBtn.style.left = `${window.scrollX + rect.left + 15}px`;
+                    window._qvFloatingBtn.style.top = `${window.scrollY + rect.top + 12}px`;
+                    window._qvFloatingBtn.style.left = `${window.scrollX + rect.left + 12}px`;
                     window._qvFloatingBtn.style.display = 'block';
                 }
             });
@@ -96,7 +96,7 @@ window.PornQuickView = class PornQuickView {
 
         const box = document.createElement('div');
         box.style.cssText = `
-            width: 96%; max-width: 1800px; height: 95vh;
+            width: 98%; max-width: 1800px; height: 98vh;
             background: #fdfdfd; border-radius: 12px; overflow: hidden;
             box-shadow: 0 15px 50px rgba(0,0,0,0.7); position: relative;
             transform: translateZ(0); will-change: transform; z-index: 2; opacity: 0; transition: opacity 0.3s;
