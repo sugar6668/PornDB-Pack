@@ -96,7 +96,7 @@ window.PornQuickView = class PornQuickView {
 
         const box = document.createElement('div');
         box.style.cssText = `
-            width: 98%; max-width: 1800px; height: 98vh;
+            width: 88%; max-width: 1300px; height: 88vh;
             background: #fdfdfd; border-radius: 12px; overflow: hidden;
             box-shadow: 0 15px 50px rgba(0,0,0,0.7); position: relative;
             transform: translateZ(0); will-change: transform; z-index: 2; opacity: 0; transition: opacity 0.3s;
@@ -133,11 +133,11 @@ window.PornQuickView = class PornQuickView {
                     header, nav, footer, .sidebar, aside { display: none !important; }
                     
                     /* 2. 彻底解锁原网页大白边限制 */
-                    .container, .max-w-7xl, .max-w-screen-xl, .grid { 
-                        max-width: 98% !important; 
-                        width: 98% !important;
-                        padding-left: 15px !important; 
-                        padding-right: 15px !important; 
+                    .container, [class*="max-w-"], .mx-auto, .grid { 
+                        max-width: 100% !important; 
+                        width: 100% !important; 
+                        padding-left: 20px !important; 
+                        padding-right: 20px !important; 
                     }
                     
                     /* 3. 基础版式优化 */
