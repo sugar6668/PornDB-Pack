@@ -1,112 +1,120 @@
 /**
  * @name         PornPack Quick View Library
- * @description  瀑布流卡片小窗预览模块 (静默抓取详情并渲染控制台)
+ * @description  瀑布流卡片小窗预览模块 (本地秒级解析，极低性能损耗)
  * @version      1.0.0
  */
 
 window.PornQuickView = class PornQuickView {
     constructor(options) {
-        this.gmFetch = options.gmFetch;
         this.magnetUI = options.magnetUI;
         this.doAutoMatch = options.doAutoMatch;
     }
 
-    // 1. 在瀑布流卡片左上角注入按钮
     ensureButtons(doc) {
         doc.querySelectorAll('.w-scene-card').forEach(card => {
             if (card.querySelector('.west-quick-view-btn')) return;
-            
-            // 提取跳转详情页的链接
+
             const a = card.querySelector('a[href*="/scenes/"]');
             if (!a) return;
-            
-            // 确保卡片是 relative 定位，以便按钮绝对定位在左上角
+
             if (getComputedStyle(card).position === 'static') card.style.position = 'relative';
-            
+
             const btn = document.createElement('button');
             btn.className = 'west-quick-view-btn';
-            btn.innerHTML = '🔍 小窗预览';
-            
-            // 左上角样式设计
+            btn.innerHTML = '小窗预览';
+
             btn.style.cssText = `
-                position: absolute; top: 6px; left: 6px; z-index: 999;
+                position: absolute; top: 6px; left: 6px; z-index: 99;
                 padding: 4px 8px; border-radius: 4px; border: none;
-                background: rgba(123, 94, 167, 0.9); color: #fff;
+                background: rgba(123, 94, 167, 0.95); color: #fff;
                 font-size: 12px; font-weight: bold; cursor: pointer;
                 box-shadow: 0 2px 4px rgba(0,0,0,0.3); transition: all 0.2s;
             `;
             btn.onmouseover = () => btn.style.background = 'rgba(123, 94, 167, 1)';
-            btn.onmouseout = () => btn.style.background = 'rgba(123, 94, 167, 0.9)';
-            
-            // 点击事件：拦截跳转，打开弹窗
+            btn.onmouseout = () => btn.style.background = 'rgba(123, 94, 167, 0.95)';
+
             btn.onclick = (e) => {
                 e.preventDefault();
                 e.stopPropagation();
-                this.openModal(a.href);
+                // 传入 card 节点，实现本地秒级提取
+                this.openModal(card, a.href);
             };
             card.appendChild(btn);
         });
     }
 
-    // 2. 弹窗与抓取渲染核心逻辑
-    async openModal(url) {
+    openModal(card, url) {
         const overlayId = 'west-quick-view-modal';
         let overlay = document.getElementById(overlayId);
-        if (overlay) overlay.remove(); // 防止重复点击
+        if (overlay) overlay.remove();
 
-        // 创建全屏遮罩
+        // 🌟 修复性能问题：干掉 backdrop-filter: blur，换成纯色黑底，CPU 风扇瞬间安静
         overlay = document.createElement('div');
         overlay.id = overlayId;
         overlay.style.cssText = `
             position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
-            background: rgba(0,0,0,0.6); z-index: 999999;
+            background: rgba(0,0,0,0.75); z-index: 999999;
             display: flex; justify-content: center; align-items: center;
-            backdrop-filter: blur(4px);
         `;
 
-        // 创建居中弹窗盒
         const box = document.createElement('div');
         box.style.cssText = `
             width: 90%; max-width: 900px; max-height: 90vh;
             background: #fdfdfd; border-radius: 12px; overflow-y: auto;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.3); position: relative;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5); position: relative;
             padding: 20px;
         `;
-        
+
         const closeBtn = document.createElement('button');
         closeBtn.innerHTML = '✖';
         closeBtn.style.cssText = `
             position: absolute; top: 15px; right: 15px; background: none; border: none;
-            font-size: 20px; color: #666; cursor: pointer; z-index: 10;
+            font-size: 20px; color: #666; cursor: pointer; z-index: 10; transition: color 0.2s;
         `;
+        closeBtn.onmouseover = () => closeBtn.style.color = '#ff4d4f';
+        closeBtn.onmouseout = () => closeBtn.style.color = '#666';
         closeBtn.onclick = () => overlay.remove();
-        
-        box.innerHTML = `<div style="text-align:center; padding: 50px; color: #666; font-size:16px;">🔄 正在极速抓取影片数据...</div>`;
-        box.appendChild(closeBtn);
+
         overlay.appendChild(box);
         document.body.appendChild(overlay);
-
-        // 点击背景也可以关闭弹窗
         overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
 
         try {
-            // 后台静默抓取 HTML
-            const res = await this.gmFetch(url);
-            if (!res.loadstuts) throw new Error('网络请求超时或失败');
-            
-            // 将文本转换为虚拟 DOM
-            const parser = new DOMParser();
-            const virtualDoc = parser.parseFromString(res.responseText, 'text/html');
-            
-            // 复用 Parser 模块，解析虚拟 DOM 拿数据
-            const details = window.PornParser.parseWestDetails(virtualDoc);
-            details.url = url; 
-            if (!details.isValid) throw new Error('页面特征解析失败，可能是不支持的页面结构');
+            // 🌟 修复数据问题：不再去后台请求，直接复用刚才抽取好的瀑布流卡片解析功能
+            const details = window.PornParser.parseWaterfallDetails(card);
 
-            box.innerHTML = '';
+            // 1. 抓取封面图 (就在卡片的 img 标签里)
+            const img = card.querySelector('img');
+            if (img) details.coverUrl = img.src || img.getAttribute('data-src') || '';
+
+            // 2. 抓取演员 (如果当前在演员专属页面，提取页面顶部的名字)
+            if (!details.actor || details.actor === 'Unknown_Actor') {
+                if (location.href.includes('/performers/')) {
+                    const h1 = document.querySelector('h1');
+                    if (h1) {
+                        details.actor = h1.textContent.trim().split('(')[0].trim();
+                        details.actors = [details.actor];
+                    }
+                } else {
+                    // 如果在混合瀑布流，尝试读取卡片上的演员链接
+                    const perfTags = Array.from(card.querySelectorAll('a[href*="/performers/"]'));
+                    if (perfTags.length) {
+                        details.actors = perfTags.map(a => a.textContent.trim());
+                        details.actor = details.actors.join(' & ');
+                    }
+                }
+            }
+
+            // 3. 补全必要字段
+            if (details.maker && details.titlePart.toLowerCase().startsWith(details.maker.toLowerCase())) {
+                let cleanT = details.titlePart.substring(details.maker.length).trim();
+                details.fullTitle = window.PornParser.slugify(`${details.maker}.${details.dateStr} ${cleanT}`);
+            }
+            details.url = url;
+            details.isValid = !!(details.dateStr && details.titlePart);
+
             box.appendChild(closeBtn);
-            
-            // 组装上半部分：影片资料 UI
+
             const contentHtml = `
                 <div style="display: flex; gap: 20px; margin-bottom: 20px; flex-wrap: wrap; padding-bottom: 15px; border-bottom: 1px dashed #eee;">
                     <div style="flex-shrink: 0; width: 220px;">
@@ -117,9 +125,9 @@ window.PornQuickView = class PornQuickView {
                         <p style="margin: 6px 0; font-size: 14px;"><strong style="color:#555; display:inline-block; width:45px;">厂商:</strong> ${details.maker}</p>
                         <p style="margin: 6px 0; font-size: 14px;"><strong style="color:#555; display:inline-block; width:45px;">日期:</strong> ${details.dateStr}</p>
                         <p style="margin: 6px 0; font-size: 14px;"><strong style="color:#555; display:inline-block; width:45px;">演员:</strong> ${details.actor}</p>
-                        <p style="margin: 6px 0; font-size: 14px;"><strong style="color:#555; display:inline-block; width:45px;">番号:</strong> ${details.matchPrefix || '无'}</p>
+                        <p style="margin: 6px 0; font-size: 14px;"><strong style="color:#555; display:inline-block; width:45px;">番号:</strong> <span style="color:#e74c3c; font-weight:bold;">${details.matchPrefix || '无'}</span></p>
                         <div style="margin-top: 15px;">
-                            <a href="${url}" target="_blank" style="display:inline-block; padding:6px 16px; background:#f4f4f5; color:#606266; text-decoration:none; border-radius:6px; font-size:13px; font-weight:bold; border:1px solid #dcdfe6; transition:all 0.2s;" onmouseover="this.style.background='#e8e8e8'" onmouseout="this.style.background='#f4f4f5'">🔗 新标签页打开</a>
+                            <a href="${url}" target="_blank" style="display:inline-block; padding:6px 16px; background:#f4f4f5; color:#606266; text-decoration:none; border-radius:6px; font-size:13px; font-weight:bold; border:1px solid #dcdfe6; transition:all 0.2s;" onmouseover="this.style.background='#e8e8e8'" onmouseout="this.style.background='#f4f4f5'">🔗 新标签页进入原网页</a>
                         </div>
                     </div>
                 </div>
@@ -133,21 +141,20 @@ window.PornQuickView = class PornQuickView {
                 </div>
             `;
             box.insertAdjacentHTML('beforeend', contentHtml);
-            
-            // 最关键的一步：给容器挂上 details 变量，这样按钮点击事件才知道它操作的是哪部影片
+
             const wrap = box.querySelector('#qv-west-wrap');
-            wrap.WESTDETAILS = details; 
-            
+            wrap.WESTDETAILS = details;
+
             // 挂载磁力面板
             const magnetSlot = wrap.querySelector('.west-magnet-slot');
             const widget = this.magnetUI.createMagnetWidget(details);
             magnetSlot.appendChild(widget);
-            
-            // 触发 115 并发匹配渲染
+
+            // 触发 115 匹配渲染
             this.doAutoMatch(wrap, details);
-            
+
         } catch (e) {
-            box.innerHTML = `<div style="text-align:center; padding: 50px; color: #dc3545; font-size: 16px;">❌ 抓取失败: ${e.message}</div>`;
+            box.innerHTML = `<div style="text-align:center; padding: 50px; color: #dc3545; font-size: 16px;">解析失败: ${e.message}</div>`;
             box.appendChild(closeBtn);
         }
     }
