@@ -23,7 +23,7 @@ window.PornQuickView = class PornQuickView {
         btn.innerHTML = '预览';
         btn.style.cssText = `
             position: absolute; z-index: 999999;
-            padding: 4px 10px; border-radius: 4px; border: none;
+            padding: 6px 10px; border-radius: 4px; border: none;
             background: rgba(34, 178, 235, 0.95); color: #fff;
             font-size: 12px; font-weight: bold; cursor: pointer;
             box-shadow: 0 2px 6px rgba(0,0,0,0.4); transition: background 0.2s;
@@ -86,9 +86,9 @@ window.PornQuickView = class PornQuickView {
         overlay.appendChild(loading);
 
         const box = document.createElement('div');
-        // 🌟 宽度优化：把 max-width 放大到了 1800px，宽度占比提高到 98%，让整个弹窗变得更宽
+        // 🌟 宽度优化：把 max-width 放大到了 1800px
         box.style.cssText = `
-            width: 98%; max-width: 1800px; height: 92vh;
+            width: 98%; max-width: 1800px; height: 98vh;
             background: #fdfdfd; border-radius: 12px; overflow: hidden;
             box-shadow: 0 10px 40px rgba(0,0,0,0.6); position: relative;
             transform: translateZ(0); z-index: 2; opacity: 0; transition: opacity 0.3s;
