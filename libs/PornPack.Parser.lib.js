@@ -172,7 +172,15 @@ window.PornParser = class PornParser {
 
             if (details.dateStr && details.titlePart) details.isValid = true;
 
-            details.matchPrefix = (details.baseAlpha && details.dateStr) ? `${details.baseAlpha}.${details.dateStr}` : '';
+            // 修复：对齐瀑布流逻辑，如果没有厂牌，降级使用“演员名.日期”作为匹配前缀
+            if (details.baseAlpha && details.dateStr) {
+                details.matchPrefix = `${details.baseAlpha}.${details.dateStr}`;
+            } else if (details.actor && details.actor !== 'Unknown_Actor' && details.dateStr) {
+                details.matchPrefix = `${details.actor.replace(/\s+/g, '')}.${details.dateStr}`;
+            } else {
+                details.matchPrefix = '';
+            }
+            
             details.titleKeyword = details.titlePart.replace(/[^a-zA-Z0-9\s]/g, '').split(/\s+/).filter(w => w.length > 2).slice(0, 2).join(' ');
 
             let cleanTitle = details.titlePart || '';

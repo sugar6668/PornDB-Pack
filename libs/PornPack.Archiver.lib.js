@@ -44,7 +44,7 @@ window.PornArchiver = class PornArchiver {
         // 步骤 1：handleVerify (高频验证下载状态与提取目标)
         // ==========================================
         for (let i = 0; i < 30; i++) {
-            if (this.updateBtnUI) this.updateBtnUI(item.hash, `⏳ 验证进度(${i+1}/30)...`, '#f39c12');
+            if (this.updateBtnUI) this.updateBtnUI(item.hash, `验证进度(${i+1}/30)...`, '#f39c12');
             await this.sleep(1500);
             
             const { tasks } = await this.req115.lixianTaskLists();

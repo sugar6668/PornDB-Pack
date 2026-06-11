@@ -25,7 +25,7 @@ window.PornMagnetUI = class PornMagnetUI {
     fillTable(table, data, details) {
         const self = this; // 捕获类实例，供下方点击事件使用
         table.querySelectorAll('tr:not(.nong-head-row)').forEach(r => r.remove());
-        
+
         if (!data || !data.length) {
             table.insertAdjacentHTML('beforeend', `<tr><td colspan="4" style="text-align:center; padding: 20px; color:#909399;">未找到结果，试试删减上方的关键词，或点击跳转搜索</td></tr>`);
             return;
@@ -50,7 +50,7 @@ window.PornMagnetUI = class PornMagnetUI {
         });
 
         const sortedData = processedData.filter(item => item.score >= 40).sort((a, b) => b.score !== a.score ? b.score - a.score : b.sizeMB - a.sizeMB).slice(0, 10);
-        
+
         if (!sortedData.length) { table.insertAdjacentHTML('beforeend', `<tr><td colspan="4" style="text-align:center; padding: 20px; color:#909399;">资源均被过滤（可能是超大合集），请尝试修改关键词</td></tr>`); return; }
 
         sortedData.forEach(item => {
@@ -78,21 +78,28 @@ window.PornMagnetUI = class PornMagnetUI {
             };
 
             tr.querySelector('.nong-offline-115').onclick = async (e) => {
-                const btn = e.currentTarget; 
+                const btn = e.currentTarget;
                 if (btn.dataset.busy === '1') return;
-                const spinner = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" style="vertical-align: -2px; margin-right: 4px;"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"><path stroke-dasharray="16" stroke-dashoffset="16" d="M12 3c4.97 0 9 4.03 9 9"><animate fill="freeze" attributeName="stroke-dashoffset" dur="0.3s" values="16;0"/><animateTransform attributeName="transform" dur="1.5s" repeatCount="indefinite" type="rotate" values="0 12 12;360 12 12"/></path><path stroke-dasharray="64" stroke-dashoffset="64" stroke-opacity=".3" d="M12 3c4.97 0 9 4.03 9 9c0 4.97 -4.03 9 -9 9c-4.97 0 -9 -4.03 -9 -9c0 -4.97 4.03 -9 9 -9Z"><animate fill="freeze" attributeName="stroke-dashoffset" dur="1.2s" values="64;0"/></path></g></svg>`;
-                btn.dataset.busy = '1'; 
-                btn.innerHTML = spinner + '创建目录...'; // 插入动画图标
+
+                // 增加 Flex 布局，保证图标文字绝对对齐同行
+                btn.style.display = 'inline-flex';
+                btn.style.alignItems = 'center';
+                btn.style.justifyContent = 'center';
+
+                const svgStyle = 'margin-right: 4px; flex-shrink: 0;';
+                const spinner = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" style="${svgStyle}"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"><path stroke-dasharray="16" stroke-dashoffset="16" d="M12 3c4.97 0 9 4.03 9 9"><animate fill="freeze" attributeName="stroke-dashoffset" dur="0.3s" values="16;0"/><animateTransform attributeName="transform" dur="1.5s" repeatCount="indefinite" type="rotate" values="0 12 12;360 12 12"/></path><path stroke-dasharray="64" stroke-dashoffset="64" stroke-opacity=".3" d="M12 3c4.97 0 9 4.03 9 9c0 4.97 -4.03 9 -9 9c-4.97 0 -9 -4.03 -9 -9c0 -4.97 4.03 -9 9 -9Z"><animate fill="freeze" attributeName="stroke-dashoffset" dur="1.2s" values="64;0"/></path></g></svg>`;
+
+                btn.dataset.busy = '1';
+                btn.innerHTML = spinner + '<span>建目录...</span>';
                 btn.style.color = '#e07b2a';
-                
+
                 try {
                     const magnetHref = btn.dataset.mag;
-                    // 通过 PornDriveAPI 调用底层方法
                     const root = await window.PornDriveAPI.ensureDir('0', '欧美演员');
                     let safeActor = (details.actor || '未知演员').replace(window.PornParser.REGEX_ILLEGAL_PATH, '').trim() || '未知演员';
                     const targetCid = await window.PornDriveAPI.ensureDir(root, safeActor);
 
-                    btn.textContent = '推送...';
+                    btn.innerHTML = spinner + '<span>推送...</span>';
                     const addRes = await window.PornDriveAPI.addOfflineTask(magnetHref, targetCid);
                     const realHash = (addRes.info_hash || (magnetHref.match(/btih:([0-9a-zA-Z]{32,40})/i) || [])[1] || '').toLowerCase();
                     btn.dataset.taskhash = realHash;
@@ -104,7 +111,6 @@ window.PornMagnetUI = class PornMagnetUI {
                     let cleanNewName = ((details.matchPrefix ? `${details.matchPrefix} ${cleanRawTitle}` : details.fullTitle) || '').replace(/\s+/g, ' ').trim() + tags;
 
                     if (!self.pornArchiver.getQueue().some(q => q.hash === realHash && q.cid === targetCid && q.newName === cleanNewName)) {
-                        // 秒传兜底触发机制
                         (async () => {
                             try {
                                 await window.PornDriveAPI.sleep(window.PornDriveAPI.rand(4000, 7000));
@@ -128,18 +134,16 @@ window.PornMagnetUI = class PornMagnetUI {
                             time: Date.now(), stage: 'task', retryCount: 0, failCount: 0, lastError: ''
                         });
                     }
-                    // 加入成功的打勾动画
-                    const checkIcon = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" style="vertical-align: -2px; margin-right: 4px;"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"><path stroke-dasharray="64" stroke-dashoffset="64" d="M3 12c0 -4.97 4.03 -9 9 -9c4.97 0 9 4.03 9 9c0 4.97 -4.03 9 -9 9c-4.97 0 -9 -4.03 -9 -9Z"><animate fill="freeze" attributeName="stroke-dashoffset" dur="0.6s" values="64;0"/></path><path stroke-dasharray="14" stroke-dashoffset="14" d="M8 12l3 3l5 -5"><animate fill="freeze" attributeName="stroke-dashoffset" begin="0.6s" dur="0.2s" values="14;0"/></path></g></svg>`;
-                    btn.innerHTML = checkIcon + '已排队'; 
+
+                    // 修复：此时任务刚好进入后台队列等待，属于中间状态，继续显示转圈即可！
+                    btn.innerHTML = spinner + '<span>已排队</span>';
                     btn.style.color = '#28a745';
                 } catch (e) {
                     alert('磁力离线刮削失败：\n' + e.message);
-                    // 加入失败的叉号动画
-                    const failIcon = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" style="vertical-align: -2px; margin-right: 4px;"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"><path stroke-dasharray="64" stroke-dashoffset="64" d="M12 3c4.97 0 9 4.03 9 9c0 4.97 -4.03 9 -9 9c-4.97 0 -9 -4.03 -9 -9c0 -4.97 4.03 -9 9 -9Z"><animate fill="freeze" attributeName="stroke-dashoffset" dur="0.6s" values="64;0"/></path><path stroke-dasharray="8" stroke-dashoffset="8" d="M12 12l4 4M12 12l-4 -4M12 12l-4 4M12 12l4 -4"><animate fill="freeze" attributeName="stroke-dashoffset" begin="0.6s" dur="0.2s" values="8;0"/></path></g></svg>`;
-                    btn.innerHTML = failIcon + '失败'; 
+                    const failIcon = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" style="${svgStyle}"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"><path stroke-dasharray="64" stroke-dashoffset="64" d="M12 3c4.97 0 9 4.03 9 9c0 4.97 -4.03 9 -9 9c-4.97 0 -9 -4.03 -9 -9c0 -4.97 4.03 -9 9 -9Z"><animate fill="freeze" attributeName="stroke-dashoffset" dur="0.6s" values="64;0"/></path><path stroke-dasharray="8" stroke-dashoffset="8" d="M12 12l4 4M12 12l-4 -4M12 12l-4 4M12 12l4 -4"><animate fill="freeze" attributeName="stroke-dashoffset" begin="0.6s" dur="0.2s" values="8;0"/></path></g></svg>`;
+                    btn.innerHTML = failIcon + '<span>失败</span>';
                     btn.style.color = '#dc3545';
-                    // 5秒后恢复原本的状态，不需要图标
-                    setTimeout(() => { btn.dataset.busy = '0'; btn.textContent = '离线刮削'; btn.style.color = '#7b5ea7'; }, 5000);
+                    setTimeout(() => { btn.dataset.busy = '0'; btn.innerHTML = '<span>离线刮削</span>'; btn.style.color = '#7b5ea7'; }, 5000);
                 }
             };
             table.appendChild(tr);
@@ -189,10 +193,10 @@ window.PornMagnetUI = class PornMagnetUI {
         wrapper.querySelector('#btn-pl-jump').onclick = () => { if (kwInput.value.trim()) window.open(`https://pornolab.net/forum/tracker.php?nm=${encodeURIComponent(kwInput.value.trim())}`, '_blank'); };
         wrapper.querySelector('#btn-copy-kw').onclick = function () { navigator.clipboard.writeText(kwInput.value.trim()); const o = this.textContent; this.textContent = '已复制'; this.style.color = '#15a095'; setTimeout(() => { this.textContent = o; this.style.color = ''; }, 1500); };
         btns.forEach(btn => { btn.onclick = (e) => { e.preventDefault(); btns.forEach(b => b.classList.remove('active')); btn.classList.add('active'); this.runSearch(table, kwInput.value.trim(), btn.dataset.engine, details); }; });
-        
+
         const self = this;
         kwInput.addEventListener('keypress', function (e) { if (e.key === 'Enter') { e.preventDefault(); if (this.value.trim() !== '') self.runSearch(table, this.value.trim(), getActiveEngine(), details); } });
-        
+
         this.runSearch(table, initKw, 'BitSearch', details);
         return wrapper;
     }
