@@ -6,15 +6,15 @@
 
 window.PornArchiver = class PornArchiver {
     constructor(options) {
-        this.req115 = options.req115; 
+        this.req115 = options.req115;
         this.updateBtnUI = options.updateBtnUI;
         this.sleep = options.sleep;
-        this.triggerAutoMatch = options.triggerAutoMatch; 
+        this.triggerAutoMatch = options.triggerAutoMatch;
     }
 
     // 兼容旧版的调用接口（废弃实际后台慢队列功能，改用前端同步快跑）
-    getQueue() { return []; } 
-    scheduleNextPoll() {} 
+    getQueue() { return []; }
+    scheduleNextPoll() { }
 
     /**
      * 核心入口：接收主脚本的任务推送
@@ -44,12 +44,12 @@ window.PornArchiver = class PornArchiver {
         // 步骤 1：handleVerify (高频验证下载状态与提取目标)
         // ==========================================
         for (let i = 0; i < 30; i++) {
-            if (this.updateBtnUI) this.updateBtnUI(item.hash, `验证进度(${i+1}/30)...`, '#f39c12');
+            if (this.updateBtnUI) this.updateBtnUI(item.hash, `验证进度(${i + 1}/30)...`, '#f39c12');
             await this.sleep(1500);
-            
+
             const { tasks } = await this.req115.lixianTaskLists();
             const task = tasks.find(t => t.info_hash && t.info_hash.toLowerCase() === item.hash.toLowerCase());
-            
+
             if (task) {
                 if (task.status === 2 && task.file_id) {
                     file_id = String(task.file_id);
@@ -71,7 +71,7 @@ window.PornArchiver = class PornArchiver {
             await this.sleep(1000);
             const { data } = await this.req115.filesAllVideos(file_id);
             videos = data.filter(v => v.s > 100 * 1024 * 1024);
-            
+
             // 应对恶心种子的单层套娃目录
             if (!videos.length) {
                 const allFiles = await this.req115.filesAll(file_id);
@@ -98,7 +98,7 @@ window.PornArchiver = class PornArchiver {
                     srts = deepSrtRes.data || [];
                 }
             }
-        } catch(e) {}
+        } catch (e) { }
 
         const keepFiles = [...videos, ...srts]; // 合并我们需要保留的正片和字幕
 
@@ -112,7 +112,7 @@ window.PornArchiver = class PornArchiver {
         // 步骤 3：handleRename (调用原生重命名组件，含多集编号和中文后缀)
         // ==========================================
         if (this.updateBtnUI) this.updateBtnUI(item.hash, `智能重命名...`, '#f39c12');
-        
+
         // 严谨的中文标识判断机制
         const checkZh = (name) => {
             // 1. 中字、字幕、以及作为独立单词的 chs/cht/sub 放行
@@ -121,7 +121,7 @@ window.PornArchiver = class PornArchiver {
             if (/[-_]c(?=\.[a-zA-Z0-9]+$|$)/i.test(name)) return true;
             return false;
         };
-        
+
         const hasZh = videos.some(v => checkZh(v.n)) || srts.length > 0;
 
         // 确保最终归档目录被创建
@@ -153,7 +153,7 @@ window.PornArchiver = class PornArchiver {
                     await this.sleep(1500);
                     await this.req115.filesEdit(finalCid, coverRes.data.file_id || coverRes.data.fileid);
                 }
-            } catch(e) {}
+            } catch (e) { }
         }
 
         // ==========================================
@@ -168,23 +168,28 @@ window.PornArchiver = class PornArchiver {
     /**
      * 控制台手动触发的【详情页现存文件提取归档】
      */
-    async flattenAfterOffline(details, dirArray) {
+    async flattenAfterOffline(details, dirArray, directVideo = null) {
         const targetCid = await this.req115.handleDir(dirArray);
         if (!targetCid) throw new Error("无法创建或获取目标目录");
 
-        const safeSearchKw = (kw) => (kw || '').replace(/[^a-zA-Z0-9\u4e00-\u9fa5\s]/g, ' ').replace(/\s+/g, ' ').trim();
-        let searchRes = await this.req115.filesSearchAllVideos(safeSearchKw(details.matchPrefix).substring(0, 40));
-        let videos = window.PornMatcher ? window.PornMatcher.getMatchedVideos(searchRes?.data || [], details) : [];
-        let video = videos[0];
+        let video = directVideo; // 直接接收前端传来的精确目标
 
-        if (!video && details.titleKeyword) {
-            let fbSearch = await this.req115.filesSearchAllVideos(safeSearchKw(details.titleKeyword).substring(0, 40));
-            let fbVideos = window.PornMatcher ? window.PornMatcher.getMatchedVideos(fbSearch?.data || [], details) : [];
-            if (details.dateStr) {
-                const year = details.dateStr.split(/[-.]/)[0]; 
-                fbVideos = fbVideos.filter(v => (v.n || '').includes(year)); 
+        // 只有在前端没传精确目标时，才去执行它原本的“盲搜”兜底
+        if (!video) {
+            const safeSearchKw = (kw) => (kw || '').replace(/[^a-zA-Z0-9\u4e00-\u9fa5\s]/g, ' ').replace(/\s+/g, ' ').trim();
+            let searchRes = await this.req115.filesSearchAllVideos(safeSearchKw(details.matchPrefix).substring(0, 40));
+            let videos = window.PornMatcher ? window.PornMatcher.getMatchedVideos(searchRes?.data || [], details) : [];
+            video = videos[0];
+
+            if (!video && details.titleKeyword) {
+                let fbSearch = await this.req115.filesSearchAllVideos(safeSearchKw(details.titleKeyword).substring(0, 40));
+                let fbVideos = window.PornMatcher ? window.PornMatcher.getMatchedVideos(fbSearch?.data || [], details) : [];
+                if (details.dateStr) {
+                    const year = details.dateStr.split(/[-.]/)[0];
+                    fbVideos = fbVideos.filter(v => (v.n || '').includes(year));
+                }
+                video = fbVideos[0];
             }
-            video = fbVideos[0];
         }
 
         if (!video) throw new Error("归档中止：115中未找到该影片！");
@@ -199,11 +204,11 @@ window.PornArchiver = class PornArchiver {
 
         // 转移至目标目录并清理旧目录垃圾
         if (String(sourceCid) !== String(targetCid)) {
-            await this.req115.filesMove(keepFiles.map(f=>f.fid), targetCid);
+            await this.req115.filesMove(keepFiles.map(f => f.fid), targetCid);
             if (sourceCid !== '0') {
                 const remaining = await this.req115.filesAllVideos(sourceCid);
                 if (!remaining?.data?.filter(v => v.s > 100 * 1024 * 1024).length) {
-                    await this.req115.rbDelete([sourceCid]); 
+                    await this.req115.rbDelete([sourceCid]);
                 }
             }
             await this.sleep(1200);
