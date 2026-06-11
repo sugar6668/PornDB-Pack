@@ -134,8 +134,26 @@ window.PornParser = class PornParser {
                     .filter(n => n.nodeType === Node.TEXT_NODE)
                     .map(n => n.textContent.trim())
                     .join('') || siteNode.textContent.trim();
-            } else if (/onlyfans|fansdb/i.test(doc.body.innerText)) {
-                details.maker = 'FansDB';
+            } else {
+                // 核心修复：精准切分出厂牌名！
+                const infoNodes = doc.querySelectorAll('div.flex, div.whitespace-nowrap');
+                for (let el of infoNodes) {
+                    const txt = el.textContent.trim();
+                    // 寻找包含日期且带有横杠的文本
+                    if (dateRawStr && txt.includes(dateRawStr) && txt.includes('-')) {
+                        const extractedMaker = txt.split('-')[0].trim();
+                        // 过滤掉误判的超长文本
+                        if (extractedMaker && extractedMaker.length < 40) {
+                            details.maker = extractedMaker;
+                            break;
+                        }
+                    }
+                }
+                
+                // 原有的兜底逻辑
+                if (!details.maker && /onlyfans|fansdb/i.test(doc.body.innerText)) {
+                    details.maker = 'FansDB';
+                }
             }
             details.maker = details.maker.replace(/\n/g, '').replace(/\s+/g, ' ').trim();
             details.baseAlpha = details.maker.replace(/\s+/g, '');
