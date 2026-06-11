@@ -86,7 +86,7 @@ window.PornParser = class PornParser {
                 // 如果有多个演员构成的数组，用同样的方法批量清洗
                 details.actors = details.actors.map(a => a.split('(')[0].trim());
             }
-            
+
             return details;
         } catch (e) { return details; }
     }
@@ -97,17 +97,22 @@ window.PornParser = class PornParser {
     static parseWestDetails(doc) {
         let details = { matchPrefix: '', baseAlpha: '', dateStr: '', titlePart: '', titleKeyword: '', fullTitle: '', maker: '', series: '', actor: 'Unknown_Actor', actors: [], url: location.href, coverUrl: '', isValid: false };
         try {
-            const ogTitle = doc.querySelector('meta[property="og:title"]');
-            if (ogTitle) {
-                let rawTitle = ogTitle.getAttribute('content') || '';
-                rawTitle = rawTitle.replace(/\s*[-|]\s*ThePornDB\s*$/i, '').trim();
-                details.titlePart = rawTitle;
+            // 优先从页面 h1 获取最纯净的原始标题 (对齐瀑布流逻辑)
+            const h1 = doc.querySelector('h1');
+            if (h1) {
+                const t = h1.textContent.trim();
+                if (t && t.toLowerCase() !== 'similar scenes') details.titlePart = t;
             }
+            // 如果 h1 抓取失败，降级使用 og:title，并强行切除演员名污染
             if (!details.titlePart) {
-                const h1 = doc.querySelector('h1');
-                if (h1) {
-                    const t = h1.textContent.trim();
-                    if (t.toLowerCase() !== 'similar scenes') details.titlePart = t;
+                const ogTitle = doc.querySelector('meta[property="og:title"]');
+                if (ogTitle) {
+                    let rawTitle = ogTitle.getAttribute('content') || '';
+                    rawTitle = rawTitle.replace(/\s*[-|]\s*ThePornDB\s*$/i, '').trim();
+                    // 剔除 "Actor in Title" 或 "Actor - Title" 格式的污染
+                    if (rawTitle.includes(' in ')) rawTitle = rawTitle.split(' in ').pop();
+                    else if (rawTitle.includes(' - ')) rawTitle = rawTitle.split(' - ').pop();
+                    details.titlePart = rawTitle.trim();
                 }
             }
 
@@ -180,7 +185,7 @@ window.PornParser = class PornParser {
             } else {
                 details.matchPrefix = '';
             }
-            
+
             details.titleKeyword = details.titlePart.replace(/[^a-zA-Z0-9\s]/g, '').split(/\s+/).filter(w => w.length > 2).slice(0, 2).join(' ');
 
             let cleanTitle = details.titlePart || '';
