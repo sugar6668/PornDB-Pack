@@ -80,7 +80,10 @@ window.PornMagnetUI = class PornMagnetUI {
             tr.querySelector('.nong-offline-115').onclick = async (e) => {
                 const btn = e.currentTarget; 
                 if (btn.dataset.busy === '1') return;
-                btn.dataset.busy = '1'; btn.textContent = '建目录...'; btn.style.color = '#e07b2a';
+                const spinner = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" style="vertical-align: -2px; margin-right: 4px;"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"><path stroke-dasharray="16" stroke-dashoffset="16" d="M12 3c4.97 0 9 4.03 9 9"><animate fill="freeze" attributeName="stroke-dashoffset" dur="0.3s" values="16;0"/><animateTransform attributeName="transform" dur="1.5s" repeatCount="indefinite" type="rotate" values="0 12 12;360 12 12"/></path><path stroke-dasharray="64" stroke-dashoffset="64" stroke-opacity=".3" d="M12 3c4.97 0 9 4.03 9 9c0 4.97 -4.03 9 -9 9c-4.97 0 -9 -4.03 -9 -9c0 -4.97 4.03 -9 9 -9Z"><animate fill="freeze" attributeName="stroke-dashoffset" dur="1.2s" values="64;0"/></path></g></svg>`;
+                btn.dataset.busy = '1'; 
+                btn.innerHTML = spinner + '创建目录...'; // 插入动画图标
+                btn.style.color = '#e07b2a';
                 
                 try {
                     const magnetHref = btn.dataset.mag;
@@ -125,11 +128,18 @@ window.PornMagnetUI = class PornMagnetUI {
                             time: Date.now(), stage: 'task', retryCount: 0, failCount: 0, lastError: ''
                         });
                     }
-                    btn.textContent = '已排队'; btn.style.color = '#28a745';
+                    // 加入成功的打勾动画
+                    const checkIcon = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" style="vertical-align: -2px; margin-right: 4px;"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"><path stroke-dasharray="64" stroke-dashoffset="64" d="M3 12c0 -4.97 4.03 -9 9 -9c4.97 0 9 4.03 9 9c0 4.97 -4.03 9 -9 9c-4.97 0 -9 -4.03 -9 -9Z"><animate fill="freeze" attributeName="stroke-dashoffset" dur="0.6s" values="64;0"/></path><path stroke-dasharray="14" stroke-dashoffset="14" d="M8 12l3 3l5 -5"><animate fill="freeze" attributeName="stroke-dashoffset" begin="0.6s" dur="0.2s" values="14;0"/></path></g></svg>`;
+                    btn.innerHTML = checkIcon + '已排队'; 
+                    btn.style.color = '#28a745';
                 } catch (e) {
                     alert('磁力离线刮削失败：\n' + e.message);
-                    btn.textContent = '失败'; btn.style.color = '#dc3545';
-                    setTimeout(() => { btn.dataset.busy = '0'; btn.textContent = ' 智能刮削'; btn.style.color = '#7b5ea7'; }, 5000);
+                    // 加入失败的叉号动画
+                    const failIcon = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" style="vertical-align: -2px; margin-right: 4px;"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"><path stroke-dasharray="64" stroke-dashoffset="64" d="M12 3c4.97 0 9 4.03 9 9c0 4.97 -4.03 9 -9 9c-4.97 0 -9 -4.03 -9 -9c0 -4.97 4.03 -9 9 -9Z"><animate fill="freeze" attributeName="stroke-dashoffset" dur="0.6s" values="64;0"/></path><path stroke-dasharray="8" stroke-dashoffset="8" d="M12 12l4 4M12 12l-4 -4M12 12l-4 4M12 12l4 -4"><animate fill="freeze" attributeName="stroke-dashoffset" begin="0.6s" dur="0.2s" values="8;0"/></path></g></svg>`;
+                    btn.innerHTML = failIcon + '失败'; 
+                    btn.style.color = '#dc3545';
+                    // 5秒后恢复原本的状态，不需要图标
+                    setTimeout(() => { btn.dataset.busy = '0'; btn.textContent = '离线刮削'; btn.style.color = '#7b5ea7'; }, 5000);
                 }
             };
             table.appendChild(tr);
