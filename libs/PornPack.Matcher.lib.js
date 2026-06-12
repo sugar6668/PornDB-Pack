@@ -21,11 +21,11 @@ window.PornMatcher = class PornMatcher {
         let hasYearOnly = false; // 💡 年份宽容匹配
 
         if (details.dateStr) {
-            const cleanDate = details.dateStr.replace(/\./g, ''); 
-            const dashDate = details.dateStr.replace(/\./g, '-'); 
-            const fullYearDate = `20${details.dateStr}`; 
-            const fullYearDash = `20${dashDate}`; 
-            
+            const cleanDate = details.dateStr.replace(/\./g, '');
+            const dashDate = details.dateStr.replace(/\./g, '-');
+            const fullYearDate = `20${details.dateStr}`;
+            const fullYearDash = `20${dashDate}`;
+
             if (n.includes(details.dateStr) || n.includes(cleanDate) || n.includes(dashDate) || n.includes(fullYearDate) || n.includes(fullYearDash)) {
                 hasDate = true;
             } else {
@@ -56,12 +56,16 @@ window.PornMatcher = class PornMatcher {
         }
 
         // 组合加分
-        if (hasMaker && hasDate) score += 100;
-        else if (hasMaker && hasYearOnly) score += 80;
+        if (hasMaker && hasDate) {
+            score += 100;
+        } else if (hasMaker && hasYearOnly) {
+            // [MOD] 缩紧年份宽容度：只有“厂牌+年份”时，必须再命中“演员”或“标题”才给分，防止误把同厂牌同年的其他影片拉进来
+            if (hasActor || hasTitle) score += 80;
+        }
 
         if (hasActor && hasTitle) score += 50;
         if (hasMaker && hasTitle) score += 40;
-        
+
         if (hasActor && hasDate) score += 30;
         else if (hasActor && hasYearOnly) score += 20;
 
