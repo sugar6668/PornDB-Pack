@@ -65,7 +65,7 @@ window.PornBookmark = class PornBookmark {
         targetAnchor.insertAdjacentElement('afterend', btn);
     }
 
-    static async handleExport() { // [MOD] 改为 async
+    static async handleExport() {
         let pbfContent = "[Bookmark]\r\n";
         let validBookmarksCount = 0;
 
@@ -101,35 +101,46 @@ window.PornBookmark = class PornBookmark {
 
         if (validBookmarksCount > 0) {
             const finalName = this.getStandardizedFilename();
-            const fileName = `${finalName}.pbf`; // [ADD] 缓存文件名
+            const fileName = `${finalName}.pbf`;
             const btn = document.getElementById(this.BTN_ID);
             const originalText = btn.innerHTML;
 
-            // [ADD] 开始：检测是否匹配到115目录并尝试上传
+            // 1. 尝试获取页面上的 115 目录 CID
             const matchedBtn = document.querySelector('.x-match-btn-wide');
             const targetCid = matchedBtn ? matchedBtn.dataset.cid : null;
 
-            if (targetCid && typeof window.Req115 !== 'undefined') {
-                btn.innerHTML = '正在同步...';
+            // 2. 暴力穿透沙盒获取 Req115 类
+            const ReqClass = typeof Req115 !== 'undefined' ? Req115 : (typeof window.Req115 !== 'undefined' ? window.Req115 : null);
+
+            // 如果有匹配结果且加载了 115 通信类
+            if (targetCid && ReqClass) {
+                btn.innerHTML = '正在同步115...';
                 try {
-                    const blob = this.createPbfBlob(pbfContent);
-                    const initRes = await window.Req115.sampleInitUpload({ filename: fileName, filesize: blob.size, cid: targetCid });
+                    // 使用标准的 File 对象
+                    const fileObj = this.createPbfFile(pbfContent, fileName);
+
+                    // 获取上传凭证
+                    const initRes = await ReqClass.sampleInitUpload({ filename: fileName, filesize: fileObj.size, cid: targetCid });
+
                     if (initRes && initRes.host) {
-                        await window.Req115.upload({ ...initRes, filename: fileName, file: blob });
+                        // 执行直传
+                        await ReqClass.upload({ ...initRes, filename: fileName, file: fileObj });
                         btn.innerHTML = `已同步115 (${validBookmarksCount})`;
                     } else {
-                        throw new Error("获取上传凭证失败");
+                        throw new Error(initRes?.error_msg || "获取115上传凭证失败，可能是接口变动");
                     }
                 } catch (e) {
-                    console.error("[PornBookmark] 上传失败", e);
+                    console.error("[PornBookmark] 115同步异常日志:", e);
+                    alert("115书签同步失败，将自动降级为下载到本地！\n报错详情: " + e.message);
                     this.downloadFile(pbfContent, fileName);
                     btn.innerHTML = `已降级本地 (${validBookmarksCount})`;
                 }
             } else {
+                // 如果页面还没查出 115 结果，或者缺少 Req115
+                if (!targetCid) console.log("[PornBookmark] 未找到匹配的 115 目录 CID，直接走本地导出。");
                 this.downloadFile(pbfContent, fileName);
                 btn.innerHTML = `已导出本地 (${validBookmarksCount})`;
             }
-            // [ADD] 结束
 
             btn.style.backgroundColor = '#67c23a';
             btn.style.borderColor = '#67c23a';
@@ -145,24 +156,24 @@ window.PornBookmark = class PornBookmark {
         }
     }
 
-    // [ADD] 抽离独立的 Blob 生成方法，供本地下载和 115 上传复用
-    static createPbfBlob(content) {
+    // 生成标准的 File 对象 (解决 115 严格的上传校验)
+    static createPbfFile(content, filename) {
         const buffer = new ArrayBuffer(content.length * 2);
         const view = new Uint16Array(buffer);
         for (let i = 0; i < content.length; i++) {
             view[i] = content.charCodeAt(i);
         }
-
         const bom = new Uint8Array([0xFF, 0xFE]);
-        return new Blob([bom, buffer], { type: 'application/octet-stream' });
+        const blob = new Blob([bom, buffer], { type: 'application/octet-stream' });
+        // [MOD] 强制转换为标准的 File 对象，而非单纯的 Blob
+        return new File([blob], filename, { type: 'application/octet-stream' });
     }
 
-    // 强行用 UTF-16 LE 编码导出，PotPlayer 专属
+    // 本地下载功能复用 File 生成
     static downloadFile(content, filename) {
-        const blob = this.createPbfBlob(content); // [MOD] 调用独立方法
-
+        const fileObj = this.createPbfFile(content, filename);
         const link = document.createElement('a');
-        link.href = URL.createObjectURL(blob);
+        link.href = URL.createObjectURL(fileObj);
         link.download = filename;
         link.style.display = 'none';
 
