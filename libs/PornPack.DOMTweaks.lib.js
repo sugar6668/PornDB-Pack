@@ -5,7 +5,7 @@
  */
 
 window.PornDOMTweaks = class PornDOMTweaks {
-    
+
     // ==========================================
     // 1. 瀑布流状态过滤器模块
     // ==========================================
@@ -109,6 +109,65 @@ window.PornDOMTweaks = class PornDOMTweaks {
         };
 
         filterGroup.insertBefore(btn, filterGroup.firstChild);
+        updateUI();
+    }
+    // [ADD] ==========================================
+    // 3. 详情页相似推荐折叠模块 (阻断演员与影片的懒加载请求)
+    // ==========================================
+    static ensureSimilarScenesToggle(doc) {
+        if (!location.href.includes('/scenes/')) return;
+        if (doc.getElementById('west-similar-toggle-wrap')) return;
+
+        // [MOD] 精准定位“相似影片”与“相似演员”的栅格容器
+        const sceneGrid = doc.querySelector('.grid.grid-cols-scene-card');
+        const performerGrid = doc.querySelector('.grid.grid-cols-performer-card');
+
+        // 如果两个都没找到，则不渲染按钮
+        if (!sceneGrid && !performerGrid) return;
+
+        // [MOD] 收集需要折叠的目标对象，并找到第一个出现在页面上的容器作为按钮插入点
+        const targets = [sceneGrid, performerGrid].filter(Boolean);
+        const insertAnchor = doc.querySelector('.grid.grid-cols-scene-card, .grid.grid-cols-performer-card');
+
+        // 创建包裹按钮的容器
+        const wrap = doc.createElement('div');
+        wrap.id = 'west-similar-toggle-wrap';
+        wrap.style.cssText = 'display: flex; align-items: center; justify-content: center; width: 100%; margin: 20px 0;';
+
+        // 创建开关按钮，复用主脚本中已存在的全局按钮样式
+        const btn = doc.createElement('button');
+        btn.id = 'west-similar-toggle';
+        btn.className = 'west-global-toggle-btn';
+        btn.style.width = 'auto';
+        btn.style.padding = '8px 24px';
+
+        let isCollapsed = true; // 默认折叠，强制阻止 IntersectionObserver 触发
+
+        const updateUI = () => {
+            btn.innerHTML = isCollapsed ? '显示推荐 ▾' : '收起推荐 ▴'; // [MOD] 统一文案
+            if (isCollapsed) {
+                btn.style.background = '#f4f0fa';
+                btn.style.borderStyle = 'solid';
+                // [MOD] 批量隐藏容器，切断高度阻止懒加载
+                targets.forEach(el => el.style.display = 'none');
+            } else {
+                btn.style.background = '#ffffff';
+                btn.style.borderStyle = 'dashed';
+                // [MOD] 展开后恢复显示
+                targets.forEach(el => el.style.display = '');
+            }
+        };
+
+        btn.onclick = (e) => {
+            e.preventDefault();
+            isCollapsed = !isCollapsed;
+            updateUI();
+        };
+
+        wrap.appendChild(btn);
+        // 将按钮容器插入到第一个卡片栅格的正上方
+        insertAnchor.insertAdjacentElement('beforebegin', wrap);
+
         updateUI();
     }
 };
