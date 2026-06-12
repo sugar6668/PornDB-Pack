@@ -191,7 +191,7 @@ window.PornMagnetUI = class PornMagnetUI {
         const getActiveEngine = () => wrapper.querySelector('#engine-btn-group .west-engine-btn.active').dataset.engine;
 
         wrapper.querySelector('#btn-pl-jump').onclick = () => { if (kwInput.value.trim()) window.open(`https://pornolab.net/forum/tracker.php?nm=${encodeURIComponent(kwInput.value.trim())}`, '_blank'); };
-        wrapper.querySelector('#btn-copy-kw').onclick = function () { navigator.clipboard.writeText(kwInput.value.trim()); const o = this.textContent; this.textContent = '已复制'; this.style.color = '#15a095'; setTimeout(() => { this.textContent = o; this.style.color = ''; }, 1500); };
+        wrapper.querySelector('#btn-copy-kw').onclick = function () { navigator.clipboard.writeText(kwInput.value.trim()); const o = this.textContent; this.textContent = '已复制'; this.style.backgroundColor = '#67c23a'; this.style.borderColor = '#67c23a'; setTimeout(() => { this.textContent = o; this.style.backgroundColor = ''; this.style.borderColor = ''; }, 1500); };
         btns.forEach(btn => { btn.onclick = (e) => { e.preventDefault(); btns.forEach(b => b.classList.remove('active')); btn.classList.add('active'); this.runSearch(table, kwInput.value.trim(), btn.dataset.engine, details); }; });
 
         const self = this;
