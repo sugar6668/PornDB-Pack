@@ -111,49 +111,42 @@ window.PornDOMTweaks = class PornDOMTweaks {
         filterGroup.insertBefore(btn, filterGroup.firstChild);
         updateUI();
     }
-    // [ADD] ==========================================
-    // 3. 详情页相似推荐折叠模块 (阻断演员与影片的懒加载请求)
-    // ==========================================
+    // 3. 详情页/演员页 相似推荐折叠模块 (精准阻断懒加载请求)
     static ensureSimilarScenesToggle(doc) {
-        if (!location.href.includes('/scenes/')) return;
-        if (doc.getElementById('west-similar-toggle-wrap')) return;
+        // [MOD] 放开限制，允许在影片页和演员页同时运行
+        if (!location.href.includes('/scenes/') && !location.href.includes('/performers/')) return;
+        if (doc.getElementById('west-similar-toggle')) return; // 防止重复创建
 
-        // [MOD] 精准定位“相似影片”与“相似演员”的栅格容器
-        const sceneGrid = doc.querySelector('.grid.grid-cols-scene-card');
-        const performerGrid = doc.querySelector('.grid.grid-cols-performer-card');
+        let sceneGrid = null;
+        let performerGrid = null;
 
-        // 如果两个都没找到，则不渲染按钮
-        if (!sceneGrid && !performerGrid) return;
+        // [MOD] 智能分流，防止在演员页把演员本人的正片给误杀了！
+        if (location.href.includes('/scenes/')) {
+            // 在影片页：可以隐藏下方的“相似影片”和“相似演员”
+            sceneGrid = doc.querySelector('.grid.grid-cols-scene-card.justify-items-center.gap-x-2.gap-y-4');
+            performerGrid = doc.querySelector('.grid.grid-cols-performer-card.justify-items-center.gap-x-2.gap-y-4');
+        } else if (location.href.includes('/performers/')) {
+            // 在演员页：只隐藏下方的“相似演员”，绝不能动 sceneGrid（那是正片）
+            performerGrid = doc.querySelector('.grid.grid-cols-performer-card.justify-items-center.gap-x-2.gap-y-4');
+        }
 
-        // [MOD] 收集需要折叠的目标对象，并找到第一个出现在页面上的容器作为按钮插入点
         const targets = [sceneGrid, performerGrid].filter(Boolean);
-        const insertAnchor = doc.querySelector('.grid.grid-cols-scene-card, .grid.grid-cols-performer-card');
+        if (targets.length === 0) return;
 
-        // 创建包裹按钮的容器
-        const wrap = doc.createElement('div');
-        wrap.id = 'west-similar-toggle-wrap';
-        wrap.style.cssText = 'display: flex; align-items: center; justify-content: center; width: 100%; margin: 20px 0;';
-
-        // 创建开关按钮，复用主脚本中已存在的全局按钮样式
+        // [MOD] 采用与脚本完全一致的按钮类名和样式
         const btn = doc.createElement('button');
         btn.id = 'west-similar-toggle';
-        btn.className = 'west-global-toggle-btn';
-        btn.style.width = 'auto';
-        btn.style.padding = '8px 24px';
+        btn.className = 'jav-filter-btn active'; // 初始为紫色激活状态
 
-        let isCollapsed = true; // 默认折叠，强制阻止 IntersectionObserver 触发
+        let isCollapsed = true;
 
         const updateUI = () => {
-            btn.innerHTML = isCollapsed ? '显示推荐 ▾' : '收起推荐 ▴'; // [MOD] 统一文案
+            btn.innerHTML = isCollapsed ? '显示相似推荐 ▾' : '收起相似推荐 ▴';
             if (isCollapsed) {
-                btn.style.background = '#f4f0fa';
-                btn.style.borderStyle = 'solid';
-                // [MOD] 批量隐藏容器，切断高度阻止懒加载
+                btn.classList.add('active');
                 targets.forEach(el => el.style.display = 'none');
             } else {
-                btn.style.background = '#ffffff';
-                btn.style.borderStyle = 'dashed';
-                // [MOD] 展开后恢复显示
+                btn.classList.remove('active');
                 targets.forEach(el => el.style.display = '');
             }
         };
@@ -164,9 +157,27 @@ window.PornDOMTweaks = class PornDOMTweaks {
             updateUI();
         };
 
-        wrap.appendChild(btn);
-        // 将按钮容器插入到第一个卡片栅格的正上方
-        insertAnchor.insertAdjacentElement('beforebegin', wrap);
+        // [MOD] 按钮位置：智能吸附“放到一块”
+        const existingGroup = doc.getElementById('jav-filter-group');
+        if (existingGroup) {
+            // 如果页面里已经有按钮组（比如演员页的“展开资料”旁边），直接追加到一起
+            existingGroup.appendChild(btn);
+        } else {
+            // 如果没有按钮组（比如影片页），就原地创建一个同款布局的容器
+            const wrap = doc.createElement('div');
+            wrap.id = 'west-similar-toggle-wrap';
+            wrap.className = 'jav-filter-group';
+            wrap.style.cssText = 'display: flex; width: 100%; margin: 15px 0; justify-content: flex-start; gap: 8px;';
+            wrap.appendChild(btn);
+
+            const firstGrid = targets[0];
+            let insertAnchor = firstGrid;
+            // 自动寻找栅格上方的 <h2> 标题（如“Similar Scenes”），连同标题一起压在下方
+            if (firstGrid.previousElementSibling && /^h[1-6]$/i.test(firstGrid.previousElementSibling.tagName)) {
+                insertAnchor = firstGrid.previousElementSibling;
+            }
+            insertAnchor.insertAdjacentElement('beforebegin', wrap);
+        }
 
         updateUI();
     }
