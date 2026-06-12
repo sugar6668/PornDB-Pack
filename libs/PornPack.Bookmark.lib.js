@@ -52,14 +52,17 @@ window.PornBookmark = class PornBookmark {
 
         if (state === 'cloud_exists') {
             const color = '#67c23a'; const hoverColor = '#85ce61';
+            const fontColor = '#ffffff'; // [ADD] 在此定义网盘已有状态的字体颜色
 
             mainBtn.innerHTML = '网盘已有';
             mainBtn.style.backgroundColor = color; mainBtn.style.borderColor = color;
+            mainBtn.style.color = fontColor; // [ADD] 赋值字体颜色
             mainBtn.onmouseover = () => mainBtn.style.backgroundColor = hoverColor;
             mainBtn.onmouseout = () => mainBtn.style.backgroundColor = color;
             mainBtn.onclick = () => this.handleExport('cloud', mainBtn);
 
             dropBtn.style.backgroundColor = color; dropBtn.style.borderColor = color;
+            dropBtn.style.color = fontColor; // [ADD] 箭头颜色同步
             dropBtn.onmouseover = () => dropBtn.style.backgroundColor = hoverColor;
             dropBtn.onmouseout = () => dropBtn.style.backgroundColor = color;
 
@@ -70,14 +73,17 @@ window.PornBookmark = class PornBookmark {
             };
         } else {
             const color = '#e6a23c'; const hoverColor = '#ebb563';
+            const fontColor = '#ffffff'; // [ADD] 在此定义默认状态的字体颜色
 
             mainBtn.innerHTML = '导出书签';
             mainBtn.style.backgroundColor = color; mainBtn.style.borderColor = color;
+            mainBtn.style.color = fontColor; // [ADD] 赋值字体颜色
             mainBtn.onmouseover = () => mainBtn.style.backgroundColor = hoverColor;
             mainBtn.onmouseout = () => mainBtn.style.backgroundColor = color;
             mainBtn.onclick = () => this.handleExport('local', mainBtn);
 
             dropBtn.style.backgroundColor = color; dropBtn.style.borderColor = color;
+            dropBtn.style.color = fontColor; // [ADD] 箭头颜色同步
             dropBtn.onmouseover = () => dropBtn.style.backgroundColor = hoverColor;
             dropBtn.onmouseout = () => dropBtn.style.backgroundColor = color;
 
