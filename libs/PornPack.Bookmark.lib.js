@@ -46,26 +46,71 @@ window.PornBookmark = class PornBookmark {
     }
 
     static createExportButton(targetAnchor) {
-        const btn = document.createElement('button');
-        btn.id = this.BTN_ID;
-        btn.className = 'west-engine-btn';
-        btn.innerHTML = '导出书签';
+        // [MOD] 容器：使用 relative 定位包裹主按钮、下拉箭头和菜单
+        const wrapper = document.createElement('div');
+        wrapper.style.cssText = 'position: relative; display: inline-flex; align-items: center; margin-left: 4px;';
 
-        btn.style.cssText = `
-            background: #e6a23c;
-            border-color: #e6a23c;
-            color: #fff;
-            margin-left: 4px;
-        `;
+        // 主按钮：导出本地
+        const mainBtn = document.createElement('button');
+        mainBtn.id = this.BTN_ID;
+        mainBtn.className = 'west-engine-btn';
+        mainBtn.innerHTML = '导出书签';
+        mainBtn.style.cssText = `background: #e6a23c; border-color: #e6a23c; color: #fff; border-top-right-radius: 0; border-bottom-right-radius: 0; border-right: 1px solid #f3d19e;`;
+        mainBtn.onmouseover = () => mainBtn.style.backgroundColor = '#ebb563';
+        mainBtn.onmouseout = () => mainBtn.style.backgroundColor = '#e6a23c';
 
-        btn.onmouseover = () => btn.style.backgroundColor = '#ebb563';
-        btn.onmouseout = () => btn.style.backgroundColor = '#e6a23c';
+        // 下拉箭头按钮
+        const dropBtn = document.createElement('button');
+        dropBtn.className = 'west-engine-btn';
+        dropBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>`;
+        dropBtn.style.cssText = `background: #e6a23c; border-color: #e6a23c; color: #fff; border-top-left-radius: 0; border-bottom-left-radius: 0; padding: 6px; display: flex; align-items: center; justify-content: center;`;
+        dropBtn.onmouseover = () => dropBtn.style.backgroundColor = '#ebb563';
+        dropBtn.onmouseout = () => dropBtn.style.backgroundColor = '#e6a23c';
 
-        btn.addEventListener('click', () => this.handleExport());
-        targetAnchor.insertAdjacentElement('afterend', btn);
+        // 浮动菜单
+        const menu = document.createElement('div');
+        menu.style.cssText = `display: none; position: absolute; top: 100%; right: 0; margin-top: 4px; background: #fff; border: 1px solid #e4e7ed; border-radius: 4px; box-shadow: 0 2px 12px 0 rgba(0,0,0,.1); z-index: 9999; min-width: 90px; overflow: hidden;`;
+
+        const uploadOption = document.createElement('div');
+        uploadOption.innerHTML = '上传书签';
+        uploadOption.style.cssText = `padding: 8px 15px; font-size: 13px; font-weight: 600; color: #606266; cursor: pointer; text-align: center; transition: background 0.2s;`;
+        uploadOption.onmouseover = () => uploadOption.style.backgroundColor = '#f5f7fa';
+        uploadOption.onmouseout = () => uploadOption.style.backgroundColor = '#fff';
+
+        menu.appendChild(uploadOption);
+        wrapper.appendChild(mainBtn);
+        wrapper.appendChild(dropBtn);
+        wrapper.appendChild(menu);
+        targetAnchor.insertAdjacentElement('afterend', wrapper);
+
+        // 事件绑定
+        dropBtn.onclick = (e) => {
+            e.stopPropagation();
+            menu.style.display = menu.style.display === 'none' ? 'block' : 'none';
+        };
+        document.addEventListener('click', () => menu.style.display = 'none');
+
+        // 传递 mode 参数以区分功能
+        mainBtn.onclick = () => this.handleExport('local', mainBtn);
+        uploadOption.onclick = () => {
+            menu.style.display = 'none';
+            this.handleExport('cloud', mainBtn);
+        };
     }
 
-    static async handleExport() {
+    // [ADD] 辅助方法：统一处理按钮状态的恢复
+    static setTempBtnState(btn, originalText, newText, color) {
+        btn.innerHTML = newText;
+        btn.style.backgroundColor = color;
+        btn.style.borderColor = color;
+        setTimeout(() => {
+            btn.innerHTML = originalText;
+            btn.style.backgroundColor = '#e6a23c';
+            btn.style.borderColor = '#e6a23c';
+        }, 3000);
+    }
+
+    static async handleExport(mode = 'local', btnNode) { // [MOD] 新增参数区分模式和按钮实例
         let pbfContent = "[Bookmark]\r\n";
         let validBookmarksCount = 0;
 
@@ -102,55 +147,40 @@ window.PornBookmark = class PornBookmark {
         if (validBookmarksCount > 0) {
             const finalName = this.getStandardizedFilename();
             const fileName = `${finalName}.pbf`;
-            const btn = document.getElementById(this.BTN_ID);
-            const originalText = btn.innerHTML;
+            const originalText = btnNode.innerHTML;
 
-            // 1. 尝试获取页面上的 115 目录 CID
-            const matchedBtn = document.querySelector('.x-match-btn-wide');
-            const targetCid = matchedBtn ? matchedBtn.dataset.cid : null;
-
-            // 2. 暴力穿透沙盒获取 Req115 类
-            const ReqClass = typeof Req115 !== 'undefined' ? Req115 : (typeof window.Req115 !== 'undefined' ? window.Req115 : null);
-
-            // 如果有匹配结果且加载了 115 通信类
-            if (targetCid && ReqClass) {
-                btn.innerHTML = '正在同步115...';
-                try {
-                    // 使用标准的 File 对象
-                    const fileObj = this.createPbfFile(pbfContent, fileName);
-
-                    // 获取上传凭证
-                    const initRes = await ReqClass.sampleInitUpload({ filename: fileName, filesize: fileObj.size, cid: targetCid });
-
-                    if (initRes && initRes.host) {
-                        // 执行直传
-                        await ReqClass.upload({ ...initRes, filename: fileName, file: fileObj });
-                        btn.innerHTML = `已同步115 (${validBookmarksCount})`;
-                    } else {
-                        throw new Error(initRes?.error_msg || "获取115上传凭证失败，可能是接口变动");
-                    }
-                } catch (e) {
-                    console.error("[PornBookmark] 115同步异常日志:", e);
-                    alert("115书签同步失败，将自动降级为下载到本地！\n报错详情: " + e.message);
-                    this.downloadFile(pbfContent, fileName);
-                    btn.innerHTML = `已降级本地 (${validBookmarksCount})`;
-                }
-            } else {
-                // 如果页面还没查出 115 结果，或者缺少 Req115
-                if (!targetCid) console.log("[PornBookmark] 未找到匹配的 115 目录 CID，直接走本地导出。");
+            if (mode === 'local') {
+                // 分支 1：仅下载到本地
                 this.downloadFile(pbfContent, fileName);
-                btn.innerHTML = `已导出本地 (${validBookmarksCount})`;
+                this.setTempBtnState(btnNode, originalText, `已导出本地 (${validBookmarksCount})`, '#67c23a');
+            } else if (mode === 'cloud') {
+                // 分支 2：仅上传到网盘
+                const matchedBtn = document.querySelector('.x-match-btn-wide');
+                const targetCid = matchedBtn ? matchedBtn.dataset.cid : null;
+                const ReqClass = typeof Req115 !== 'undefined' ? Req115 : (typeof window.Req115 !== 'undefined' ? window.Req115 : null);
+
+                if (targetCid && ReqClass) {
+                    btnNode.innerHTML = '正在上传...';
+                    try {
+                        const fileObj = this.createPbfFile(pbfContent, fileName);
+                        const initRes = await ReqClass.sampleInitUpload({ filename: fileName, filesize: fileObj.size, cid: targetCid });
+
+                        if (initRes && initRes.host) {
+                            await ReqClass.upload({ ...initRes, filename: fileName, file: fileObj });
+                            this.setTempBtnState(btnNode, originalText, `上传成功 (${validBookmarksCount})`, '#67c23a');
+                        } else {
+                            throw new Error(initRes?.error_msg || "获取115上传凭证失败");
+                        }
+                    } catch (e) {
+                        console.error("[PornBookmark] 上传115失败:", e);
+                        alert("书签上传网盘失败: " + e.message);
+                        this.setTempBtnState(btnNode, originalText, `上传失败`, '#f56c6c'); // 红色警示
+                    }
+                } else {
+                    alert("无法上传：请先等待界面匹配出 115 影片归档目录！");
+                    this.setTempBtnState(btnNode, originalText, `无目标目录`, '#e6a23c');
+                }
             }
-
-            btn.style.backgroundColor = '#67c23a';
-            btn.style.borderColor = '#67c23a';
-
-            setTimeout(() => {
-                btn.innerHTML = originalText;
-                btn.style.backgroundColor = '#e6a23c';
-                btn.style.borderColor = '#e6a23c';
-            }, 3000);
-
         } else {
             alert("未能提取到有效的时间标签！");
         }
