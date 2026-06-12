@@ -14,7 +14,7 @@ window.PornBookmark = class PornBookmark {
     static ensureButtonExists() {
         if (!location.href.includes('/scenes/')) return;
         const targetAnchor = document.getElementById('btn-copy-kw');
-        
+
         if (targetAnchor && !document.getElementById(this.BTN_ID)) {
             this.createExportButton(targetAnchor);
         }
@@ -27,15 +27,15 @@ window.PornBookmark = class PornBookmark {
                 if (details && details.isValid) {
                     let cleanRawTitle = details.titlePart || details.title || "";
                     let maker = details.maker ? details.maker.trim() : "";
-                    
+
                     if (maker && cleanRawTitle.toLowerCase().startsWith(maker.toLowerCase())) {
                         cleanRawTitle = cleanRawTitle.substring(maker.length).replace(/^[^a-zA-Z0-9\u4e00-\u9fa5]+/, '').trim();
                     }
-                    
-                    let cleanNewName = details.matchPrefix 
-                        ? `${details.matchPrefix} ${cleanRawTitle}` 
+
+                    let cleanNewName = details.matchPrefix
+                        ? `${details.matchPrefix} ${cleanRawTitle}`
                         : (details.fullTitle || cleanRawTitle);
-                    
+
                     return cleanNewName.replace(/[\\/:*?"<>|]/g, '').replace(/\s+/g, ' ').trim() || "视频时间轴书签";
                 }
             }
@@ -50,22 +50,22 @@ window.PornBookmark = class PornBookmark {
         btn.id = this.BTN_ID;
         btn.className = 'west-engine-btn';
         btn.innerHTML = '导出书签';
-        
+
         btn.style.cssText = `
             background: #e6a23c;
             border-color: #e6a23c;
             color: #fff;
             margin-left: 4px;
         `;
-        
+
         btn.onmouseover = () => btn.style.backgroundColor = '#ebb563';
         btn.onmouseout = () => btn.style.backgroundColor = '#e6a23c';
-        
+
         btn.addEventListener('click', () => this.handleExport());
         targetAnchor.insertAdjacentElement('afterend', btn);
     }
 
-    static handleExport() {
+    static async handleExport() { // [MOD] 改为 async
         let pbfContent = "[Bookmark]\r\n";
         let validBookmarksCount = 0;
 
@@ -82,65 +82,93 @@ window.PornBookmark = class PornBookmark {
             if (titleSpan && timeSpan) {
                 const titleText = titleSpan.innerText.replace(/['"]/g, '').trim();
                 const timeText = timeSpan.innerText.replace(/['"]/g, '').trim();
-                
+
                 let ms = 0;
                 let timeParts = timeText.split(':').map(Number);
-                
-                if (timeParts.length === 3) { 
+
+                if (timeParts.length === 3) {
                     ms = (timeParts[0] * 3600 + timeParts[1] * 60 + timeParts[2]) * 1000;
-                } else if (timeParts.length === 2) { 
+                } else if (timeParts.length === 2) {
                     ms = (timeParts[0] * 60 + timeParts[1]) * 1000;
                 }
 
                 if (!isNaN(ms) && ms >= 0 && timeText !== "") {
-                     // 保留末尾星号和回车换行，适配 PotPlayer
-                     pbfContent += `${validBookmarksCount}=${ms}*${titleText}*\r\n`;
-                     validBookmarksCount++;
+                    pbfContent += `${validBookmarksCount}=${ms}*${titleText}*\r\n`;
+                    validBookmarksCount++;
                 }
             }
         });
 
         if (validBookmarksCount > 0) {
             const finalName = this.getStandardizedFilename();
-            this.downloadFile(pbfContent, `${finalName}.pbf`);
-            
+            const fileName = `${finalName}.pbf`; // [ADD] 缓存文件名
             const btn = document.getElementById(this.BTN_ID);
             const originalText = btn.innerHTML;
-            
-            btn.innerHTML = `已导出 (${validBookmarksCount})`;
+
+            // [ADD] 开始：检测是否匹配到115目录并尝试上传
+            const matchedBtn = document.querySelector('.x-match-btn-wide');
+            const targetCid = matchedBtn ? matchedBtn.dataset.cid : null;
+
+            if (targetCid && typeof window.Req115 !== 'undefined') {
+                btn.innerHTML = '正在同步...';
+                try {
+                    const blob = this.createPbfBlob(pbfContent);
+                    const initRes = await window.Req115.sampleInitUpload({ filename: fileName, filesize: blob.size, cid: targetCid });
+                    if (initRes && initRes.host) {
+                        await window.Req115.upload({ ...initRes, filename: fileName, file: blob });
+                        btn.innerHTML = `已同步115 (${validBookmarksCount})`;
+                    } else {
+                        throw new Error("获取上传凭证失败");
+                    }
+                } catch (e) {
+                    console.error("[PornBookmark] 上传失败", e);
+                    this.downloadFile(pbfContent, fileName);
+                    btn.innerHTML = `已降级本地 (${validBookmarksCount})`;
+                }
+            } else {
+                this.downloadFile(pbfContent, fileName);
+                btn.innerHTML = `已导出本地 (${validBookmarksCount})`;
+            }
+            // [ADD] 结束
+
             btn.style.backgroundColor = '#67c23a';
             btn.style.borderColor = '#67c23a';
-            
+
             setTimeout(() => {
                 btn.innerHTML = originalText;
                 btn.style.backgroundColor = '#e6a23c';
                 btn.style.borderColor = '#e6a23c';
             }, 3000);
-            
+
         } else {
             alert("未能提取到有效的时间标签！");
         }
     }
 
-    // 强行用 UTF-16 LE 编码导出，PotPlayer 专属
-    static downloadFile(content, filename) {
+    // [ADD] 抽离独立的 Blob 生成方法，供本地下载和 115 上传复用
+    static createPbfBlob(content) {
         const buffer = new ArrayBuffer(content.length * 2);
         const view = new Uint16Array(buffer);
         for (let i = 0; i < content.length; i++) {
             view[i] = content.charCodeAt(i);
         }
-        
+
         const bom = new Uint8Array([0xFF, 0xFE]);
-        const blob = new Blob([bom, buffer], { type: 'application/octet-stream' });
-        
+        return new Blob([bom, buffer], { type: 'application/octet-stream' });
+    }
+
+    // 强行用 UTF-16 LE 编码导出，PotPlayer 专属
+    static downloadFile(content, filename) {
+        const blob = this.createPbfBlob(content); // [MOD] 调用独立方法
+
         const link = document.createElement('a');
         link.href = URL.createObjectURL(blob);
         link.download = filename;
         link.style.display = 'none';
-        
+
         document.body.appendChild(link);
         link.click();
-        
+
         document.body.removeChild(link);
         URL.revokeObjectURL(link.href);
     }
