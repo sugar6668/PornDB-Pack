@@ -17,6 +17,7 @@ window.PornDispatcher = class PornDispatcher {
         this.waitMap = {};       // 字典：存放等待同一番号的多个影片卡片 (合并同类项)
         this.searchQueue = [];   // 队列：存放需要查询的番号
         this.isSearching = false;
+        this.lastReqTime = 0;    // [ADD] 记录上一次请求时间
     }
 
     /**
@@ -50,6 +51,10 @@ window.PornDispatcher = class PornDispatcher {
     async processQueue() {
         if (this.isSearching || !this.searchQueue.length) return;
         this.isSearching = true;
+        // [MOD] 动态退避节流，不浪费一毫秒
+        const elapsed = Date.now() - this.lastReqTime;
+        if (elapsed < 300) await this.sleep(300 - elapsed);
+        this.lastReqTime = Date.now();
 
         const prefix = this.searchQueue[0];
         const pendingItems = this.waitMap[prefix] || []; 
@@ -81,9 +86,6 @@ window.PornDispatcher = class PornDispatcher {
 
         this.searchQueue.shift(); 
         this.isSearching = false;
-
-        // 【关键参数】：安全缓冲，防止并发风控
-        await this.sleep(300);
         this.processQueue(); 
     }
 };

@@ -72,11 +72,6 @@ window.PornMagnetUI = class PornMagnetUI {
                 <td style="white-space:nowrap; text-align:center;"><a class="nong-offline-115" data-mag="${item.maglink}">离线刮削</a></td>
             `;
 
-            tr.querySelector('.nong-copy').onclick = function () {
-                if (typeof GM_setClipboard !== 'undefined') GM_setClipboard(this.dataset.mag); else navigator.clipboard.writeText(this.dataset.mag);
-                this.textContent = '已复制'; setTimeout(() => this.textContent = '复制', 1500);
-            };
-
             tr.querySelector('.nong-offline-115').onclick = async (e) => {
                 const btn = e.currentTarget;
                 if (btn.dataset.busy === '1') return;
@@ -189,6 +184,19 @@ window.PornMagnetUI = class PornMagnetUI {
             </div>`;
         const kwInput = wrapper.querySelector('#jav-nong-kw'), table = wrapper.querySelector('#jav-nong-table'), btns = wrapper.querySelectorAll('#engine-btn-group .west-engine-btn');
         const getActiveEngine = () => wrapper.querySelector('#engine-btn-group .west-engine-btn.active').dataset.engine;
+
+        // [MOD] 全局事件委托：一键监听所有“复制”按钮，省去循环绑定的内存消耗
+        table.addEventListener('click', (e) => {
+            const copyBtn = e.target.closest('.nong-copy');
+            if (copyBtn) {
+                e.preventDefault();
+                const mag = copyBtn.dataset.mag;
+                if (typeof GM_setClipboard !== 'undefined') GM_setClipboard(mag);
+                else navigator.clipboard.writeText(mag);
+                copyBtn.textContent = '已复制';
+                setTimeout(() => copyBtn.textContent = '复制', 1500);
+            }
+        });
 
         wrapper.querySelector('#btn-pl-jump').onclick = () => { if (kwInput.value.trim()) window.open(`https://pornolab.net/forum/tracker.php?nm=${encodeURIComponent(kwInput.value.trim())}`, '_blank'); };
         wrapper.querySelector('#btn-copy-kw').onclick = function () { navigator.clipboard.writeText(kwInput.value.trim()); const o = this.textContent; this.textContent = '已复制'; this.style.backgroundColor = '#67c23a'; this.style.borderColor = '#67c23a'; setTimeout(() => { this.textContent = o; this.style.backgroundColor = ''; this.style.borderColor = ''; }, 1500); };
