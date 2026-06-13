@@ -12,76 +12,64 @@ window.PornQuickView = class PornQuickView {
     ensureButtons(doc) {
         if (window.self !== window.top) return;
 
-        // 1. 全局单例：初始化一次悬浮按钮
-        if (!window._qvFloatingBtn) {
-            const btn = document.createElement('button');
-            btn.innerHTML = '原生预览';
-            btn.style.cssText = `
-                position: absolute; z-index: 999999;
-                padding: 5px 12px; border-radius: 4px; border: none;
-                background: rgba(123, 94, 167, 0.95); color: #fff;
-                font-size: 12px; font-weight: bold; cursor: pointer;
-                box-shadow: 0 3px 8px rgba(0,0,0,0.4); transition: background 0.2s, transform 0.1s;
-                display: none; pointer-events: auto;
-            `;
-            // 鼠标移入按钮本身时，取消隐藏定时器
-            btn.onmouseover = () => {
-                btn.style.background = 'rgba(123, 94, 167, 1)';
-                btn.style.transform = 'scale(1.05)';
-                clearTimeout(window._qvHideTimeout);
-            };
-            // 鼠标移出按钮本身时，触发隐藏定时器
-            btn.onmouseout = () => {
-                btn.style.background = 'rgba(123, 94, 167, 0.95)';
-                btn.style.transform = 'scale(1)';
-                window._qvHideTimeout = setTimeout(() => { btn.style.display = 'none'; }, 50);
-            };
-            btn.onclick = (e) => {
-                e.preventDefault(); e.stopPropagation();
-                btn.style.display = 'none';
-                if (window._qvCurrentUrl) this.openIframeModal(window._qvCurrentUrl);
-            };
-            document.body.appendChild(btn);
-            window._qvFloatingBtn = btn;
-        }
-
-        // [MOD] 真正的性能核武：事件委托机制，全页面只需挂载1个全局监听器！
-        if (!window._qvGlobalBound) {
-            window._qvGlobalBound = true;
-
-            document.body.addEventListener('mouseover', (e) => {
-                const card = e.target.closest('.w-scene-card');
-                if (!card) return;
-
-                // 避免在卡片内部移动时重复触发计算
-                if (window._qvCurrentCard === card) return;
-                window._qvCurrentCard = card;
-
-                clearTimeout(window._qvHideTimeout);
-                const a = card.querySelector('a[href*="/scenes/"]');
-                if (a) {
-                    window._qvCurrentUrl = a.href;
-                    const rect = card.getBoundingClientRect();
-                    window._qvFloatingBtn.style.top = `${window.scrollY + rect.top + 12}px`;
-                    window._qvFloatingBtn.style.left = `${window.scrollX + rect.left + 12}px`;
-                    window._qvFloatingBtn.style.display = 'block';
+        // [ADD] 1. 一次性注入纯 CSS 驱动的悬浮动画（0% CPU开销，GPU硬件加速）
+        if (!doc.getElementById('qv-static-style')) {
+            const style = doc.createElement('style');
+            style.id = 'qv-static-style';
+            style.innerHTML = `
+                /* 按钮默认隐身且不响应鼠标，防止遮挡底层链接 */
+                .qv-static-btn {
+                    position: absolute; top: 8px; left: 8px; z-index: 99;
+                    padding: 5px 12px; border-radius: 4px; border: none;
+                    background: rgba(123, 94, 167, 0.95); color: #fff;
+                    font-size: 12px; font-weight: bold; cursor: pointer;
+                    box-shadow: 0 3px 8px rgba(0,0,0,0.4); 
+                    transition: opacity 0.2s, transform 0.1s;
+                    opacity: 0; pointer-events: none;
                 }
-            });
-
-            document.body.addEventListener('mouseout', (e) => {
-                const card = e.target.closest('.w-scene-card');
-                if (!card) return;
-
-                // 确认鼠标是离开了整个卡片，而不是移动到了卡片内的子元素上
-                const related = e.relatedTarget;
-                if (card.contains(related)) return;
-
-                window._qvCurrentCard = null;
-                window._qvHideTimeout = setTimeout(() => {
-                    window._qvFloatingBtn.style.display = 'none';
-                }, 50);
-            });
+                /* 卡片悬停时，按钮显形并可点击 */
+                .w-scene-card:hover .qv-static-btn {
+                    opacity: 1; pointer-events: auto;
+                }
+                /* 按钮自身的交互动画 */
+                .qv-static-btn:hover {
+                    background: rgba(123, 94, 167, 1); transform: scale(1.05);
+                }
+            `;
+            doc.head.appendChild(style);
         }
+
+        // 2. 静态批量绑定（剔除已经绑过的卡片）
+        const cards = doc.querySelectorAll('.w-scene-card:not(.qv-bound)');
+        if (!cards.length) return;
+
+        cards.forEach(card => {
+            card.classList.add('qv-bound');
+
+            // 找到卡片里的主封面链接
+            const aNode = card.querySelector('a[href*="/scenes/"]');
+            if (!aNode) return;
+
+            // 确保封面的定位模式支持 absolute 子元素
+            if (getComputedStyle(aNode).position === 'static') {
+                aNode.style.position = 'relative';
+            }
+            aNode.style.display = 'block';
+
+            // 直接把固定按钮塞进链接里
+            const btn = doc.createElement('button');
+            btn.className = 'qv-static-btn';
+            btn.innerHTML = '原生预览';
+
+            // 拦截点击事件，防止误触底层的 a 标签跳转
+            btn.onclick = (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                this.openIframeModal(aNode.href);
+            };
+
+            aNode.appendChild(btn);
+        });
     }
 
     openIframeModal(url) {
