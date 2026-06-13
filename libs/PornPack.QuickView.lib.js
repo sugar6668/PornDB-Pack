@@ -12,62 +12,38 @@ window.PornQuickView = class PornQuickView {
     ensureButtons(doc) {
         if (window.self !== window.top) return;
 
-        // [ADD] 1. 一次性注入纯 CSS 驱动的悬浮动画（0% CPU开销，GPU硬件加速）
-        if (!doc.getElementById('qv-static-style')) {
-            const style = doc.createElement('style');
-            style.id = 'qv-static-style';
-            style.innerHTML = `
-                /* 按钮默认隐身且不响应鼠标，防止遮挡底层链接 */
-                .qv-static-btn {
-                    position: absolute; top: 8px; left: 8px; z-index: 99;
-                    padding: 5px 12px; border-radius: 4px; border: none;
-                    background: rgba(123, 94, 167, 0.95); color: #fff;
-                    font-size: 12px; font-weight: bold; cursor: pointer;
-                    box-shadow: 0 3px 8px rgba(0,0,0,0.4); 
-                    transition: opacity 0.2s, transform 0.1s;
-                    opacity: 0; pointer-events: none;
-                }
-                /* 卡片悬停时，按钮显形并可点击 */
-                .w-scene-card:hover .qv-static-btn {
-                    opacity: 1; pointer-events: auto;
-                }
-                /* 按钮自身的交互动画 */
-                .qv-static-btn:hover {
-                    background: rgba(123, 94, 167, 1); transform: scale(1.05);
-                }
-            `;
-            doc.head.appendChild(style);
-        }
-
-        // 2. 静态批量绑定（剔除已经绑过的卡片）
+        // 获取所有未绑定过小窗按钮的卡片
         const cards = doc.querySelectorAll('.w-scene-card:not(.qv-bound)');
         if (!cards.length) return;
 
         cards.forEach(card => {
+            // 打上终身标记，防止重复渲染
             card.classList.add('qv-bound');
 
-            // 找到卡片里的主封面链接
+            // 获取目标影片的链接（通常也是包裹图片的容器）
             const aNode = card.querySelector('a[href*="/scenes/"]');
             if (!aNode) return;
 
-            // 确保封面的定位模式支持 absolute 子元素
+            // 必须把图片容器设为 relative，按钮才能乖乖待在卡片的左上角
             if (getComputedStyle(aNode).position === 'static') {
                 aNode.style.position = 'relative';
             }
             aNode.style.display = 'block';
 
-            // 直接把固定按钮塞进链接里
+            // 创建固定显示的静态按钮
             const btn = doc.createElement('button');
-            btn.className = 'qv-static-btn';
+            // 【完全复原样式与位置】：绝对定位，距离左侧和顶部 12px，原本的紫色背景和阴影
+            btn.style.cssText = 'position: absolute; top: 12px; left: 12px; z-index: 99; padding: 5px 12px; background: #7b5ea7; color: #fff; border: none; border-radius: 4px; font-size: 13px; font-weight: bold; cursor: pointer; box-shadow: 0 3px 8px rgba(0,0,0,0.4);';
             btn.innerHTML = '原生预览';
 
-            // 拦截点击事件，防止误触底层的 a 标签跳转
+            // 只有点击这一瞬间，才会唤醒小窗功能
             btn.onclick = (e) => {
                 e.preventDefault();
                 e.stopPropagation();
                 this.openIframeModal(aNode.href);
             };
 
+            // 将按钮原汁原味地挂载到图片链接的内部
             aNode.appendChild(btn);
         });
     }
