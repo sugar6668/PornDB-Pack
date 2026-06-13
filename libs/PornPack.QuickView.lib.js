@@ -11,7 +11,7 @@ window.PornQuickView = class PornQuickView {
 
     ensureButtons(doc) {
         if (window.self !== window.top) return;
-        
+
         // 1. 全局单例：初始化一次悬浮按钮
         if (!window._qvFloatingBtn) {
             const btn = document.createElement('button');
@@ -25,15 +25,15 @@ window.PornQuickView = class PornQuickView {
                 display: none; pointer-events: auto;
             `;
             // 鼠标移入按钮本身时，取消隐藏定时器
-            btn.onmouseover = () => { 
-                btn.style.background = 'rgba(123, 94, 167, 1)'; 
-                btn.style.transform = 'scale(1.05)'; 
-                clearTimeout(window._qvHideTimeout); 
+            btn.onmouseover = () => {
+                btn.style.background = 'rgba(123, 94, 167, 1)';
+                btn.style.transform = 'scale(1.05)';
+                clearTimeout(window._qvHideTimeout);
             };
             // 鼠标移出按钮本身时，触发隐藏定时器
-            btn.onmouseout = () => { 
-                btn.style.background = 'rgba(123, 94, 167, 0.95)'; 
-                btn.style.transform = 'scale(1)'; 
+            btn.onmouseout = () => {
+                btn.style.background = 'rgba(123, 94, 167, 0.95)';
+                btn.style.transform = 'scale(1)';
                 window._qvHideTimeout = setTimeout(() => { btn.style.display = 'none'; }, 50);
             };
             btn.onclick = (e) => {
@@ -45,15 +45,18 @@ window.PornQuickView = class PornQuickView {
             window._qvFloatingBtn = btn;
         }
 
-        // 2. 🌟 性能核武器：局部精准绑定，抛弃全局监听
-        const cards = doc.querySelectorAll('.w-scene-card:not(.qv-bound)');
-        if (!cards.length) return;
+        // [MOD] 真正的性能核武：事件委托机制，全页面只需挂载1个全局监听器！
+        if (!window._qvGlobalBound) {
+            window._qvGlobalBound = true;
 
-        cards.forEach(card => {
-            card.classList.add('qv-bound'); // 打上标记，终身只绑定一次
-            
-            // 只有鼠标刚跨入卡片边界的那一瞬间（mouseenter），才计算 1 次位置
-            card.addEventListener('mouseenter', () => {
+            document.body.addEventListener('mouseover', (e) => {
+                const card = e.target.closest('.w-scene-card');
+                if (!card) return;
+
+                // 避免在卡片内部移动时重复触发计算
+                if (window._qvCurrentCard === card) return;
+                window._qvCurrentCard = card;
+
                 clearTimeout(window._qvHideTimeout);
                 const a = card.querySelector('a[href*="/scenes/"]');
                 if (a) {
@@ -65,13 +68,20 @@ window.PornQuickView = class PornQuickView {
                 }
             });
 
-            // 鼠标离开卡片时，延时 50 毫秒隐藏（给鼠标滑入按钮留出时间）
-            card.addEventListener('mouseleave', () => {
+            document.body.addEventListener('mouseout', (e) => {
+                const card = e.target.closest('.w-scene-card');
+                if (!card) return;
+
+                // 确认鼠标是离开了整个卡片，而不是移动到了卡片内的子元素上
+                const related = e.relatedTarget;
+                if (card.contains(related)) return;
+
+                window._qvCurrentCard = null;
                 window._qvHideTimeout = setTimeout(() => {
                     window._qvFloatingBtn.style.display = 'none';
                 }, 50);
             });
-        });
+        }
     }
 
     openIframeModal(url) {
@@ -111,7 +121,7 @@ window.PornQuickView = class PornQuickView {
         `;
         closeBtn.onmouseover = () => closeBtn.style.background = '#ff4d4f';
         closeBtn.onmouseout = () => closeBtn.style.background = 'rgba(0,0,0,0.6)';
-        
+
         const closeModal = () => {
             overlay.remove();
             document.body.style.overflow = originalOverflow;
@@ -126,7 +136,7 @@ window.PornQuickView = class PornQuickView {
         iframe.onload = () => {
             try {
                 const iDoc = iframe.contentDocument || iframe.contentWindow.document;
-                
+
                 const style = iDoc.createElement('style');
                 style.innerHTML = `
                     /* 1. 隐藏无用全局组件 */
@@ -152,7 +162,7 @@ window.PornQuickView = class PornQuickView {
                     }
                 `;
                 iDoc.head.appendChild(style);
-                
+
                 box.style.opacity = '1';
             } catch (e) {
                 box.style.opacity = '1';
