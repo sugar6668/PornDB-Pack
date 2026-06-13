@@ -33,8 +33,8 @@ window.PornQuickView = class PornQuickView {
             // 创建固定显示的静态按钮
             const btn = doc.createElement('button');
             // 【完全复原样式与位置】：绝对定位，距离左侧和顶部 12px，原本的紫色背景和阴影
-            btn.style.cssText = 'position: absolute; top: 12px; left: 12px; z-index: 99; padding: 5px 12px; background: #7b5ea7; color: #fff; border: none; border-radius: 4px; font-size: 13px; font-weight: bold; cursor: pointer; box-shadow: 0 3px 8px rgba(0,0,0,0.4);';
-            btn.innerHTML = '原生预览';
+            btn.style.cssText = 'position: absolute; top: 8px; left: 8px; z-index: 99; padding: 5px 12px; background: #7b5ea7; color: #fff; border: none; border-radius: 4px; font-size: 13px; font-weight: bold; cursor: pointer; box-shadow: 0 3px 8px rgba(0,0,0,0.4);';
+            btn.innerHTML = '小窗预览';
 
             // 只有点击这一瞬间，才会唤醒小窗功能
             btn.onclick = (e) => {
