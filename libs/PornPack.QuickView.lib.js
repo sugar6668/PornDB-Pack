@@ -12,38 +12,36 @@ window.PornQuickView = class PornQuickView {
     ensureButtons(doc) {
         if (window.self !== window.top) return;
 
-        // 获取所有未绑定过小窗按钮的卡片
-        const cards = doc.querySelectorAll('.w-scene-card:not(.qv-bound)');
+        // [MOD] 废弃 qv-bound 标记，直接扫所有卡片
+        const cards = doc.querySelectorAll('.w-scene-card');
         if (!cards.length) return;
 
         cards.forEach(card => {
-            // 打上终身标记，防止重复渲染
-            card.classList.add('qv-bound');
-
-            // 获取目标影片的链接（通常也是包裹图片的容器）
+            // 找图片链接的容器
             const aNode = card.querySelector('a[href*="/scenes/"]');
-            if (!aNode) return;
+            // [核心修复]：如果 Vue 还没把链接渲染出来，直接跳过！不打任何标记，等下次触发再试
+            if (!aNode) return; 
 
-            // 必须把图片容器设为 relative，按钮才能乖乖待在卡片的左上角
+            // [核心防重]：检查里面是不是已经有咱们的按钮了，如果有就跳过
+            if (aNode.querySelector('.qv-static-btn')) return;
+
             if (getComputedStyle(aNode).position === 'static') {
                 aNode.style.position = 'relative';
             }
             aNode.style.display = 'block';
 
-            // 创建固定显示的静态按钮
             const btn = doc.createElement('button');
-            // 【完全复原样式与位置】：绝对定位，距离左侧和顶部 12px，原本的紫色背景和阴影
+            // [MOD] 赋予专属的 class 名，作为识别烙印！
+            btn.className = 'qv-static-btn'; 
             btn.style.cssText = 'position: absolute; top: 8px; left: 8px; z-index: 99; padding: 5px 12px; background: #7b5ea7; color: #fff; border: none; border-radius: 4px; font-size: 13px; font-weight: bold; cursor: pointer; box-shadow: 0 3px 8px rgba(0,0,0,0.4);';
             btn.innerHTML = '小窗预览';
 
-            // 只有点击这一瞬间，才会唤醒小窗功能
             btn.onclick = (e) => {
                 e.preventDefault();
                 e.stopPropagation();
                 this.openIframeModal(aNode.href);
             };
 
-            // 将按钮原汁原味地挂载到图片链接的内部
             aNode.appendChild(btn);
         });
     }
