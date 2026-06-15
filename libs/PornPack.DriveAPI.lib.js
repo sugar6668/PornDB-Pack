@@ -18,7 +18,7 @@ window.PornDriveAPI = class PornDriveAPI {
     static tryJSON(r) { try { return JSON.parse(r.responseText); } catch { return null; } }
     static sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
     static rand(min, max) { return Math.floor(Math.random() * (max - min + 1)) + min; }
-    
+
     static req115(method, url, data) {
         return new Promise((res, rej) => {
             const opts = { method, url, headers: { 'User-Agent': navigator.userAgent, 'Origin': 'https://115.com', 'Referer': 'https://115.com/' }, onload: r => res(r), onerror: e => rej(e) };
@@ -52,7 +52,8 @@ window.PornDriveAPI = class PornDriveAPI {
     static initCache() {
         if (!this.dirCache && typeof GM_getValue !== 'undefined') {
             this.dirCache = GM_getValue('pdb_dir_cache_v2', {});
-            this.sweepOldWestCaches(); // 初始化时顺手打扫一下影片过期缓存
+            // [MOD] 性能优化：将全盘垃圾遍历操作延迟 10 秒执行，把宝贵的首屏性能还给用户
+            setTimeout(() => this.sweepOldWestCaches(), 10000);
         }
     }
 
@@ -70,13 +71,13 @@ window.PornDriveAPI = class PornDriveAPI {
 
     static async ensureDir(pid, name) {
         this.initCache();
-        const key = `${pid}::${name}`; 
-        if (this.dirCache[key]) { 
-            this.dirCache[key].ts = Date.now(); this.saveDirCache(); return String(this.dirCache[key].cid); 
+        const key = `${pid}::${name}`;
+        if (this.dirCache[key]) {
+            this.dirCache[key].ts = Date.now(); this.saveDirCache(); return String(this.dirCache[key].cid);
         }
         const found = (this.tryJSON(await this.safeReq115('GET', `${this.API_115.fileList}?aid=1&cid=${pid}&limit=200&show_dir=1&offset=0`))?.data || []).find(f => f.n === name);
-        if (found) { 
-            this.dirCache[key] = { cid: String(found.cid), ts: Date.now() }; this.saveDirCache(); return String(found.cid); 
+        if (found) {
+            this.dirCache[key] = { cid: String(found.cid), ts: Date.now() }; this.saveDirCache(); return String(found.cid);
         }
         const j = this.tryJSON(await this.safeReq115('POST', this.API_115.fileAdd, new URLSearchParams({ pid: String(pid), cname: name }).toString(), 1800, 3200));
         if (!j || !j.cid) throw new Error('创建目录失败');

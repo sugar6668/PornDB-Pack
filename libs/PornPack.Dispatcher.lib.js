@@ -46,46 +46,50 @@ window.PornDispatcher = class PornDispatcher {
     }
 
     /**
-     * 极速处理引擎：消费队列，带安全缓冲
+     * 极速处理引擎：使用安全稳健的 while 迭代代替危险的死递归
      */
     async processQueue() {
         if (this.isSearching || !this.searchQueue.length) return;
         this.isSearching = true;
-        // [MOD] 动态退避节流，不浪费一毫秒
-        const elapsed = Date.now() - this.lastReqTime;
-        if (elapsed < 300) await this.sleep(300 - elapsed);
-        this.lastReqTime = Date.now();
 
-        const prefix = this.searchQueue[0];
-        const pendingItems = this.waitMap[prefix] || []; 
+        // [MOD] 使用 while 迭代代替异步死递归，彻底杜绝长时间挂机时的内存泄漏
+        while (this.searchQueue.length > 0) {
+            const prefix = this.searchQueue[0];
+            const pendingItems = this.waitMap[prefix] || [];
 
-        try {
-            const sampleDetails = pendingItems[0]?.details;
-            if (sampleDetails) {
-                const req = this.getReq();
-                let { data = [] } = await req.filesSearchAllVideos(prefix);
-                let videos = window.PornMatcher.getMatchedVideos(data, sampleDetails);
+            try {
+                const sampleDetails = pendingItems[0]?.details;
+                if (sampleDetails) {
+                    const req = this.getReq();
+                    let { data = [] } = await req.filesSearchAllVideos(prefix);
+                    let videos = window.PornMatcher.getMatchedVideos(data, sampleDetails);
 
-                if (!videos.length && sampleDetails.titleKeyword) {
-                    const fb = await req.filesSearchAllVideos(sampleDetails.titleKeyword);
-                    videos = window.PornMatcher.getMatchedVideos(fb.data, sampleDetails);
+                    if (!videos.length && sampleDetails.titleKeyword) {
+                        const fb = await req.filesSearchAllVideos(sampleDetails.titleKeyword);
+                        videos = window.PornMatcher.getMatchedVideos(fb.data, sampleDetails);
+                    }
+
+                    this.setWestCache(prefix, videos);
+
+                    // 批量渲染：一网打尽网页上所有相同的影片卡片
+                    pendingItems.forEach(({ item }) => {
+                        this.applyMatchTagState(item, videos);
+                    });
                 }
-
-                this.setWestCache(prefix, videos);
-
-                // 批量渲染：一网打尽网页上所有相同的影片卡片
-                pendingItems.forEach(({ item }) => {
-                    this.applyMatchTagState(item, videos);
-                });
+            } catch (e) {
+                pendingItems.forEach(({ item }) => this.applyMatchTagState(item, []));
+            } finally {
+                delete this.waitMap[prefix]; // 处理完释放内存
             }
-        } catch (e) {
-            pendingItems.forEach(({ item }) => this.applyMatchTagState(item, []));
-        } finally {
-            delete this.waitMap[prefix]; // 处理完释放内存
+
+            this.searchQueue.shift();
+
+            // 如果队列里还有任务，就等 300ms 再进入下一次循环，防止风控
+            if (this.searchQueue.length > 0) {
+                await this.sleep(300);
+            }
         }
 
-        this.searchQueue.shift(); 
         this.isSearching = false;
-        this.processQueue(); 
     }
 };

@@ -18,7 +18,7 @@ window.PornMatcher = class PornMatcher {
 
         let score = 0;
         let hasDate = false, hasMaker = false, hasTitle = false, hasActor = false;
-        let hasYearOnly = false; // 💡 年份宽容匹配
+        let hasYearOnly = false;
 
         if (details.dateStr) {
             const cleanDate = details.dateStr.replace(/\./g, '');
@@ -29,50 +29,43 @@ window.PornMatcher = class PornMatcher {
             if (n.includes(details.dateStr) || n.includes(cleanDate) || n.includes(dashDate) || n.includes(fullYearDate) || n.includes(fullYearDash)) {
                 hasDate = true;
             } else {
-                // 💡 年份降级兜底
                 const year = "20" + details.dateStr.split(/[-.]/)[0];
-                if (n.includes(year)) {
-                    hasYearOnly = true;
-                }
+                if (n.includes(year)) hasYearOnly = true;
             }
         }
 
-        const maker = String(details.baseAlpha || '').toLowerCase().replace(this.REGEX_NON_ALPHANUM, '');
+        // [MOD] 直接读取外层预处理好的干净字符，跳过耗时的正则运算
+        const maker = details.makerClean !== undefined ? details.makerClean : String(details.baseAlpha || '').toLowerCase().replace(this.REGEX_NON_ALPHANUM, '');
         if (maker && maker !== 'unknown' && nClean.includes(maker)) hasMaker = true;
 
-        const cleanT = (details.titlePart || '').toLowerCase().replace(this.REGEX_NON_ALPHANUM, '');
+        const cleanT = details.titleClean !== undefined ? details.titleClean : (details.titlePart || '').toLowerCase().replace(this.REGEX_NON_ALPHANUM, '');
         if (cleanT.length >= 4 && nClean.includes(cleanT)) hasTitle = true;
 
-        if (details.actors && details.actors.length > 0) {
+        if (details.actorsClean) {
+            details.actorsClean.forEach(ac => { if (ac && nClean.includes(ac)) hasActor = true; });
+        } else if (details.actors && details.actors.length > 0) {
             details.actors.forEach(actor => {
                 const ac = actor.toLowerCase().replace(this.REGEX_NON_ALPHANUM, '');
                 if (ac && nClean.includes(ac)) hasActor = true;
             });
         }
 
-        // 💡 免死金牌！只要包含了对应年份，绝不误伤打 0 分！
         if (details.dateStr && !hasDate && !hasYearOnly) {
             if (this.REGEX_DATE_FORMAT.test(n)) return 0;
         }
 
-        // 组合加分
         if (hasMaker && hasDate) {
             score += 100;
         } else if (hasMaker && hasYearOnly) {
-            // [MOD] 缩紧年份宽容度：只有“厂牌+年份”时，必须再命中“演员”或“标题”才给分，防止误把同厂牌同年的其他影片拉进来
             if (hasActor || hasTitle) score += 80;
         }
 
         if (hasActor && hasTitle) score += 50;
         if (hasMaker && hasTitle) score += 40;
-
         if (hasActor && hasDate) score += 30;
         else if (hasActor && hasYearOnly) score += 20;
-
         if (hasDate && hasTitle) score += 20;
         else if (hasYearOnly && hasTitle) score += 15;
-
-        // 瀑布流极致宽容！连厂牌和演员都没抓到时，仅靠标题和年份也强行捞起！
         if (!hasMaker && !hasActor && hasYearOnly && hasTitle) score += 30;
 
         return score;
@@ -146,9 +139,16 @@ window.PornMatcher = class PornMatcher {
      */
     static getMatchedVideos(dataArray, details) {
         if (!dataArray || !dataArray.length) return [];
+
+        // [MOD] 性能优化：提前将 details 的正则清洗结果缓存下来，避免在 map 中执行几百次相同的运算
+        const makerClean = String(details.baseAlpha || '').toLowerCase().replace(this.REGEX_NON_ALPHANUM, '');
+        const titleClean = (details.titlePart || '').toLowerCase().replace(this.REGEX_NON_ALPHANUM, '');
+        const actorsClean = (details.actors || []).map(a => String(a).toLowerCase().replace(this.REGEX_NON_ALPHANUM, '')).filter(Boolean);
+        const cleanedDetails = { ...details, makerClean, titleClean, actorsClean };
+
         return dataArray
             .map(it => {
-                it.matchScore = this.getMatchScore(it.n, details);
+                it.matchScore = this.getMatchScore(it.n, cleanedDetails);
                 return it;
             })
             .filter(it => it.matchScore > 0)
