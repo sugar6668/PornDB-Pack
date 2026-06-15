@@ -123,7 +123,7 @@ window.PornParser = class PornParser {
                 if (/[a-zA-Z]{3,}\s+\d{1,2},\s+\d{4}/.test(txt)) dateRawStr = txt;
             });
             if (!dateRawStr) {
-                const m = doc.body.innerText.match(/([a-zA-Z]{3,})\s+(\d{1,2}),\s+(\d{4})/);
+                const m = doc.body.textContent.match(/([a-zA-Z]{3,})\s+(\d{1,2}),\s+(\d{4})/);
                 if (m) dateRawStr = m[0];
             }
             if (dateRawStr) details.dateStr = this.parseDate(dateRawStr);
@@ -151,7 +151,7 @@ window.PornParser = class PornParser {
                 }
                 
                 // 原有的兜底逻辑
-                if (!details.maker && /onlyfans|fansdb/i.test(doc.body.innerText)) {
+                if (!details.maker && /onlyfans|fansdb/i.test(doc.body.textContent)) {
                     details.maker = 'FansDB';
                 }
             }
