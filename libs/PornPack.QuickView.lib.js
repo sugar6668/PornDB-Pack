@@ -12,19 +12,17 @@ window.PornQuickView = class PornQuickView {
     ensureButtons(doc) {
         if (window.self !== window.top) return;
 
-        // 【CPU 性能核武】：只扫描没生成过按钮的新卡片
         const newCards = doc.querySelectorAll('.w-scene-card:not([data-qv-processed="1"])');
         if (!newCards.length) return;
 
         newCards.forEach(card => {
-            // 瞬间打上烙印
             card.dataset.qvProcessed = "1";
 
             const aNode = card.querySelector('a[href*="/scenes/"]');
             if (!aNode) return;
 
-            // 撤销外部挂载，恢复原有的完美位置：放回 a 标签内部
-            aNode.style.display = 'block';
+            // 【隔离护城河】：挂载在最外层 card 末尾，避免被 Vue 针对性抹除
+            card.style.position = 'relative';
 
             const btn = doc.createElement('button');
             btn.className = 'qv-static-btn';
@@ -37,8 +35,7 @@ window.PornQuickView = class PornQuickView {
                 this.openIframeModal(aNode.href);
             };
 
-            // 重新塞回 a 标签内
-            aNode.appendChild(btn);
+            card.appendChild(btn);
         });
     }
 
