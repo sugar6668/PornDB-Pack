@@ -7,15 +7,13 @@
 window.PornFilter = class PornFilter {
     constructor(defaultWhitelist = []) {
         this.storageKey = 'pdb_studio_whitelist_v1';
-        // 正则化函数：统一转小写，并剔除所有空格和点，以完美匹配 "blackedraw" 和 "Blacked Raw" 等
         this.normalize = (name) => String(name).toLowerCase().replace(/[\s.]/g, '');
-
-        // 存入和读取的白名单均强制统一为正则化格式
         this.whitelist = this.loadWhitelist(defaultWhitelist.map(this.normalize));
         this.currentStudioMap = new Map();
-
+        
         this.initCSS();
         this.initUI();
+        this.startFastTagger(); // [MOD] 启用极速打标器，解决 300ms 延迟闪烁
     }
 
     loadWhitelist(defaultList) {
@@ -78,41 +76,51 @@ window.PornFilter = class PornFilter {
         document.head.appendChild(style);
     }
 
+    // [ADD] 极速打标器：利用微任务队列，在浏览器渲染新卡片前瞬间判定并隐藏
     startFastTagger() {
         const checkCard = (card) => {
             if (card.dataset.studioChecked) return;
+            card.dataset.studioChecked = '1';
+
             const studioLink = card.querySelector('a[href*="/sites/"]');
             if (studioLink) {
                 const studioName = studioLink.textContent.trim() || studioLink.querySelector('img')?.getAttribute('title') || '未知片商';
-                card.dataset.studioName = studioName; // 保留原始排版名称供 UI 展示
+                card.dataset.studioName = studioName;
                 const normName = this.normalize(studioName);
-
+                
+                // 如果命中黑名单，瞬间打上隐藏标签，此时还没画到屏幕上
                 if (!this.whitelist.includes(normName)) {
-                    card.dataset.studioHidden = '1'; // 挂载结界，瞬间 CSS 隐藏
+                    card.dataset.studioHidden = '1';
                 }
-                card.dataset.studioChecked = '1';
             }
         };
 
-        document.querySelectorAll('.grid-cols-scene-card .w-scene-card').forEach(checkCard);
+        // 页面初始加载时的扫描
+        document.querySelectorAll('.grid-cols-scene-card .w-scene-card:not([data-studio-checked="1"])').forEach(checkCard);
 
+        // 监听 Vue 动态插入（翻页/切换路由）
         new MutationObserver((mutations) => {
-            mutations.forEach(m => {
-                m.addedNodes.forEach(node => {
-                    if (node.nodeType === 1 && node.classList.contains('w-scene-card')) {
-                        checkCard(node);
-                    } else if (node.nodeType === 1 && node.querySelector) {
-                        node.querySelectorAll('.w-scene-card').forEach(checkCard);
+            for (let m of mutations) {
+                if (m.addedNodes.length) {
+                    for (let node of m.addedNodes) {
+                        if (node.nodeType === 1) {
+                            if (node.classList.contains('w-scene-card')) {
+                                checkCard(node);
+                            } else if (node.querySelector) {
+                                const cards = node.querySelectorAll('.w-scene-card:not([data-studio-checked="1"])');
+                                cards.forEach(checkCard);
+                            }
+                        }
                     }
-                });
-            });
+                }
+            }
         }).observe(document.body, { childList: true, subtree: true });
     }
 
     initUI() {
         this.overlay = document.createElement('div');
         this.overlay.id = 'pdb-filter-overlay';
-
+        
         this.modal = document.createElement('div');
         this.modal.id = 'pdb-filter-modal';
         this.modal.innerHTML = `
@@ -137,7 +145,7 @@ window.PornFilter = class PornFilter {
 
         this.overlay.onclick = () => this.hideModal();
         this.modal.querySelector('#pdb-modal-close').onclick = () => this.hideModal();
-
+        
         this.modal.querySelector('#pdb-select-all').onclick = () => {
             this.modal.querySelectorAll('.pdb-checkbox').forEach(cb => { cb.checked = true; this.updateItemStyle(cb); });
         };
@@ -167,7 +175,6 @@ window.PornFilter = class PornFilter {
         const cards = document.querySelectorAll('.grid-cols-scene-card .w-scene-card');
         this.currentStudioMap.clear();
 
-        // 收集所有片商及其在当前页卡片数量
         cards.forEach(card => {
             const name = card.dataset.studioName || '未知片商';
             if (!this.currentStudioMap.has(name)) this.currentStudioMap.set(name, []);
@@ -178,7 +185,7 @@ window.PornFilter = class PornFilter {
         let html = '';
 
         const sorted = Array.from(this.currentStudioMap.entries()).sort((a, b) => b[1].length - a[1].length);
-
+        
         if (sorted.length === 0) {
             html = `<div style="text-align:center; color:#6b7280; padding:20px 0;">当前页面未解析到片商数据</div>`;
         } else {
@@ -202,15 +209,14 @@ window.PornFilter = class PornFilter {
     }
 
     applyFilter(saveAsDefault = false) {
-        // 读取此时面板上打着勾的正则化名称，形成新的白名单数组
         const checkedNormNames = Array.from(this.modal.querySelectorAll('.pdb-checkbox:checked')).map(cb => cb.dataset.normName);
-
+        
         document.querySelectorAll('.grid-cols-scene-card .w-scene-card').forEach(card => {
             const normName = this.normalize(card.dataset.studioName);
             if (checkedNormNames.includes(normName)) {
-                delete card.dataset.studioHidden; // 移除结界，重新显示
+                delete card.dataset.studioHidden;
             } else {
-                card.dataset.studioHidden = '1';  // 加上结界，隐藏卡片
+                card.dataset.studioHidden = '1';
             }
         });
 
@@ -230,50 +236,24 @@ window.PornFilter = class PornFilter {
         this.modal.style.display = 'none';
     }
 
-    // [ADD] 新增同步极速验证方法：供主脚本在排队前调用，避免双重循环扫描！
-    checkAndTagCard(card) {
-        if (card.dataset.studioChecked) return card.dataset.studioHidden === '1';
-
-        const studioLink = card.querySelector('a[href*="/sites/"]');
-        if (studioLink) {
-            const studioName = studioLink.textContent.trim() || studioLink.querySelector('img')?.getAttribute('title') || '未知片商';
-            card.dataset.studioName = studioName;
-            const normName = this.normalize(studioName);
-
-            // 如果命中黑名单，瞬间挂上隐藏标签
-            if (!this.whitelist.includes(normName)) {
-                card.dataset.studioHidden = '1';
-            }
-        }
-        card.dataset.studioChecked = '1';
-        return card.dataset.studioHidden === '1'; // 返回 true 代表该卡片被隐藏
-    }
-
-    // 供外部环境（PornDOMTweaks）挂载顶部按钮调用
     ensureTopButton(doc) {
-        // 1. 严格限制：只在演员页启用
         if (!location.href.includes('/performers/')) return;
-
-        // 2. 防重复创建
         if (doc.getElementById('pdb-top-filter-btn')) return;
 
-        // 3. 强依赖找寻 DOMTweaks 刚才创建的那个统一容器
         const group = doc.getElementById('jav-filter-group');
-        if (!group) return;
+        if (!group) return; 
 
         const btn = doc.createElement('button');
         btn.id = 'pdb-top-filter-btn';
-        btn.className = 'jav-filter-btn';
-        // 剥离多余背景色，采用纯净绿色字体，和旁边的按钮视觉上完美统一
-        btn.style.cssText = 'color: #10b981; border-color: transparent; font-weight: bold; background: transparent;';
+        // [MOD] 完全使用原生类名，不添加任何修改背景或边框的内联样式，使其与资料折叠按钮风格 100% 统一
+        btn.className = 'jav-filter-btn'; 
         btn.innerHTML = `厂牌过滤`;
-
+        
         btn.onclick = (e) => {
             e.preventDefault();
             this.showModal();
         };
 
-        // 4. 塞进原生容器组中，和资料、推荐按钮彻底排在一块！
         group.appendChild(btn);
     }
 };
