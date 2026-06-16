@@ -245,8 +245,7 @@ window.PornFilter = class PornFilter {
 
         const btn = doc.createElement('button');
         btn.id = 'pdb-top-filter-btn';
-        // [MOD] 完全使用原生类名，不添加任何修改背景或边框的内联样式，使其与资料折叠按钮风格 100% 统一
-        btn.className = 'jav-filter-btn'; 
+        btn.className = 'jav-filter-btn active'; 
         btn.innerHTML = `厂牌过滤`;
         
         btn.onclick = (e) => {
