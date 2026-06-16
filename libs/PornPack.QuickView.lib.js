@@ -23,7 +23,7 @@ window.PornQuickView = class PornQuickView {
             const aNode = card.querySelector('a[href*="/scenes/"]');
             if (!aNode) return;
 
-            // [MOD] 彻底抹除导致卡顿的 getComputedStyle，样式定位已由主脚本统一托管
+            // 撤销外部挂载，恢复原有的完美位置：放回 a 标签内部
             aNode.style.display = 'block';
 
             const btn = doc.createElement('button');
@@ -37,6 +37,7 @@ window.PornQuickView = class PornQuickView {
                 this.openIframeModal(aNode.href);
             };
 
+            // 重新塞回 a 标签内
             aNode.appendChild(btn);
         });
     }

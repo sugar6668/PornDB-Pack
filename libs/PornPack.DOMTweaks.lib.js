@@ -19,45 +19,20 @@ window.PornDOMTweaks = class PornDOMTweaks {
         document.head.appendChild(style);
     }
 
-    // 2. 统一寻找挂载容器 (核心修复：根据截图暴露的 data-name 精确制导)
+    // 2. 统一寻找挂载容器（独立安全容器版）
     static getOrCreateActionBar(doc) {
         let group = doc.getElementById('jav-filter-group');
         if (group) return group;
 
-        let targetContent = null;
-        // 获取所有的 tab 滚动内容区
-        const allContents = Array.from(doc.querySelectorAll('.n-tabs-nav-scroll-content'));
-
-        for (let content of allContents) {
-            // 【精确制导】：只要这个容器里包含了 scenes / jav / movies 任何一个标签，它绝对就是作品栏！
-            if (content.querySelector('[data-name="scenes"], [data-name="jav"], [data-name="movies"]')) {
-                targetContent = content;
-                break;
-            }
-        }
-
-        // 兜底：如果没找到对应特征，但页面上有 tab，默认取最后一个（通常厂牌页只有一个也是作品）
-        if (!targetContent && allContents.length > 0) {
-            targetContent = allContents[allContents.length - 1];
-        }
-
-        if (targetContent) {
-            group = doc.createElement('div');
-            group.id = 'jav-filter-group';
-            group.className = 'jav-filter-group';
-            // 利用 margin-left: auto 将按钮组推到 flex 容器的最右侧，完美融入原生 UI
-            group.style.cssText = 'display: inline-flex; align-items: center; gap: 8px; margin-left: auto; padding-right: 15px;';
-            targetContent.appendChild(group);
-            return group;
-        }
-
-        // 备用兜底（部分影片详情页可能根本没有 tab，直接放在网格上方）
+        // 【终极安全挂载点】：彻底放弃与 Tab 标签组的纠缠！
+        // 直接找到展示作品的网格，插在网格正上方。这里是绝对安全的块级区域，不会挤压任何原生排版。
         const grid = doc.querySelector('.grid-cols-scene-card') || doc.querySelector('.grid-cols-performer-site-card');
         if (grid) {
             group = doc.createElement('div');
             group.id = 'jav-filter-group';
             group.className = 'jav-filter-group';
-            group.style.cssText = 'display: flex; width: 100%; margin: 15px 0; justify-content: flex-start; gap: 8px;';
+            // 加一个漂亮的控制台底框，让它自成一派，视觉上也更整洁
+            group.style.cssText = 'display: flex; width: 100%; margin: 5px 0 15px 0; padding: 12px; background: #fdfdfd; border: 1px dashed #7b5ea7; border-radius: 8px; justify-content: flex-start; align-items: center; gap: 8px; flex-wrap: wrap; box-sizing: border-box;';
             grid.parentNode.insertBefore(group, grid);
             return group;
         }
