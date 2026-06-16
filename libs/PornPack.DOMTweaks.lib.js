@@ -19,30 +19,39 @@ window.PornDOMTweaks = class PornDOMTweaks {
         document.head.appendChild(style);
     }
 
-    // 2. 统一寻找挂载容器 (核心修复：精确制导，避开被隐藏的资料 Tab)
+    // 2. 统一寻找挂载容器 (核心修复：根据截图暴露的 data-name 精确制导)
     static getOrCreateActionBar(doc) {
         let group = doc.getElementById('jav-filter-group');
         if (group) return group;
 
-        // 演员页面有多个 n-tabs，必须精确找到包含“视频/JAV/Scenes”的那个真实作品容器！
-        const allTabs = Array.from(doc.querySelectorAll('.n-tabs'));
-        // 倒序查找，或者通过文本匹配，确保找到的是视频列表上方的 Tab
-        let targetTabs = allTabs.find(tab => tab.innerText.includes('JAV') || tab.innerText.includes('Scenes')) || allTabs[allTabs.length - 1];
+        let targetContent = null;
+        // 获取所有的 tab 滚动内容区
+        const allContents = Array.from(doc.querySelectorAll('.n-tabs-nav-scroll-content'));
 
-        if (targetTabs) {
-            const scrollContent = targetTabs.querySelector('.n-tabs-nav-scroll-content');
-            if (scrollContent) {
-                group = doc.createElement('div');
-                group.id = 'jav-filter-group';
-                group.className = 'jav-filter-group';
-                // 使用 margin-left: auto 把按钮完美推到原生标签的右侧
-                group.style.cssText = 'display: inline-flex; align-items: center; gap: 8px; margin-left: auto; padding-right: 15px;';
-                scrollContent.appendChild(group);
-                return group;
+        for (let content of allContents) {
+            // 【精确制导】：只要这个容器里包含了 scenes / jav / movies 任何一个标签，它绝对就是作品栏！
+            if (content.querySelector('[data-name="scenes"], [data-name="jav"], [data-name="movies"]')) {
+                targetContent = content;
+                break;
             }
         }
 
-        // 备用兜底（影片详情页可能没有 tab，直接放在网格上方）
+        // 兜底：如果没找到对应特征，但页面上有 tab，默认取最后一个（通常厂牌页只有一个也是作品）
+        if (!targetContent && allContents.length > 0) {
+            targetContent = allContents[allContents.length - 1];
+        }
+
+        if (targetContent) {
+            group = doc.createElement('div');
+            group.id = 'jav-filter-group';
+            group.className = 'jav-filter-group';
+            // 利用 margin-left: auto 将按钮组推到 flex 容器的最右侧，完美融入原生 UI
+            group.style.cssText = 'display: inline-flex; align-items: center; gap: 8px; margin-left: auto; padding-right: 15px;';
+            targetContent.appendChild(group);
+            return group;
+        }
+
+        // 备用兜底（部分影片详情页可能根本没有 tab，直接放在网格上方）
         const grid = doc.querySelector('.grid-cols-scene-card') || doc.querySelector('.grid-cols-performer-site-card');
         if (grid) {
             group = doc.createElement('div');
@@ -101,11 +110,16 @@ window.PornDOMTweaks = class PornDOMTweaks {
         const group = this.getOrCreateActionBar(doc);
         if (!group) return;
 
-        // 识别那个用于展示参数的 Info Tab，动态给它挂上标记，配合 CSS 进行防闪烁隐藏
+        // 【精准隐藏】：寻找上面那一层用来展示“资料/外部链接”的 n-tabs 并打上隐藏标记
         const allTabs = Array.from(doc.querySelectorAll('.n-tabs'));
-        const infoTabs = allTabs.find(tab => tab.innerText.includes('Info') || tab.innerText.includes('Sites'));
-        if (infoTabs && !infoTabs.classList.contains('west-info-tab-node')) {
-            infoTabs.classList.add('west-info-tab-node');
+        for (let tabWrap of allTabs) {
+            // 利用原生特征识别
+            if (tabWrap.querySelector('[data-name="info"], [data-name="sites"]')) {
+                if (!tabWrap.classList.contains('west-info-tab-node')) {
+                    tabWrap.classList.add('west-info-tab-node');
+                }
+                break;
+            }
         }
 
         let btn = doc.getElementById('west-performer-toggle');
