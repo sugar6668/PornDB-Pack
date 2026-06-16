@@ -16,7 +16,6 @@ window.PornFilter = class PornFilter {
 
         this.initCSS();
         this.initUI();
-        this.startFastTagger();
     }
 
     loadWhitelist(defaultList) {
@@ -231,25 +230,45 @@ window.PornFilter = class PornFilter {
         this.modal.style.display = 'none';
     }
 
+    // [ADD] 新增同步极速验证方法：供主脚本在排队前调用，避免双重循环扫描！
+    checkAndTagCard(card) {
+        if (card.dataset.studioChecked) return card.dataset.studioHidden === '1';
+
+        const studioLink = card.querySelector('a[href*="/sites/"]');
+        if (studioLink) {
+            const studioName = studioLink.textContent.trim() || studioLink.querySelector('img')?.getAttribute('title') || '未知片商';
+            card.dataset.studioName = studioName;
+            const normName = this.normalize(studioName);
+
+            // 如果命中黑名单，瞬间挂上隐藏标签
+            if (!this.whitelist.includes(normName)) {
+                card.dataset.studioHidden = '1';
+            }
+        }
+        card.dataset.studioChecked = '1';
+        return card.dataset.studioHidden === '1'; // 返回 true 代表该卡片被隐藏
+    }
+
+    // [MOD] 修复按钮显示：精确挂载到原生 tab 容器
     ensureTopButton(doc) {
         if (!location.href.includes('/performers/')) return;
         if (doc.getElementById('pdb-top-filter-btn')) return;
 
-        // [MOD] 强制依赖 PornDOMTweaks 创建的标准容器，不再自行创建兜底容器
-        const filterGroup = doc.getElementById('jav-filter-group');
-        if (!filterGroup) return;
+        const group = doc.getElementById('jav-filter-group');
+        if (!group) return;
 
         const btn = doc.createElement('button');
         btn.id = 'pdb-top-filter-btn';
-        // [MOD] 剔除所有内联 style 硬编码，完全依赖 DOMTweaks 统一下发的 jav-filter-btn 样式
         btn.className = 'jav-filter-btn';
-        btn.innerHTML = `厂牌过滤`;
+        // 保持样式一致
+        btn.style.cssText = 'color: #10b981; border-color: #10b981; font-weight: bold; background: #e7e7e7;';
+        btn.innerHTML = `⚙️ 厂牌过滤`;
 
         btn.onclick = (e) => {
             e.preventDefault();
             this.showModal();
         };
 
-        filterGroup.appendChild(btn);
+        group.appendChild(btn);
     }
 };

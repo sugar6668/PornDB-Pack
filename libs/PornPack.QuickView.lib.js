@@ -12,22 +12,22 @@ window.PornQuickView = class PornQuickView {
     ensureButtons(doc) {
         if (window.self !== window.top) return;
 
-        // [MOD] 废弃 qv-bound 标记，直接扫所有卡片
-        const cards = doc.querySelectorAll('.w-scene-card');
-        if (!cards.length) return;
+        // 【CPU 性能核武】：只扫描没生成过按钮的新卡片
+        const newCards = doc.querySelectorAll('.w-scene-card:not([data-qv-processed="1"])');
+        if (!newCards.length) return;
 
-        cards.forEach(card => {
-            // 找图片链接的容器
+        newCards.forEach(card => {
+            // 瞬间打上烙印
+            card.dataset.qvProcessed = "1";
+
             const aNode = card.querySelector('a[href*="/scenes/"]');
-            // [核心修复]：如果 Vue 还没把链接渲染出来，直接跳过！不打任何标记，等下次触发再试
-            if (!aNode) return; 
+            if (!aNode) return;
 
-            // [核心防重]：检查里面是不是已经有咱们的按钮了，如果有就跳过
-            if (aNode.querySelector('.qv-static-btn')) return;
+            // [MOD] 彻底抹除导致卡顿的 getComputedStyle，样式定位已由主脚本统一托管
+            aNode.style.display = 'block';
 
             const btn = doc.createElement('button');
-            // [MOD] 赋予专属的 class 名，作为识别烙印！
-            btn.className = 'qv-static-btn'; 
+            btn.className = 'qv-static-btn';
             btn.style.cssText = 'position: absolute; top: 8px; left: 8px; z-index: 99; padding: 5px 12px; background: #7b5ea7; color: #fff; border: none; border-radius: 4px; font-size: 13px; font-weight: bold; cursor: pointer; box-shadow: 0 3px 8px rgba(0,0,0,0.4);';
             btn.innerHTML = '小窗预览';
 

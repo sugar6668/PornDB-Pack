@@ -1,187 +1,146 @@
 /**
  * @name         PornPack DOM Tweaks Library
- * @description  PornDB 站点样式与页面结构改造模块（过滤器、资料折叠等）
+ * @description  PornDB 站点样式与页面结构改造模块
  * @version      1.0.0
  */
 
 window.PornDOMTweaks = class PornDOMTweaks {
+    // 1. 注入防闪烁全局 CSS 结界
+    static initGlobalStyles() {
+        if (document.getElementById('west-dom-tweaks-css')) return;
+        const style = document.createElement('style');
+        style.id = 'west-dom-tweaks-css';
+        style.innerHTML = `
+            /* 资料与推荐防闪烁隐藏结界 */
+            body.west-info-collapsed .w-full.bg-white.shadow-sm.rounded-sm.overflow-hidden.p-4.mb-5,
+            body.west-info-collapsed .n-tabs.n-tabs--card-type.n-tabs--medium-size.n-tabs--top { display: none !important; }
+            body.west-similar-collapsed .grid-cols-performer-card { display: none !important; }
+        `;
+        document.head.appendChild(style);
+    }
 
-    // ==========================================
-    // 1. 瀑布流状态过滤器模块
-    // ==========================================
-    static ensureFilterButtons(doc) {
-        // 找到 tabs 的滚动容器和 JAV 标签页
+    // 2. 统一寻找或建立挂载容器
+    static getOrCreateActionBar(doc) {
+        let group = doc.getElementById('jav-filter-group');
+        if (group) return group;
+
+        // [核心要求]：精准挂载到原生的 tab 滚动容器中
         const scrollContent = doc.querySelector('.n-tabs-nav-scroll-content');
-        const javTab = doc.querySelector('div[data-name="jav"]');
-
-        if (scrollContent && javTab && !doc.getElementById('jav-filter-group')) {
-            const group = doc.createElement('div');
+        if (scrollContent) {
+            group = doc.createElement('div');
             group.id = 'jav-filter-group';
             group.className = 'jav-filter-group';
-
-            const filters = [
-                { id: 'all', text: '显示所有' },
-                { id: 'matched', text: '显示已匹配' },
-                { id: 'unmatched', text: '显示未匹配' }
-            ];
-
-            filters.forEach((f, idx) => {
-                const btn = doc.createElement('button');
-                btn.className = `jav-filter-btn ${idx === 0 ? 'active' : ''}`;
-                btn.innerText = f.text;
-
-                btn.onclick = (e) => {
-                    e.preventDefault();
-                    // 切换按钮高亮
-                    group.querySelectorAll('.jav-filter-btn').forEach(b => b.classList.remove('active'));
-                    btn.classList.add('active');
-
-                    // 切换 body class，触发 CSS 引擎规则
-                    doc.body.classList.remove('filter-mode-matched', 'filter-mode-unmatched');
-                    if (f.id !== 'all') {
-                        doc.body.classList.add(`filter-mode-${f.id}`);
-                    }
-                };
-                group.appendChild(btn);
-            });
-
+            // 使用内联 flex 完美接在原生 tab 标签序列的最后方
+            group.style.cssText = 'display: inline-flex; align-items: center; gap: 8px; margin-left: 15px; padding-right: 15px;';
             scrollContent.appendChild(group);
+            return group;
         }
+
+        // 备用兜底（影片详情页可能没有 tab，放在网格上方）
+        const grid = doc.querySelector('.grid-cols-scene-card') || doc.querySelector('.grid-cols-performer-site-card');
+        if (grid) {
+            group = doc.createElement('div');
+            group.id = 'jav-filter-group';
+            group.className = 'jav-filter-group';
+            group.style.cssText = 'display: flex; width: 100%; margin: 15px 0; justify-content: flex-start; gap: 8px;';
+            grid.parentNode.insertBefore(group, grid);
+            return group;
+        }
+        return null;
     }
 
     // ==========================================
-    // 2. 演员页面全局资料折叠模块
+    // 模块：瀑布流状态过滤器
+    // ==========================================
+    static ensureFilterButtons(doc) {
+        const group = this.getOrCreateActionBar(doc);
+        if (!group || doc.getElementById('west-status-filter-all')) return;
+
+        const filters = [
+            { id: 'all', text: '显示所有' },
+            { id: 'matched', text: '显示已匹配' },
+            { id: 'unmatched', text: '显示未匹配' }
+        ];
+
+        filters.forEach((f, idx) => {
+            const btn = doc.createElement('button');
+            btn.id = `west-status-filter-${f.id}`;
+            btn.className = `jav-filter-btn ${idx === 0 ? 'active' : ''}`;
+            btn.innerText = f.text;
+
+            btn.onclick = (e) => {
+                e.preventDefault();
+                doc.querySelectorAll('[id^="west-status-filter-"]').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                doc.body.classList.remove('filter-mode-matched', 'filter-mode-unmatched');
+                if (f.id !== 'all') doc.body.classList.add(`filter-mode-${f.id}`);
+            };
+            group.appendChild(btn);
+        });
+    }
+
+    // ==========================================
+    // 模块：演员页面全局资料折叠 (物理零闪烁版)
     // ==========================================
     static ensurePerformerPanelToggle(doc) {
         if (!location.href.includes('/performers/')) return;
+        this.initGlobalStyles();
+
+        // 无论 DOM 怎么重建，只要是演员页，立刻在 body 上加折叠锁
+        if (!doc.body.classList.contains('west-info-collapsed') && !doc.body.dataset.panelInit) {
+            doc.body.classList.add('west-info-collapsed');
+            doc.body.dataset.panelInit = '1';
+        }
+
         if (doc.getElementById('west-performer-toggle')) return;
 
-        // 定位到底部的视频导航栏
-        const allTabs = Array.from(doc.querySelectorAll('.n-tabs'));
-        const videoTabs = allTabs.find(tab => tab.innerText.includes('JAV(s)') || tab.innerText.includes('Scenes'));
-        if (!videoTabs) return;
+        const group = this.getOrCreateActionBar(doc);
+        if (!group) return;
 
-        // 定位上方的参数资料导航栏和卡片
-        const infoTabs = allTabs.find(tab => tab.innerText.includes('Info') || tab.innerText.includes('Sites'));
-        const targetCards = Array.from(doc.querySelectorAll('.w-full.bg-white.shadow-sm.rounded-sm.overflow-hidden.p-4.mb-5'));
-
-        const elementsToHide = [...targetCards];
-        if (infoTabs) elementsToHide.push(infoTabs);
-        if (elementsToHide.length === 0) return;
-        // [ADD] 核心修复：翻页时如果按钮已存在，读取当前状态并瞬间重新隐藏新刷出的资料卡片
-        const existingBtn = doc.getElementById('west-performer-toggle');
-        if (existingBtn) {
-            const isCollapsed = existingBtn.classList.contains('active');
-            elementsToHide.forEach(el => { if (el) el.style.display = isCollapsed ? 'none' : ''; });
-            return;
-        }
-
-        const scrollContent = videoTabs.querySelector('.n-tabs-nav-scroll-content');
-        if (!scrollContent) return;
-
-        // 获取或创建过滤按钮组容器
-        let filterGroup = doc.getElementById('jav-filter-group');
-        if (!filterGroup) {
-            filterGroup = doc.createElement('div');
-            filterGroup.id = 'jav-filter-group';
-            filterGroup.className = 'jav-filter-group';
-            scrollContent.appendChild(filterGroup);
-        } else if (!scrollContent.contains(filterGroup)) {
-            scrollContent.appendChild(filterGroup);
-        }
-
-        // 创建折叠开关
         const btn = doc.createElement('button');
         btn.id = 'west-performer-toggle';
-        // [MOD] 默认加上 active 类名（折叠状态）
         btn.className = 'jav-filter-btn active';
-
-        const updateUI = () => {
-            // [MOD] 状态直接从 DOM 原生类名中读取，防止 Vue 重绘导致变量脱节
-            const isCollapsed = btn.classList.contains('active');
-            btn.innerHTML = isCollapsed ? `展开资料` : `收起资料`;
-            elementsToHide.forEach(el => {
-                if (el) el.style.display = isCollapsed ? 'none' : '';
-            });
-        };
+        btn.innerHTML = doc.body.classList.contains('west-info-collapsed') ? '展开资料' : '收起资料';
 
         btn.onclick = (e) => {
             e.preventDefault();
-            btn.classList.toggle('active'); // [MOD] 切换原生类名
-            updateUI();
+            const isCollapsed = doc.body.classList.toggle('west-info-collapsed');
+            btn.classList.toggle('active', isCollapsed);
+            btn.innerHTML = isCollapsed ? '展开资料' : '收起资料';
         };
 
-        filterGroup.insertBefore(btn, filterGroup.firstChild);
-        updateUI(); // 首次执行隐藏
+        group.insertBefore(btn, group.firstChild); // 插在最前面
     }
-    // 3. 详情页/演员页 相似推荐折叠模块 (精准阻断懒加载请求)
+
+    // ==========================================
+    // 模块：相似推荐折叠 (物理零闪烁版)
+    // ==========================================
     static ensureSimilarScenesToggle(doc) {
-        // [MOD] 放开限制，允许在影片页和演员页同时运行
         if (!location.href.includes('/scenes/') && !location.href.includes('/performers/')) return;
-        if (doc.getElementById('west-similar-toggle')) return; // 防止重复创建
+        this.initGlobalStyles();
 
-        let sceneGrid = null;
-        let performerGrid = null;
-
-        // [MOD] 智能分流，防止在演员页把演员本人的正片给误杀了！
-        if (location.href.includes('/scenes/')) {
-            // 在影片页：可以隐藏下方的“相似影片”和“相似演员”
-            sceneGrid = doc.querySelector('.grid.grid-cols-scene-card.justify-items-center.gap-x-2.gap-y-4');
-            performerGrid = doc.querySelector('.grid.grid-cols-performer-card.justify-items-center.gap-x-2.gap-y-4');
-        } else if (location.href.includes('/performers/')) {
-            // 在演员页：只隐藏下方的“相似演员”，绝不能动 sceneGrid（那是正片）
-            performerGrid = doc.querySelector('.grid.grid-cols-performer-card.justify-items-center.gap-x-2.gap-y-4');
+        if (!doc.body.classList.contains('west-similar-collapsed') && !doc.body.dataset.similarInit) {
+            doc.body.classList.add('west-similar-collapsed');
+            doc.body.dataset.similarInit = '1';
         }
 
-        const targets = [sceneGrid, performerGrid].filter(Boolean);
-        if (targets.length === 0) return;
+        if (doc.getElementById('west-similar-toggle')) return;
 
-        // [MOD] 采用与脚本完全一致的按钮类名和样式
+        const group = this.getOrCreateActionBar(doc);
+        if (!group) return;
+
         const btn = doc.createElement('button');
         btn.id = 'west-similar-toggle';
-        btn.className = 'jav-filter-btn active'; // 初始为紫色激活状态
-        btn.style.cssText = 'display: inline-flex; align-items: center; justify-content: center; white-space: nowrap;';
-
-        let isCollapsed = true;
-        const updateUI = () => {
-            btn.innerHTML = isCollapsed ? `显示推荐` : `收起推荐`;
-            if (isCollapsed) {
-                btn.classList.add('active');
-                targets.forEach(el => el.style.display = 'none');
-            } else {
-                btn.classList.remove('active');
-                targets.forEach(el => el.style.display = '');
-            }
-        };
+        btn.className = 'jav-filter-btn active';
+        btn.innerHTML = doc.body.classList.contains('west-similar-collapsed') ? '显示推荐' : '收起推荐';
 
         btn.onclick = (e) => {
             e.preventDefault();
-            isCollapsed = !isCollapsed;
-            updateUI();
+            const isCollapsed = doc.body.classList.toggle('west-similar-collapsed');
+            btn.classList.toggle('active', isCollapsed);
+            btn.innerHTML = isCollapsed ? '显示推荐' : '收起推荐';
         };
 
-        // [MOD] 按钮位置：智能吸附“放到一块”
-        const existingGroup = doc.getElementById('jav-filter-group');
-        if (existingGroup) {
-            // 如果页面里已经有按钮组（比如演员页的“展开资料”旁边），直接追加到一起
-            existingGroup.appendChild(btn);
-        } else {
-            // 如果没有按钮组（比如影片页），就原地创建一个同款布局的容器
-            const wrap = doc.createElement('div');
-            wrap.id = 'west-similar-toggle-wrap';
-            wrap.className = 'jav-filter-group';
-            wrap.style.cssText = 'display: flex; width: 100%; margin: 15px 0; justify-content: flex-start; gap: 8px;';
-            wrap.appendChild(btn);
-
-            const firstGrid = targets[0];
-            let insertAnchor = firstGrid;
-            // 自动寻找栅格上方的 <h2> 标题（如“Similar Scenes”），连同标题一起压在下方
-            if (firstGrid.previousElementSibling && /^h[1-6]$/i.test(firstGrid.previousElementSibling.tagName)) {
-                insertAnchor = firstGrid.previousElementSibling;
-            }
-            insertAnchor.insertAdjacentElement('beforebegin', wrap);
-        }
-
-        updateUI();
+        group.appendChild(btn);
     }
 };
