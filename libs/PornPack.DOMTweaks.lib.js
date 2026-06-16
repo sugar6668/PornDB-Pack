@@ -11,32 +11,38 @@ window.PornDOMTweaks = class PornDOMTweaks {
         const style = document.createElement('style');
         style.id = 'west-dom-tweaks-css';
         style.innerHTML = `
-            /* 资料与推荐防闪烁隐藏结界 */
+            /* 资料与推荐防闪烁隐藏结界 (交由 C++ 原生渲染管线在绘制前抹除) */
             body.west-info-collapsed .w-full.bg-white.shadow-sm.rounded-sm.overflow-hidden.p-4.mb-5,
-            body.west-info-collapsed .n-tabs.n-tabs--card-type.n-tabs--medium-size.n-tabs--top { display: none !important; }
+            body.west-info-collapsed .west-info-tab-node { display: none !important; }
             body.west-similar-collapsed .grid-cols-performer-card { display: none !important; }
         `;
         document.head.appendChild(style);
     }
 
-    // 2. 统一寻找或建立挂载容器
+    // 2. 统一寻找挂载容器 (核心修复：精确制导，避开被隐藏的资料 Tab)
     static getOrCreateActionBar(doc) {
         let group = doc.getElementById('jav-filter-group');
         if (group) return group;
 
-        // [核心要求]：精准挂载到原生的 tab 滚动容器中
-        const scrollContent = doc.querySelector('.n-tabs-nav-scroll-content');
-        if (scrollContent) {
-            group = doc.createElement('div');
-            group.id = 'jav-filter-group';
-            group.className = 'jav-filter-group';
-            // 使用内联 flex 完美接在原生 tab 标签序列的最后方
-            group.style.cssText = 'display: inline-flex; align-items: center; gap: 8px; margin-left: 15px; padding-right: 15px;';
-            scrollContent.appendChild(group);
-            return group;
+        // 演员页面有多个 n-tabs，必须精确找到包含“视频/JAV/Scenes”的那个真实作品容器！
+        const allTabs = Array.from(doc.querySelectorAll('.n-tabs'));
+        // 倒序查找，或者通过文本匹配，确保找到的是视频列表上方的 Tab
+        let targetTabs = allTabs.find(tab => tab.innerText.includes('JAV') || tab.innerText.includes('Scenes')) || allTabs[allTabs.length - 1];
+
+        if (targetTabs) {
+            const scrollContent = targetTabs.querySelector('.n-tabs-nav-scroll-content');
+            if (scrollContent) {
+                group = doc.createElement('div');
+                group.id = 'jav-filter-group';
+                group.className = 'jav-filter-group';
+                // 使用 margin-left: auto 把按钮完美推到原生标签的右侧
+                group.style.cssText = 'display: inline-flex; align-items: center; gap: 8px; margin-left: auto; padding-right: 15px;';
+                scrollContent.appendChild(group);
+                return group;
+            }
         }
 
-        // 备用兜底（影片详情页可能没有 tab，放在网格上方）
+        // 备用兜底（影片详情页可能没有 tab，直接放在网格上方）
         const grid = doc.querySelector('.grid-cols-scene-card') || doc.querySelector('.grid-cols-performer-site-card');
         if (grid) {
             group = doc.createElement('div');
@@ -86,30 +92,35 @@ window.PornDOMTweaks = class PornDOMTweaks {
         if (!location.href.includes('/performers/')) return;
         this.initGlobalStyles();
 
-        // 无论 DOM 怎么重建，只要是演员页，立刻在 body 上加折叠锁
+        // 无论 Vue 怎么重建 DOM，只要进入演员页，立刻在 body 上加结界锁
         if (!doc.body.classList.contains('west-info-collapsed') && !doc.body.dataset.panelInit) {
             doc.body.classList.add('west-info-collapsed');
             doc.body.dataset.panelInit = '1';
         }
 
-        if (doc.getElementById('west-performer-toggle')) return;
-
         const group = this.getOrCreateActionBar(doc);
         if (!group) return;
 
-        const btn = doc.createElement('button');
-        btn.id = 'west-performer-toggle';
-        btn.className = 'jav-filter-btn active';
-        btn.innerHTML = doc.body.classList.contains('west-info-collapsed') ? '展开资料' : '收起资料';
+        // 识别那个用于展示参数的 Info Tab，动态给它挂上标记，配合 CSS 进行防闪烁隐藏
+        const allTabs = Array.from(doc.querySelectorAll('.n-tabs'));
+        const infoTabs = allTabs.find(tab => tab.innerText.includes('Info') || tab.innerText.includes('Sites'));
+        if (infoTabs && !infoTabs.classList.contains('west-info-tab-node')) {
+            infoTabs.classList.add('west-info-tab-node');
+        }
 
-        btn.onclick = (e) => {
-            e.preventDefault();
-            const isCollapsed = doc.body.classList.toggle('west-info-collapsed');
-            btn.classList.toggle('active', isCollapsed);
-            btn.innerHTML = isCollapsed ? '展开资料' : '收起资料';
-        };
-
-        group.insertBefore(btn, group.firstChild); // 插在最前面
+        let btn = doc.getElementById('west-performer-toggle');
+        if (!btn) {
+            btn = doc.createElement('button');
+            btn.id = 'west-performer-toggle';
+            btn.className = 'jav-filter-btn';
+            btn.onclick = (e) => {
+                e.preventDefault();
+                doc.body.classList.toggle('west-info-collapsed');
+                this.updateToggleButton(btn, doc.body.classList.contains('west-info-collapsed'), '资料');
+            };
+            group.insertBefore(btn, group.firstChild); // 插在控制台最前面
+        }
+        this.updateToggleButton(btn, doc.body.classList.contains('west-info-collapsed'), '资料');
     }
 
     // ==========================================
@@ -124,23 +135,32 @@ window.PornDOMTweaks = class PornDOMTweaks {
             doc.body.dataset.similarInit = '1';
         }
 
-        if (doc.getElementById('west-similar-toggle')) return;
-
         const group = this.getOrCreateActionBar(doc);
         if (!group) return;
 
-        const btn = doc.createElement('button');
-        btn.id = 'west-similar-toggle';
-        btn.className = 'jav-filter-btn active';
-        btn.innerHTML = doc.body.classList.contains('west-similar-collapsed') ? '显示推荐' : '收起推荐';
+        let btn = doc.getElementById('west-similar-toggle');
+        if (!btn) {
+            btn = doc.createElement('button');
+            btn.id = 'west-similar-toggle';
+            btn.className = 'jav-filter-btn';
+            btn.onclick = (e) => {
+                e.preventDefault();
+                doc.body.classList.toggle('west-similar-collapsed');
+                this.updateToggleButton(btn, doc.body.classList.contains('west-similar-collapsed'), '推荐');
+            };
+            group.appendChild(btn); // 插在控制台最后面
+        }
+        this.updateToggleButton(btn, doc.body.classList.contains('west-similar-collapsed'), '推荐');
+    }
 
-        btn.onclick = (e) => {
-            e.preventDefault();
-            const isCollapsed = doc.body.classList.toggle('west-similar-collapsed');
-            btn.classList.toggle('active', isCollapsed);
-            btn.innerHTML = isCollapsed ? '显示推荐' : '收起推荐';
-        };
-
-        group.appendChild(btn);
+    // 更新按钮高亮与文字状态
+    static updateToggleButton(btn, isCollapsed, typeName) {
+        if (isCollapsed) {
+            btn.classList.add('active');
+            btn.innerHTML = `显示${typeName}`;
+        } else {
+            btn.classList.remove('active');
+            btn.innerHTML = `收起${typeName}`;
+        }
     }
 };
