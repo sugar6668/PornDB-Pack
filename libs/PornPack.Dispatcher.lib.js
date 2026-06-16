@@ -23,22 +23,24 @@ window.PornDispatcher = class PornDispatcher {
     /**
      * 统一派发器：接收新加载的影片卡片，分配处理策略
      */
-    dispatch(item, details) {
+    dispatch(item, details, skipCacheCheck) {
         const prefix = details.matchPrefix || details.dateStr;
         if (!prefix) return;
 
-        // 1. 查本地永久缓存 (秒出结果)
-        const cachedVideos = this.getWestCache(prefix);
-        if (cachedVideos) {
-            this.applyMatchTagState(item, cachedVideos);
-            return;
+        // 【P1 优化】调用方已检查过缓存时跳过二次检查
+        if (!skipCacheCheck) {
+            const cachedVideos = this.getWestCache(prefix);
+            if (cachedVideos) {
+                this.applyMatchTagState(item, cachedVideos);
+                return;
+            }
         }
 
-        // 2. 查等待队列，合并同类项
+        // 查等待队列，合并同类项
         if (!this.waitMap[prefix]) this.waitMap[prefix] = [];
         this.waitMap[prefix].push({ item, details });
 
-        // 3. 加入查询队列并触发引擎
+        // 加入查询队列并触发引擎
         if (!this.searchQueue.includes(prefix)) {
             this.searchQueue.push(prefix);
             this.processQueue();
