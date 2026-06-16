@@ -25,11 +25,6 @@ window.PornQuickView = class PornQuickView {
             // [核心防重]：检查里面是不是已经有咱们的按钮了，如果有就跳过
             if (aNode.querySelector('.qv-static-btn')) return;
 
-            if (getComputedStyle(aNode).position === 'static') {
-                aNode.style.position = 'relative';
-            }
-            aNode.style.display = 'block';
-
             const btn = doc.createElement('button');
             // [MOD] 赋予专属的 class 名，作为识别烙印！
             btn.className = 'qv-static-btn'; 

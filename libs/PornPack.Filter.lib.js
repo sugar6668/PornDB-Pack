@@ -235,23 +235,14 @@ window.PornFilter = class PornFilter {
         if (!location.href.includes('/performers/')) return;
         if (doc.getElementById('pdb-top-filter-btn')) return;
 
-        let filterGroup = doc.getElementById('jav-filter-group');
-        // [MOD] 兜底机制：如果没找到父容器，主动在作品网格上方注入一个独立容器
-        if (!filterGroup) {
-            const grid = doc.querySelector('.grid-cols-scene-card');
-            if (!grid) return;
-            filterGroup = doc.createElement('div');
-            filterGroup.id = 'jav-filter-group';
-            filterGroup.className = 'jav-filter-group';
-            filterGroup.style.cssText = 'display: flex; width: 100%; margin: 15px 0; justify-content: flex-start; gap: 8px;';
-            grid.parentNode.insertBefore(filterGroup, grid);
-        }
+        // [MOD] 强制依赖 PornDOMTweaks 创建的标准容器，不再自行创建兜底容器
+        const filterGroup = doc.getElementById('jav-filter-group');
+        if (!filterGroup) return;
 
         const btn = doc.createElement('button');
         btn.id = 'pdb-top-filter-btn';
+        // [MOD] 剔除所有内联 style 硬编码，完全依赖 DOMTweaks 统一下发的 jav-filter-btn 样式
         btn.className = 'jav-filter-btn';
-        // [MOD] 增加默认的基础样式背景，防止透明看不清
-        btn.style.cssText = 'display: inline-flex; align-items: center; justify-content: center; white-space: nowrap; color: #10b981; border-color: #10b981; font-weight: bold; background: #e7e7e7; padding: 4px 12px; border-radius: 6px; cursor: pointer;';
         btn.innerHTML = `厂牌过滤`;
 
         btn.onclick = (e) => {

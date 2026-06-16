@@ -68,6 +68,13 @@ window.PornDOMTweaks = class PornDOMTweaks {
         const elementsToHide = [...targetCards];
         if (infoTabs) elementsToHide.push(infoTabs);
         if (elementsToHide.length === 0) return;
+        // [ADD] 核心修复：翻页时如果按钮已存在，读取当前状态并瞬间重新隐藏新刷出的资料卡片
+        const existingBtn = doc.getElementById('west-performer-toggle');
+        if (existingBtn) {
+            const isCollapsed = existingBtn.classList.contains('active');
+            elementsToHide.forEach(el => { if (el) el.style.display = isCollapsed ? 'none' : ''; });
+            return;
+        }
 
         const scrollContent = videoTabs.querySelector('.n-tabs-nav-scroll-content');
         if (!scrollContent) return;
@@ -86,18 +93,13 @@ window.PornDOMTweaks = class PornDOMTweaks {
         // 创建折叠开关
         const btn = doc.createElement('button');
         btn.id = 'west-performer-toggle';
-        btn.className = 'jav-filter-btn';
-        btn.style.cssText = 'display: inline-flex; align-items: center; justify-content: center; white-space: nowrap;';
-
-        let isCollapsed = true;
+        // [MOD] 默认加上 active 类名（折叠状态）
+        btn.className = 'jav-filter-btn active';
 
         const updateUI = () => {
+            // [MOD] 状态直接从 DOM 原生类名中读取，防止 Vue 重绘导致变量脱节
+            const isCollapsed = btn.classList.contains('active');
             btn.innerHTML = isCollapsed ? `展开资料` : `收起资料`;
-            if (isCollapsed) {
-                btn.classList.add('active');
-            } else {
-                btn.classList.remove('active');
-            }
             elementsToHide.forEach(el => {
                 if (el) el.style.display = isCollapsed ? 'none' : '';
             });
@@ -105,12 +107,12 @@ window.PornDOMTweaks = class PornDOMTweaks {
 
         btn.onclick = (e) => {
             e.preventDefault();
-            isCollapsed = !isCollapsed;
+            btn.classList.toggle('active'); // [MOD] 切换原生类名
             updateUI();
         };
 
         filterGroup.insertBefore(btn, filterGroup.firstChild);
-        updateUI();
+        updateUI(); // 首次执行隐藏
     }
     // 3. 详情页/演员页 相似推荐折叠模块 (精准阻断懒加载请求)
     static ensureSimilarScenesToggle(doc) {
