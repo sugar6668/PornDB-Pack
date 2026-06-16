@@ -249,26 +249,31 @@ window.PornFilter = class PornFilter {
         return card.dataset.studioHidden === '1'; // 返回 true 代表该卡片被隐藏
     }
 
-    // [MOD] 修复按钮显示：精确挂载到原生 tab 容器
+    // 供外部环境（PornDOMTweaks）挂载顶部按钮调用
     ensureTopButton(doc) {
+        // 1. 严格限制：只在演员页启用
         if (!location.href.includes('/performers/')) return;
+
+        // 2. 防重复创建
         if (doc.getElementById('pdb-top-filter-btn')) return;
 
+        // 3. 强依赖找寻 DOMTweaks 刚才创建的那个统一容器
         const group = doc.getElementById('jav-filter-group');
         if (!group) return;
 
         const btn = doc.createElement('button');
         btn.id = 'pdb-top-filter-btn';
         btn.className = 'jav-filter-btn';
-        // 保持样式一致
-        btn.style.cssText = 'color: #10b981; border-color: #10b981; font-weight: bold; background: #e7e7e7;';
-        btn.innerHTML = `⚙️ 厂牌过滤`;
+        // 剥离多余背景色，采用纯净绿色字体，和旁边的按钮视觉上完美统一
+        btn.style.cssText = 'color: #10b981; border-color: transparent; font-weight: bold; background: transparent;';
+        btn.innerHTML = `厂牌过滤`;
 
         btn.onclick = (e) => {
             e.preventDefault();
             this.showModal();
         };
 
+        // 4. 塞进原生容器组中，和资料、推荐按钮彻底排在一块！
         group.appendChild(btn);
     }
 };
