@@ -9,11 +9,11 @@ window.PornFilter = class PornFilter {
         this.storageKey = 'pdb_studio_whitelist_v1';
         // 正则化函数：统一转小写，并剔除所有空格和点，以完美匹配 "blackedraw" 和 "Blacked Raw" 等
         this.normalize = (name) => String(name).toLowerCase().replace(/[\s.]/g, '');
-        
+
         // 存入和读取的白名单均强制统一为正则化格式
         this.whitelist = this.loadWhitelist(defaultWhitelist.map(this.normalize));
         this.currentStudioMap = new Map();
-        
+
         this.initCSS();
         this.initUI();
         this.startFastTagger();
@@ -87,7 +87,7 @@ window.PornFilter = class PornFilter {
                 const studioName = studioLink.textContent.trim() || studioLink.querySelector('img')?.getAttribute('title') || '未知片商';
                 card.dataset.studioName = studioName; // 保留原始排版名称供 UI 展示
                 const normName = this.normalize(studioName);
-                
+
                 if (!this.whitelist.includes(normName)) {
                     card.dataset.studioHidden = '1'; // 挂载结界，瞬间 CSS 隐藏
                 }
@@ -113,7 +113,7 @@ window.PornFilter = class PornFilter {
     initUI() {
         this.overlay = document.createElement('div');
         this.overlay.id = 'pdb-filter-overlay';
-        
+
         this.modal = document.createElement('div');
         this.modal.id = 'pdb-filter-modal';
         this.modal.innerHTML = `
@@ -138,7 +138,7 @@ window.PornFilter = class PornFilter {
 
         this.overlay.onclick = () => this.hideModal();
         this.modal.querySelector('#pdb-modal-close').onclick = () => this.hideModal();
-        
+
         this.modal.querySelector('#pdb-select-all').onclick = () => {
             this.modal.querySelectorAll('.pdb-checkbox').forEach(cb => { cb.checked = true; this.updateItemStyle(cb); });
         };
@@ -179,7 +179,7 @@ window.PornFilter = class PornFilter {
         let html = '';
 
         const sorted = Array.from(this.currentStudioMap.entries()).sort((a, b) => b[1].length - a[1].length);
-        
+
         if (sorted.length === 0) {
             html = `<div style="text-align:center; color:#6b7280; padding:20px 0;">当前页面未解析到片商数据</div>`;
         } else {
@@ -205,7 +205,7 @@ window.PornFilter = class PornFilter {
     applyFilter(saveAsDefault = false) {
         // 读取此时面板上打着勾的正则化名称，形成新的白名单数组
         const checkedNormNames = Array.from(this.modal.querySelectorAll('.pdb-checkbox:checked')).map(cb => cb.dataset.normName);
-        
+
         document.querySelectorAll('.grid-cols-scene-card .w-scene-card').forEach(card => {
             const normName = this.normalize(card.dataset.studioName);
             if (checkedNormNames.includes(normName)) {
@@ -233,21 +233,32 @@ window.PornFilter = class PornFilter {
 
     ensureTopButton(doc) {
         if (!location.href.includes('/performers/')) return;
-        const filterGroup = doc.getElementById('jav-filter-group');
-        if (!filterGroup || doc.getElementById('pdb-top-filter-btn')) return;
+        if (doc.getElementById('pdb-top-filter-btn')) return;
+
+        let filterGroup = doc.getElementById('jav-filter-group');
+        // [MOD] 兜底机制：如果没找到父容器，主动在作品网格上方注入一个独立容器
+        if (!filterGroup) {
+            const grid = doc.querySelector('.grid-cols-scene-card');
+            if (!grid) return;
+            filterGroup = doc.createElement('div');
+            filterGroup.id = 'jav-filter-group';
+            filterGroup.className = 'jav-filter-group';
+            filterGroup.style.cssText = 'display: flex; width: 100%; margin: 15px 0; justify-content: flex-start; gap: 8px;';
+            grid.parentNode.insertBefore(filterGroup, grid);
+        }
 
         const btn = doc.createElement('button');
         btn.id = 'pdb-top-filter-btn';
         btn.className = 'jav-filter-btn';
-        btn.style.cssText = 'display: inline-flex; align-items: center; justify-content: center; white-space: nowrap; color: #10b981; border-color: #10b981; font-weight: bold;';
-        btn.innerHTML = `⚙️ 厂牌过滤`;
-        
+        // [MOD] 增加默认的基础样式背景，防止透明看不清
+        btn.style.cssText = 'display: inline-flex; align-items: center; justify-content: center; white-space: nowrap; color: #10b981; border-color: #10b981; font-weight: bold; background: #e7e7e7; padding: 4px 12px; border-radius: 6px; cursor: pointer;';
+        btn.innerHTML = `厂牌过滤`;
+
         btn.onclick = (e) => {
             e.preventDefault();
             this.showModal();
         };
 
-        // 插入过滤按钮容器中
         filterGroup.appendChild(btn);
     }
 };
