@@ -7,14 +7,24 @@
 window.PornFilter = class PornFilter {
     constructor(defaultWhitelist = []) {
         this.storageKey = 'pdb_studio_whitelist_v1';
-        // [MOD] 增加 .split(':')[0] 逻辑，截断类似于 "FansDB: 演员名" 格式的后缀后缀，仅保留核心厂牌名
+        
+        // 1. 厂牌名格式化算法（切分冒号、去空格去点、转小写）
         this.normalize = (name) => String(name).split(':')[0].toLowerCase().replace(/[\s.]/g, '');
-        this.whitelist = this.loadWhitelist(defaultWhitelist.map(this.normalize));
-        this.currentStudioMap = new Map();
+        
+        // 2. 将传入的默认数组进行规范化
+        const defaults = defaultWhitelist.map(this.normalize);
+        
+        // 3. 读取本地浏览器缓存（如果没缓存则返回空数组）
+        const cached = this.loadWhitelist ? this.loadWhitelist([]) : []; 
+        
+        // 【核心修复】：取并集！强制把代码里最新的 DEFAULT_STUDIOS 塞进白名单，并自动去重
+        this.whitelist = [...new Set([...defaults, ...cached])];
+        
+        // 把合并后的最全名单重新存回硬盘，刷新缓存
+        if (this.saveWhitelist) this.saveWhitelist(this.whitelist);
 
         this.initCSS();
-        this.initUI();
-        this.startFastTagger(); // [MOD] 启用极速打标器，解决 300ms 延迟闪烁
+        this.startFastTagger();
     }
 
     loadWhitelist(defaultList) {
