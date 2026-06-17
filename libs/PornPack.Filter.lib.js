@@ -11,7 +11,7 @@ window.PornFilter = class PornFilter {
         this.normalize = (name) => String(name).split(':')[0].toLowerCase().replace(/[\s.]/g, '');
         this.whitelist = this.loadWhitelist(defaultWhitelist.map(this.normalize));
         this.currentStudioMap = new Map();
-        
+
         this.initCSS();
         this.initUI();
         this.startFastTagger(); // [MOD] 启用极速打标器，解决 300ms 延迟闪烁
@@ -79,6 +79,9 @@ window.PornFilter = class PornFilter {
 
     // [ADD] 极速打标器：利用微任务队列，在浏览器渲染新卡片前瞬间判定并隐藏
     startFastTagger() {
+        // 【核心修复】：过滤拦截只在演员及演员子站页面生效！厂牌主页、搜索页等一律罢工放行！
+        if (!location.href.includes('/performers/') && !location.href.includes('/performer-sites/')) return;
+
         const checkCard = (card) => {
             if (card.dataset.studioChecked) return;
             card.dataset.studioChecked = '1';
@@ -88,8 +91,8 @@ window.PornFilter = class PornFilter {
                 const studioName = studioLink.textContent.trim() || studioLink.querySelector('img')?.getAttribute('title') || '未知片商';
                 card.dataset.studioName = studioName;
                 const normName = this.normalize(studioName);
-                
-                // 如果命中黑名单，瞬间打上隐藏标签，此时还没画到屏幕上
+
+                // 如果命中黑名单，瞬间打上隐藏标签
                 if (!this.whitelist.includes(normName)) {
                     card.dataset.studioHidden = '1';
                 }
@@ -121,7 +124,7 @@ window.PornFilter = class PornFilter {
     initUI() {
         this.overlay = document.createElement('div');
         this.overlay.id = 'pdb-filter-overlay';
-        
+
         this.modal = document.createElement('div');
         this.modal.id = 'pdb-filter-modal';
         this.modal.innerHTML = `
@@ -146,7 +149,7 @@ window.PornFilter = class PornFilter {
 
         this.overlay.onclick = () => this.hideModal();
         this.modal.querySelector('#pdb-modal-close').onclick = () => this.hideModal();
-        
+
         this.modal.querySelector('#pdb-select-all').onclick = () => {
             this.modal.querySelectorAll('.pdb-checkbox').forEach(cb => { cb.checked = true; this.updateItemStyle(cb); });
         };
@@ -186,7 +189,7 @@ window.PornFilter = class PornFilter {
         let html = '';
 
         const sorted = Array.from(this.currentStudioMap.entries()).sort((a, b) => b[1].length - a[1].length);
-        
+
         if (sorted.length === 0) {
             html = `<div style="text-align:center; color:#6b7280; padding:20px 0;">当前页面未解析到片商数据</div>`;
         } else {
@@ -211,7 +214,7 @@ window.PornFilter = class PornFilter {
 
     applyFilter(saveAsDefault = false) {
         const checkedNormNames = Array.from(this.modal.querySelectorAll('.pdb-checkbox:checked')).map(cb => cb.dataset.normName);
-        
+
         document.querySelectorAll('.grid-cols-scene-card .w-scene-card').forEach(card => {
             const normName = this.normalize(card.dataset.studioName);
             if (checkedNormNames.includes(normName)) {
@@ -238,17 +241,18 @@ window.PornFilter = class PornFilter {
     }
 
     ensureTopButton(doc) {
+        // 【逻辑同步】：过滤按钮也绝不允许在厂牌页(/sites/)出现，防止引起逻辑混乱
         if (!location.href.includes('/performers/') && !location.href.includes('/performer-sites/')) return;
         if (doc.getElementById('pdb-top-filter-btn')) return;
 
         const group = doc.getElementById('jav-filter-group');
-        if (!group) return; 
+        if (!group) return;
 
         const btn = doc.createElement('button');
         btn.id = 'pdb-top-filter-btn';
-        btn.className = 'jav-filter-btn active'; 
+        btn.className = 'jav-filter-btn active';
         btn.innerHTML = `厂牌过滤`;
-        
+
         btn.onclick = (e) => {
             e.preventDefault();
             this.showModal();
