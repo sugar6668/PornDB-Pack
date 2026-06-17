@@ -1,7 +1,5 @@
 ﻿/* ============================================
    mediakit-buttons.css — PornDB 媒体管理工具样式模块
-   基于 iOS Liquid Glass + 语义化 Color Coding
-   作者自行上传 GitHub 后通过 GM_addStyle 或 @import 加载
    ============================================ */
 :root {
   --mk-blur: 18px; --mk-saturate: 170%;
