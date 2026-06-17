@@ -73,7 +73,7 @@ window.PornDOMTweaks = class PornDOMTweaks {
     // 模块：演员页面全局资料折叠 (物理零闪烁版)
     // ==========================================
     static ensurePerformerPanelToggle(doc) {
-        if (!location.href.includes('/performers/')) return;
+        if (!location.href.includes('/performers/') && !location.href.includes('/performer-sites/')) return;
         this.initGlobalStyles();
 
         // 无论 Vue 怎么重建 DOM，只要进入演员页，立刻在 body 上加结界锁
@@ -116,7 +116,7 @@ window.PornDOMTweaks = class PornDOMTweaks {
     // 模块：相似推荐折叠 (物理零闪烁版)
     // ==========================================
     static ensureSimilarScenesToggle(doc) {
-        if (!location.href.includes('/scenes/') && !location.href.includes('/performers/')) return;
+        if (!location.href.includes('/scenes/') && !location.href.includes('/performers/') && !location.href.includes('/performer-sites/')) return;
         this.initGlobalStyles();
 
         if (!doc.body.classList.contains('west-similar-collapsed') && !doc.body.dataset.similarInit) {

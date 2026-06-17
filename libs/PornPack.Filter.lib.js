@@ -7,7 +7,8 @@
 window.PornFilter = class PornFilter {
     constructor(defaultWhitelist = []) {
         this.storageKey = 'pdb_studio_whitelist_v1';
-        this.normalize = (name) => String(name).toLowerCase().replace(/[\s.]/g, '');
+        // [MOD] 增加 .split(':')[0] 逻辑，截断类似于 "FansDB: 演员名" 格式的后缀后缀，仅保留核心厂牌名
+        this.normalize = (name) => String(name).split(':')[0].toLowerCase().replace(/[\s.]/g, '');
         this.whitelist = this.loadWhitelist(defaultWhitelist.map(this.normalize));
         this.currentStudioMap = new Map();
         
@@ -237,7 +238,7 @@ window.PornFilter = class PornFilter {
     }
 
     ensureTopButton(doc) {
-        if (!location.href.includes('/performers/')) return;
+        if (!location.href.includes('/performers/') && !location.href.includes('/performer-sites/')) return;
         if (doc.getElementById('pdb-top-filter-btn')) return;
 
         const group = doc.getElementById('jav-filter-group');
