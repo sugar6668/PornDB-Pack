@@ -1,0 +1,207 @@
+﻿/* ============================================
+   mediakit-buttons.css — PornDB 媒体管理工具样式模块
+   基于 iOS Liquid Glass + 语义化 Color Coding
+   作者自行上传 GitHub 后通过 GM_addStyle 或 @import 加载
+   ============================================ */
+:root {
+  --mk-blur: 18px; --mk-saturate: 170%;
+  --mk-glass-bg: rgba(255,255,255,0.16);
+  --mk-glass-bg-hover: rgba(255,255,255,0.26);
+  --mk-border: rgba(255,255,255,0.20);
+  --mk-border-hover: rgba(255,255,255,0.40);
+  --mk-shadow: 0 4px 14px rgba(0,0,0,0.06);
+  --mk-shadow-hover: 0 8px 30px rgba(0,0,0,0.10);
+  --mk-inner: inset 0 1px 0 rgba(255,255,255,0.30);
+  --mk-text: rgba(255,255,255,0.92);
+  --mk-radius: 10px; --mk-radius-pill: 999px;
+  --mk-construct: rgba(0,122,255,0.18);
+  --mk-construct-hover: rgba(0,122,255,0.30);
+  --mk-construct-border: rgba(0,122,255,0.30);
+  --mk-construct-icon: #5EACE8;
+  --mk-destruct: rgba(255,69,58,0.16);
+  --mk-destruct-hover: rgba(255,69,58,0.28);
+  --mk-destruct-border: rgba(255,69,58,0.28);
+  --mk-destruct-icon: #FF6B6B;
+  --mk-network: rgba(48,209,88,0.14);
+  --mk-network-hover: rgba(48,209,88,0.26);
+  --mk-network-border: rgba(48,209,88,0.26);
+  --mk-network-icon: #4AE08A;
+  --mk-construct-p: rgba(0,122,255,0.32);
+  --mk-construct-ph: rgba(0,122,255,0.45);
+  --mk-destruct-p: rgba(255,69,58,0.30);
+  --mk-destruct-ph: rgba(255,69,58,0.44);
+  --mk-network-p: rgba(48,209,88,0.26);
+  --mk-network-ph: rgba(48,209,88,0.40);
+  --mk-font: -apple-system,"SF Pro Display","Helvetica Neue","Fira Sans",sans-serif;
+  --mk-font-mono: "SF Mono","Fira Code",monospace;
+  --mk-transition: 0.3s cubic-bezier(0.25,0.1,0.25,1);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --mk-glass-bg: rgba(255,255,255,0.06);
+    --mk-glass-bg-hover: rgba(255,255,255,0.14);
+    --mk-border: rgba(255,255,255,0.08);
+    --mk-border-hover: rgba(255,255,255,0.18);
+    --mk-shadow: 0 4px 14px rgba(0,0,0,0.25);
+    --mk-shadow-hover: 0 8px 30px rgba(0,0,0,0.35);
+    --mk-inner: inset 0 1px 0 rgba(255,255,255,0.10);
+    --mk-construct: rgba(10,132,255,0.15);
+    --mk-construct-hover: rgba(10,132,255,0.28);
+    --mk-destruct: rgba(255,69,58,0.12);
+    --mk-destruct-hover: rgba(255,69,58,0.24);
+    --mk-network: rgba(48,209,88,0.10);
+    --mk-network-hover: rgba(48,209,88,0.22);
+  }
+}
+/* ======== 基础按钮 ======== */
+.mk-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  padding: 9px 20px; font-family: var(--mk-font); font-size: 13px; font-weight: 500;
+  letter-spacing: 0.2px; text-decoration: none; white-space: nowrap; cursor: pointer;
+  user-select: none; -webkit-tap-highlight-color: transparent;
+  border: 1px solid var(--mk-border); border-radius: var(--mk-radius);
+  background: var(--mk-glass-bg); color: var(--mk-text);
+  backdrop-filter: blur(var(--mk-blur)) saturate(var(--mk-saturate));
+  -webkit-backdrop-filter: blur(var(--mk-blur)) saturate(var(--mk-saturate));
+  box-shadow: var(--mk-shadow), var(--mk-inner);
+  position: relative; overflow: hidden; outline: none;
+  transition: background var(--mk-transition), border-color var(--mk-transition), box-shadow var(--mk-transition), color var(--mk-transition), transform 0.2s ease;
+}
+.mk-btn:active { transform: scale(0.96); }
+.mk-btn:focus-visible { outline: 2.5px solid rgba(0,122,255,0.5); outline-offset: 3px; }
+@media (hover: hover) { .mk-btn:hover { background: var(--mk-glass-bg-hover); border-color: var(--mk-border-hover); box-shadow: var(--mk-shadow-hover), var(--mk-inner); } }
+.mk-btn:disabled, .mk-btn--disabled { opacity: 0.35; cursor: not-allowed; transform: none !important; }
+
+/* ======== 语义变体 ======== */
+.mk-btn--construct { background: var(--mk-construct); border-color: var(--mk-construct-border); }
+.mk-btn--construct .mk-icon { color: var(--mk-construct-icon); }
+@media (hover: hover) { .mk-btn--construct:hover { background: var(--mk-construct-hover); border-color: rgba(0,122,255,0.45); box-shadow: 0 8px 28px rgba(0,122,255,0.12), var(--mk-inner); } }
+
+.mk-btn--destruct { background: var(--mk-destruct); border-color: var(--mk-destruct-border); }
+.mk-btn--destruct .mk-icon { color: var(--mk-destruct-icon); }
+@media (hover: hover) { .mk-btn--destruct:hover { background: var(--mk-destruct-hover); border-color: rgba(255,69,58,0.42); box-shadow: 0 8px 28px rgba(255,69,58,0.12), var(--mk-inner); } }
+
+.mk-btn--network { background: var(--mk-network); border-color: var(--mk-network-border); }
+.mk-btn--network .mk-icon { color: var(--mk-network-icon); }
+@media (hover: hover) { .mk-btn--network:hover { background: var(--mk-network-hover); border-color: rgba(48,209,88,0.40); box-shadow: 0 8px 28px rgba(48,209,88,0.10), var(--mk-inner); } }
+
+/* ======== Prominent (高强调) ======== */
+.mk-btn--p { font-weight: 600; }
+.mk-btn--construct.mk-btn--p { background: var(--mk-construct-p); border-color: rgba(0,122,255,0.42); box-shadow: 0 4px 20px rgba(0,122,255,0.12), var(--mk-inner); }
+@media (hover: hover) { .mk-btn--construct.mk-btn--p:hover { background: var(--mk-construct-ph); border-color: rgba(0,122,255,0.55); box-shadow: 0 8px 32px rgba(0,122,255,0.18), var(--mk-inner); } }
+.mk-btn--destruct.mk-btn--p { background: var(--mk-destruct-p); border-color: rgba(255,69,58,0.42); box-shadow: 0 4px 20px rgba(255,69,58,0.12), var(--mk-inner); }
+@media (hover: hover) { .mk-btn--destruct.mk-btn--p:hover { background: var(--mk-destruct-ph); border-color: rgba(255,69,58,0.55); box-shadow: 0 8px 32px rgba(255,69,58,0.20), var(--mk-inner); } }
+.mk-btn--network.mk-btn--p { background: var(--mk-network-p); border-color: rgba(48,209,88,0.38); box-shadow: 0 4px 20px rgba(48,209,88,0.10), var(--mk-inner); }
+@media (hover: hover) { .mk-btn--network.mk-btn--p:hover { background: var(--mk-network-ph); border-color: rgba(48,209,88,0.52); box-shadow: 0 8px 32px rgba(48,209,88,0.18), var(--mk-inner); } }
+
+/* ======== 尺寸 & 形状 ======== */
+.mk-btn--sm { padding: 6px 14px; font-size: 12px; gap: 6px; }
+.mk-btn--lg { padding: 12px 28px; font-size: 14px; gap: 10px; }
+.mk-btn--pill { border-radius: var(--mk-radius-pill); }
+.mk-btn--block { display: flex; width: 100%; }
+.mk-btn--tag { display: inline-flex; padding: 3px 10px; font-size: 11px; border-radius: var(--mk-radius-pill); gap: 4px; }
+
+/* ======== 图标容器 ======== */
+.mk-icon { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; flex-shrink: 0; transition: transform 0.2s ease; }
+.mk-icon svg { width: 100%; height: 100%; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.mk-btn--sm .mk-icon { width: 15px; height: 15px; }
+.mk-btn--lg .mk-icon { width: 22px; height: 22px; }
+
+/* ======== 图标悬停动效 ======== */
+@media (hover: hover) {
+  .mk-btn:hover .mk-icon { transform: scale(1.1); }
+  .mk-btn--destruct:hover .mk-icon { transform: scale(1.1) rotate(4deg); }
+  .mk-btn--network:hover .mk-icon { transform: scale(1.1) translateY(-1px); }
+}
+
+/* ======== 激活态 (active 互斥) ======== */
+.mk-active {
+  background: rgba(123,94,167,0.35) !important;
+  border-color: rgba(123,94,167,0.55) !important;
+  color: #fff !important;
+  box-shadow: 0 4px 20px rgba(123,94,167,0.20), var(--mk-inner) !important;
+}
+
+/* ======== 禁用/加载/完成状态 ======== */
+.mk-btn--loading { opacity: 0.6; cursor: wait; }
+.mk-btn--done { pointer-events: none; }
+.mk-btn--has-cover { opacity: 0.7; cursor: not-allowed; }
+.mk-btn--busy { pointer-events: none; }
+
+/* ======== 全宽控制条 (global toggle) ======== */
+.mk-bar {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  width: 100%; padding: 12px; margin-bottom: 20px;
+  background: rgba(255,255,255,0.06); color: var(--mk-construct-icon);
+  font-size: 14px; font-weight: 600; font-family: var(--mk-font);
+  border: 1px dashed rgba(0,122,255,0.30); border-radius: var(--mk-radius);
+  cursor: pointer; backdrop-filter: blur(10px);
+  transition: background 0.3s, border 0.3s;
+}
+.mk-bar:hover { background: rgba(0,122,255,0.08); border-style: solid; border-color: rgba(0,122,255,0.45); }
+@media (prefers-color-scheme: dark) { .mk-bar { background: rgba(255,255,255,0.03); } }
+
+/* ======== 控制栏容器 ======== */
+.mk-control-bar {
+  display: flex; gap: 8px; align-items: center; margin-bottom: 12px; flex-wrap: wrap;
+}
+.mk-engine-group { display: flex; gap: 6px; align-items: center; }
+
+/* ======== 操作行按钮组 ======== */
+.mk-btn-group {
+  display: flex; gap: 8px; margin-top: 4px; flex-wrap: wrap;
+}
+
+/* ======== 搜索表格内链接 ======== */
+.mk-link-copy { color: var(--mk-construct-icon) !important; cursor: pointer; text-decoration: none; font-weight: 600; }
+.mk-link-copy:hover { opacity: 0.8; }
+.mk-link-offline { color: var(--mk-network-icon) !important; cursor: pointer; text-decoration: none; font-weight: 600; }
+.mk-link-offline:hover { opacity: 0.8; }
+
+/* ======== 控制组容器 (滤镜等) ======== */
+.mk-filter-group {
+  display: flex; width: 100%; margin: 5px 0 15px 0; padding: 12px;
+  background: rgba(255,255,255,0.04); border: 1px dashed rgba(123,94,167,0.25);
+  border-radius: var(--mk-radius); justify-content: flex-start;
+  align-items: center; gap: 8px; flex-wrap: wrap; box-sizing: border-box;
+  backdrop-filter: blur(8px);
+}
+
+/* ======== 控制组内的按钮 ======== */
+.mk-filter-group .mk-btn { font-size: 12px; padding: 5px 14px; }
+
+/* ======== 模态框内按钮 (Filter Modal) ======== */
+.mk-modal-btn {
+  flex: 1; padding: 9px 0; border: none; border-radius: 6px;
+  font-family: var(--mk-font); font-size: 13px; font-weight: 600;
+  cursor: pointer; transition: 0.2s; text-align: center;
+}
+.mk-modal-btn-primary { background: #10b981; color: #fff; }
+.mk-modal-btn-primary:hover { background: #059669; }
+.mk-modal-btn-warning { background: #f59e0b; color: #fff; }
+.mk-modal-btn-warning:hover { background: #d97706; }
+.mk-modal-btn-secondary { background: #4b5563; color: #fff; }
+.mk-modal-btn-secondary:hover { background: #6b7280; }
+
+/* ======== 减少动效 ======== */
+@media (prefers-reduced-motion: reduce) {
+  .mk-btn, .mk-icon, .mk-bar { transition-duration: 0.01ms !important; }
+}
+
+/* ======== 磁力搜索面板容器 ======== */
+.mk-container {
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: var(--mk-radius);
+  padding: 12px;
+  background: rgba(255,255,255,0.03);
+  margin-top: 10px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+  backdrop-filter: blur(8px);
+}
+@media (prefers-color-scheme: dark) {
+  .mk-container { background: rgba(255,255,255,0.02); }
+}
+
+/* ======== 宽匹配按钮（左对齐内容） ======== */
+.x-match-btn-wide { flex-basis: 100%; text-align: left; }
+.x-match-btn-wide .x-match-pc-path { font-size: 12px; color: rgba(255,255,255,0.45); margin-top: 4px; display: flex; align-items: center; gap: 4px; }
