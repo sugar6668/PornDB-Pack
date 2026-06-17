@@ -7,28 +7,31 @@
 window.PornFilter = class PornFilter {
     constructor(defaultWhitelist = []) {
         this.storageKey = 'pdb_studio_whitelist_v1';
-        
+
+        // 【核心修复】：必须初始化这个 Map 容器，否则点击按钮渲染列表时会崩溃！
+        this.currentStudioMap = new Map();
+
         // 1. 厂牌名格式化算法（切分冒号、去空格去点、转小写）
         this.normalize = (name) => String(name).split(':')[0].toLowerCase().replace(/[\s.]/g, '');
-        
+
         // 2. 将传入的默认数组进行规范化
         const defaults = defaultWhitelist.map(this.normalize);
-        
+
         // 3. 读取本地浏览器缓存（如果没缓存则返回空数组）
-        const cached = this.loadWhitelist ? this.loadWhitelist([]) : []; 
-        
+        const cached = this.loadWhitelist ? this.loadWhitelist([]) : [];
+
         // 4. 取并集！强制把代码里最新的 DEFAULT_STUDIOS 塞进白名单，并自动去重
         this.whitelist = [...new Set([...defaults, ...cached])];
-        
+
         // 5. 把合并后的最全名单重新存回硬盘，刷新缓存
         if (this.saveWhitelist) this.saveWhitelist(this.whitelist);
         this.initCSS();
-        
-        // 自动探测并调用你的原版弹窗初始化函数（防止写死函数名出错）
+
+        // 自动调用弹窗初始化函数
         if (typeof this.initModal === 'function') this.initModal();
         else if (typeof this.createModal === 'function') this.createModal();
         else if (typeof this.initUI === 'function') this.initUI();
-        
+
         this.startFastTagger();
     }
 
