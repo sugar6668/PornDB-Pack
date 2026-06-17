@@ -17,13 +17,18 @@ window.PornFilter = class PornFilter {
         // 3. 读取本地浏览器缓存（如果没缓存则返回空数组）
         const cached = this.loadWhitelist ? this.loadWhitelist([]) : []; 
         
-        // 【核心修复】：取并集！强制把代码里最新的 DEFAULT_STUDIOS 塞进白名单，并自动去重
+        // 4. 取并集！强制把代码里最新的 DEFAULT_STUDIOS 塞进白名单，并自动去重
         this.whitelist = [...new Set([...defaults, ...cached])];
         
-        // 把合并后的最全名单重新存回硬盘，刷新缓存
+        // 5. 把合并后的最全名单重新存回硬盘，刷新缓存
         if (this.saveWhitelist) this.saveWhitelist(this.whitelist);
-
         this.initCSS();
+        
+        // 自动探测并调用你的原版弹窗初始化函数（防止写死函数名出错）
+        if (typeof this.initModal === 'function') this.initModal();
+        else if (typeof this.createModal === 'function') this.createModal();
+        else if (typeof this.initUI === 'function') this.initUI();
+        
         this.startFastTagger();
     }
 
