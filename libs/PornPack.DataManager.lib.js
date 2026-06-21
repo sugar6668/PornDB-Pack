@@ -244,21 +244,45 @@ window.PornDataManager = class PornDataManager {
         const data = this.buildBackupData(checks);
         const jsonStr = JSON.stringify(data);
 
-        document.getElementById('btn-push-dav').textContent = '推送中...';
+        const btn = document.getElementById('btn-push-dav');
+        btn.textContent = '建档中...';
 
+        // 提取父级目录的 URL (去掉最后的文件名)
+        const folderUrl = authInfo.url.substring(0, authInfo.url.lastIndexOf('/') + 1);
+
+        // 核心上传逻辑 (PUT)
+        const uploadFile = () => {
+            btn.textContent = '推送中...';
+            GM_xmlhttpRequest({
+                method: 'PUT',
+                url: authInfo.url,
+                headers: { 'Authorization': authInfo.auth, 'Content-Type': 'application/json' },
+                data: jsonStr,
+                onload: (res) => {
+                    btn.textContent = '推送备份到 WebDAV';
+                    if (res.status >= 200 && res.status < 300) alert('成功推送到 WebDAV！');
+                    else alert(`推送失败，HTTP 状态码: ${res.status}\n请检查坚果云应用密码是否正确。`);
+                },
+                onerror: () => {
+                    btn.textContent = '推送备份到 WebDAV';
+                    alert('网络请求失败，请检查 WebDAV 地址或跨域权限');
+                }
+            });
+        };
+
+        // [ADD] 自动创建文件夹逻辑 (MKCOL)
         GM_xmlhttpRequest({
-            method: 'PUT',
-            url: authInfo.url,
-            headers: { 'Authorization': authInfo.auth, 'Content-Type': 'application/json' },
-            data: jsonStr,
+            method: 'MKCOL',
+            url: folderUrl,
+            headers: { 'Authorization': authInfo.auth },
             onload: (res) => {
-                document.getElementById('btn-push-dav').textContent = '推送备份到 WebDAV';
-                if (res.status >= 200 && res.status < 300) alert('成功推送到 WebDAV！');
-                else alert(`推送失败，HTTP 状态码: ${res.status}`);
+                // 状态码 201 代表创建成功，405 代表文件夹已经存在。
+                // 无论存在与否，只要网络通了，就继续执行上传文件的逻辑。
+                uploadFile();
             },
             onerror: () => {
-                document.getElementById('btn-push-dav').textContent = '推送备份到 WebDAV';
-                alert('网络请求失败，请检查 WebDAV 地址或跨域权限');
+                // 即使创建目录请求因为某些限制失败，依然强行尝试上传作为兜底
+                uploadFile();
             }
         });
     }
