@@ -11,11 +11,11 @@ window.PornSubtitle = class PornSubtitle {
 
     static ensureButtonExists() {
         if (!location.href.includes('/scenes/')) return;
-        
+
         // 挂载点：紧跟在书签按钮模块的后面，如果书签未生成，则降级挂载到复制按钮后
         const pbfBtn = document.getElementById('export-pbf-btn');
         const targetAnchor = pbfBtn ? pbfBtn.parentElement : document.getElementById('btn-copy-kw');
-        
+
         if (targetAnchor && !document.getElementById(this.BTN_ID)) {
             this.createSearchButton(targetAnchor);
             this.checkedCid = null;
@@ -39,7 +39,7 @@ window.PornSubtitle = class PornSubtitle {
             const hasSub = res?.data?.some(f => /\.(srt|ass|ssa|vtt|sub)$/i.test(f.n));
             this.hasSubInCloud = !!hasSub;
             this.updateButtonUI(this.hasSubInCloud ? 'cloud_exists' : 'default');
-        } catch (e) {}
+        } catch (e) { }
     }
 
     static updateButtonUI(state) {
@@ -70,16 +70,25 @@ window.PornSubtitle = class PornSubtitle {
         btn.style.cssText = 'margin-left: 6px; transition: all 0.2s;';
         btn.onclick = () => this.openSearchModal();
         targetAnchor.insertAdjacentElement('afterend', btn);
-        
+
         this.hasSubInCloud = false;
         this.updateButtonUI('default');
     }
 
     static async openSearchModal() {
-        // 直接提取磁力面板的纯净关键词 (已过滤各种非法字符并提纯)
+        // [MOD] 优化默认关键词提取逻辑：优先使用完整标题，降级使用磁力词
+        const details = document.WESTDETAILS || {};
         const kwInput = document.getElementById('jav-nong-kw');
-        const kw = kwInput ? kwInput.value.trim() : '';
-        if (!kw) return alert('请先等待或在磁力面板输入有效的番号/关键词！');
+        const magKw = kwInput ? kwInput.value.trim() : '';
+
+        let defaultKw = magKw;
+        // 如果能拿到完整的解析标题(slugify过的)，把点换成空格，对迅雷最友好
+        if (details.fullTitle) {
+            defaultKw = details.fullTitle.replace(/\./g, ' ');
+        } else if (details.titlePart) {
+            defaultKw = details.maker ? `${details.maker} ${details.titlePart}` : details.titlePart;
+        }
+        if (!defaultKw) defaultKw = document.title;
 
         const overlayId = 'west-subtitle-modal';
         if (document.getElementById(overlayId)) document.getElementById(overlayId).remove();
@@ -87,19 +96,26 @@ window.PornSubtitle = class PornSubtitle {
         const overlay = document.createElement('div');
         overlay.id = overlayId;
         overlay.style.cssText = 'position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.85); z-index: 9999999; display: flex; justify-content: center; align-items: center;';
-        
+
         const box = document.createElement('div');
         box.style.cssText = 'width: 80%; max-width: 900px; max-height: 80vh; background: #fff; border-radius: 8px; overflow: hidden; display: flex; flex-direction: column; position: relative;';
-        
+
         const header = document.createElement('div');
-        header.style.cssText = 'padding: 15px; background: #f5f5f5; border-bottom: 1px solid #e8e8e8; display: flex; justify-content: space-between; align-items: center; font-weight: bold; font-size: 16px; color: #333;';
-        header.innerHTML = `<span>迅雷字幕库检索: ${kw}</span><span style="cursor:pointer; color:#999; font-size:22px; line-height:1;" id="sub-close-btn">&times;</span>`;
-        
+        header.style.cssText = 'padding: 15px; background: #f5f5f5; border-bottom: 1px solid #e8e8e8; display: flex; justify-content: space-between; align-items: center;';
+
+        // [ADD] 注入交互式搜索框 UI
+        header.innerHTML = `
+            <div style="display:flex; align-items:center; gap:10px; flex:1;">
+                <span style="font-weight:bold; font-size:15px; color:#333;">迅雷字幕检索:</span>
+                <input type="text" id="sub-search-input" value="${defaultKw}" style="padding:6px 10px; border:1px solid #dcdfe6; border-radius:4px; font-size:13px; width:60%; outline:none; color:#303133; background:#fff;" placeholder="输入更宽松的标题重新搜索..." />
+                <button id="sub-search-btn" style="padding:6px 15px; background:#7b5ea7; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:13px; font-weight:bold;">重新搜索</button>
+            </div>
+            <span style="cursor:pointer; color:#999; font-size:24px; line-height:1; margin-left:15px;" id="sub-close-btn">&times;</span>
+        `;
+
         const contentWrap = document.createElement('div');
         contentWrap.style.cssText = 'padding: 15px; overflow-y: auto; flex: 1;';
-        contentWrap.innerHTML = '<div style="text-align:center; padding: 30px; color:#666;">正在连接迅雷字幕接口，请稍候...</div>';
 
-        // 用于预览内存字幕文本的底盒
         const previewBox = document.createElement('textarea');
         previewBox.style.cssText = 'display:none; width: 100%; height: 200px; margin-top: 15px; padding: 10px; border: 1px solid #e8e8e8; border-radius: 4px; background: #fafafa; resize: none; outline: none; font-size: 13px; color: #333; box-sizing: border-box;';
         previewBox.readOnly = true;
@@ -114,29 +130,47 @@ window.PornSubtitle = class PornSubtitle {
         header.querySelector('#sub-close-btn').onclick = closeModal;
         overlay.onclick = (e) => { if (e.target === overlay) closeModal(); };
 
-        try {
-            GM_xmlhttpRequest({
-                method: 'GET',
-                url: `https://api-shoulei-ssl.xunlei.com/oracle/subtitle?name=${encodeURIComponent(kw)}`,
-                onload: (res) => {
-                    try {
-                        const root = JSON.parse(res.responseText);
-                        if (root.code === 0 && root.data && root.data.length > 0) {
-                            this.renderTable(contentWrap, root.data, previewBox, overlay);
-                        } else {
-                            contentWrap.innerHTML = '<div style="text-align:center; padding: 30px; color:#999;">未找到相关字幕，可能是生肉或关键词不精确</div>';
+        // [ADD] 封装独立搜索方法，支持无刷新重搜
+        const performSearch = (kw) => {
+            if (!kw) return;
+            contentWrap.innerHTML = '<div style="text-align:center; padding: 30px; color:#666;">正在连接迅雷字幕接口，请稍候...</div>';
+            previewBox.style.display = 'none';
+
+            try {
+                GM_xmlhttpRequest({
+                    method: 'GET',
+                    url: `https://api-shoulei-ssl.xunlei.com/oracle/subtitle?name=${encodeURIComponent(kw)}`,
+                    onload: (res) => {
+                        try {
+                            const root = JSON.parse(res.responseText);
+                            if (root.code === 0 && root.data && root.data.length > 0) {
+                                this.renderTable(contentWrap, root.data, previewBox, overlay);
+                            } else {
+                                contentWrap.innerHTML = '<div style="text-align:center; padding: 30px; color:#999;">未找到相关字幕，请尝试删减搜索框中的关键词（尽量只保留纯英文标题）</div>';
+                            }
+                        } catch (e) {
+                            contentWrap.innerHTML = '<div style="text-align:center; padding: 30px; color:#dc3545;">API 数据解析失败</div>';
                         }
-                    } catch (e) {
-                        contentWrap.innerHTML = '<div style="text-align:center; padding: 30px; color:#dc3545;">API 数据解析失败</div>';
+                    },
+                    onerror: () => {
+                        contentWrap.innerHTML = '<div style="text-align:center; padding: 30px; color:#dc3545;">请求失败，请检查跨域网络设置</div>';
                     }
-                },
-                onerror: () => {
-                    contentWrap.innerHTML = '<div style="text-align:center; padding: 30px; color:#dc3545;">请求失败，请检查跨域网络设置</div>';
-                }
-            });
-        } catch (e) {
-            contentWrap.innerHTML = `<div style="text-align:center; padding: 30px; color:#dc3545;">${e.message}</div>`;
-        }
+                });
+            } catch (e) {
+                contentWrap.innerHTML = `<div style="text-align:center; padding: 30px; color:#dc3545;">${e.message}</div>`;
+            }
+        };
+
+        // [ADD] 绑定重新搜索事件（点击按钮或回车）
+        header.querySelector('#sub-search-btn').onclick = () => {
+            performSearch(header.querySelector('#sub-search-input').value.trim());
+        };
+        header.querySelector('#sub-search-input').onkeypress = (e) => {
+            if (e.key === 'Enter') performSearch(e.target.value.trim());
+        };
+
+        // 首次打开弹窗时，自动触发一次搜索
+        performSearch(defaultKw);
     }
 
     static renderTable(container, dataList, previewBox, overlay) {
@@ -152,7 +186,7 @@ window.PornSubtitle = class PornSubtitle {
                 </thead>
                 <tbody>
         `;
-        
+
         dataList.forEach((item, index) => {
             const lang = (item.languages && item.languages.length > 0) ? item.languages[0] : '未知';
             tableHtml += `
@@ -173,12 +207,12 @@ window.PornSubtitle = class PornSubtitle {
 
         const self = this;
         container.querySelectorAll('.sub-action-btn').forEach(btn => {
-            btn.onclick = async function() {
+            btn.onclick = async function () {
                 const action = this.dataset.action;
                 const item = dataList[this.dataset.idx];
                 const url = item.url;
                 if (!url) return alert('无效的字幕下载直链');
-                
+
                 const format = item.ext || 'srt';
                 // 核心：复用书签模块的命名清洗逻辑，统一字幕与视频的名称
                 const standardName = window.PornBookmark ? window.PornBookmark.getStandardizedFilename() : document.title.replace(/[\\/:*?"<>|]/g, "_").replace(/\s+/g, ' ').trim();
@@ -191,13 +225,13 @@ window.PornSubtitle = class PornSubtitle {
 
                 try {
                     const buffer = await self.fetchBinary(url);
-                    
+
                     if (action === 'preview') {
                         // 利用 TextDecoder 解码 ArrayBuffer 并推入文本域
-                        const decoder = new TextDecoder('utf-8'); 
+                        const decoder = new TextDecoder('utf-8');
                         previewBox.value = decoder.decode(buffer);
                         previewBox.style.display = 'block';
-                    } 
+                    }
                     else if (action === 'download') {
                         const blob = new Blob([buffer], { type: 'application/octet-stream' });
                         const link = document.createElement('a');
@@ -205,20 +239,20 @@ window.PornSubtitle = class PornSubtitle {
                         link.download = finalFilename;
                         link.click();
                         URL.revokeObjectURL(link.href);
-                    } 
+                    }
                     else if (action === 'upload') {
                         const matchedBtn = document.querySelector('.x-match-btn-wide');
                         const targetCid = matchedBtn ? matchedBtn.dataset.cid : null;
                         const ReqClass = typeof Req115 !== 'undefined' ? Req115 : (typeof window.Req115 !== 'undefined' ? window.Req115 : null);
-                        
+
                         if (!targetCid || !ReqClass) throw new Error('未检测到 115 归档目录，请先等待主界面刮削或匹配完毕！');
-                        
+
                         this.textContent = '直传中...';
-                        
+
                         // 强制构造标准 File 实体通过 115 的文件校验层
                         const blob = new Blob([buffer], { type: 'application/octet-stream' });
                         const fileObj = new File([blob], finalFilename, { type: 'application/octet-stream' });
-                        
+
                         const initRes = await ReqClass.sampleInitUpload({ filename: finalFilename, filesize: fileObj.size, cid: targetCid });
                         if (initRes && initRes.host) {
                             await ReqClass.upload({ ...initRes, filename: finalFilename, file: fileObj });
