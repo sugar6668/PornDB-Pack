@@ -12,7 +12,7 @@ window.PornDataManager = class PornDataManager {
     static CORE_KEYS = [
         'pdb_fav_performers',
         'pdb_filter_config',
-        'pdb_maker_whitelist',
+        'pdb_studio_whitelist_v1',
         'JavPack_Config'
     ];
 
