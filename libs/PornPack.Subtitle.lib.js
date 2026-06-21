@@ -111,10 +111,10 @@ window.PornSubtitle = class PornSubtitle {
         bodyContainer.style.cssText = 'display: flex; flex: 1; overflow: hidden;';
         
         const contentWrap = document.createElement('div');
-        contentWrap.style.cssText = 'flex: 1; padding: 15px; overflow-y: auto; border-right: 1px solid #e8e8e8;';
+        contentWrap.style.cssText = 'flex: 7; padding: 15px; overflow-y: auto; border-right: 1px solid #e8e8e8;';
 
         const previewWrap = document.createElement('div');
-        previewWrap.style.cssText = 'flex: 1; padding: 15px; display: flex; flex-direction: column; background: #fafafa;';
+        previewWrap.style.cssText = 'flex: 3; padding: 15px; display: flex; flex-direction: column; background: #fafafa;';
         
         const previewTitle = document.createElement('div');
         previewTitle.style.cssText = 'font-weight: bold; margin-bottom: 10px; color: #333; display: flex; justify-content: space-between; align-items: center;';
