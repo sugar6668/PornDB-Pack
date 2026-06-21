@@ -155,7 +155,6 @@ window.PornDataManager = class PornDataManager {
     }
 
     // --- 数据组装与恢复逻辑 ---
-
     static buildBackupData(checks) {
         const backup = {
             version: '1.0',
@@ -164,13 +163,20 @@ window.PornDataManager = class PornDataManager {
             match_caches: {},
             dir_caches: {}
         };
+        // [MOD] 核心数据强制点名提取，杜绝 GM_listValues 漏报
+        if (checks.core) {
+            this.CORE_KEYS.forEach(key => {
+                const val = GM_getValue(key);
+                if (val !== undefined && val !== null) {
+                    backup.core_data[key] = val;
+                }
+            });
+        }
 
+        // 刮削缓存和目录缓存数量庞大，依然走遍历提取
         const allKeys = GM_listValues();
-
         allKeys.forEach(key => {
-            if (checks.core && this.CORE_KEYS.includes(key)) {
-                backup.core_data[key] = GM_getValue(key);
-            } else if (checks.match && key.startsWith('pdb_v4_')) {
+            if (checks.match && key.startsWith('pdb_v4_')) {
                 backup.match_caches[key] = GM_getValue(key);
             } else if (checks.dir && key === 'pdb_dir_cache_v2') {
                 backup.dir_caches[key] = GM_getValue(key);
@@ -231,6 +237,11 @@ window.PornDataManager = class PornDataManager {
         }
         let url = conf.url.trim();
         if (!url.endsWith('/')) url += '/';
+        // [MOD] 智能建档逻辑：如果用户只填了网盘根目录，自动追加专属文件夹
+        if (url.endsWith('/dav/') || url.split('/').length <= 4) {
+            url += 'PornDB_Backup/';
+        }
+
         url += 'porndb_sync_data.json';
 
         const auth = 'Basic ' + btoa(`${conf.user.trim()}:${conf.pass.trim()}`);
