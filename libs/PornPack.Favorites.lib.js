@@ -16,7 +16,7 @@ window.PornFavorites = class PornFavorites {
         style.innerHTML = `
             .pdb-fav-btn { cursor: pointer; display: inline-flex; align-items: center; justify-content: center; width: 25px; height: 25px; margin-left: 6px; transition: transform 0.1s ease; }
             .pdb-fav-btn:hover { transform: scale(1.25); }
-            .pdb-fav-btn svg { width: 100%; height: 100%; }
+            .pdb-fav-btn svg { width: 100%; height: 100%; display: block;}
             .pdb-fav-highlight { color: #e74c3c !important; font-weight: bold !important; text-shadow: 0 0 1px rgba(231,76,60,0.2); }
         `;
         document.head.appendChild(style);
@@ -25,7 +25,7 @@ window.PornFavorites = class PornFavorites {
         const localData = GM_getValue('pdb_fav_performers', '[]');
         try {
             this.favSet = new Set(JSON.parse(localData));
-        } catch(e) {
+        } catch (e) {
             this.favSet = new Set();
         }
         this.isInit = true;
@@ -60,6 +60,8 @@ window.PornFavorites = class PornFavorites {
             }
 
             aNode.dataset.favProcessed = "1";
+            aNode.style.whiteSpace = "nowrap";
+            aNode.style.flexWrap = "nowrap";
 
             // 提取网址中的唯一标识后缀 (例如 /performers/12345-angela-white 提取 12345-angela-white)
             const urlMatch = aNode.href.match(/\/performers\/([^/?#]+)/);
