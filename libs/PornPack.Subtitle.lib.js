@@ -11,11 +11,11 @@ window.PornSubtitle = class PornSubtitle {
 
     static ensureButtonExists() {
         if (!location.href.includes('/scenes/')) return;
-
+        
         // 挂载点：紧跟在书签按钮模块的后面，如果书签未生成，则降级挂载到复制按钮后
         const pbfBtn = document.getElementById('export-pbf-btn');
         const targetAnchor = pbfBtn ? pbfBtn.parentElement : document.getElementById('btn-copy-kw');
-
+        
         if (targetAnchor && !document.getElementById(this.BTN_ID)) {
             this.createSearchButton(targetAnchor);
             this.checkedCid = null;
@@ -39,7 +39,7 @@ window.PornSubtitle = class PornSubtitle {
             const hasSub = res?.data?.some(f => /\.(srt|ass|ssa|vtt|sub)$/i.test(f.n));
             this.hasSubInCloud = !!hasSub;
             this.updateButtonUI(this.hasSubInCloud ? 'cloud_exists' : 'default');
-        } catch (e) { }
+        } catch (e) {}
     }
 
     static updateButtonUI(state) {
@@ -70,19 +70,19 @@ window.PornSubtitle = class PornSubtitle {
         btn.style.cssText = 'margin-left: 6px; transition: all 0.2s;';
         btn.onclick = () => this.openSearchModal();
         targetAnchor.insertAdjacentElement('afterend', btn);
-
+        
         this.hasSubInCloud = false;
         this.updateButtonUI('default');
     }
 
+    // 完整的交互式弹窗与左右分栏布局
     static async openSearchModal() {
-        // [MOD] 优化默认关键词提取逻辑：优先使用完整标题，降级使用磁力词
+        // 优化默认关键词提取逻辑：优先使用完整标题，降级使用磁力词
         const details = document.WESTDETAILS || {};
         const kwInput = document.getElementById('jav-nong-kw');
         const magKw = kwInput ? kwInput.value.trim() : '';
-
+        
         let defaultKw = magKw;
-        // 如果能拿到完整的解析标题(slugify过的)，把点换成空格，对迅雷最友好
         if (details.fullTitle) {
             defaultKw = details.fullTitle.replace(/\./g, ' ');
         } else if (details.titlePart) {
@@ -96,33 +96,52 @@ window.PornSubtitle = class PornSubtitle {
         const overlay = document.createElement('div');
         overlay.id = overlayId;
         overlay.style.cssText = 'position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.85); z-index: 9999999; display: flex; justify-content: center; align-items: center;';
-
+        
+        // 弹窗外盒：加宽到 1200px 适配双屏分栏
         const box = document.createElement('div');
-        box.style.cssText = 'width: 80%; max-width: 900px; max-height: 80vh; background: #fff; border-radius: 8px; overflow: hidden; display: flex; flex-direction: column; position: relative;';
-
+        box.style.cssText = 'width: 90%; max-width: 1200px; height: 85vh; background: #fff; border-radius: 8px; overflow: hidden; display: flex; flex-direction: column; position: relative;';
+        
         const header = document.createElement('div');
         header.style.cssText = 'padding: 15px; background: #f5f5f5; border-bottom: 1px solid #e8e8e8; display: flex; justify-content: space-between; align-items: center;';
-
-        // [ADD] 注入交互式搜索框 UI
+        
+        // 交互式搜索框 UI
         header.innerHTML = `
             <div style="display:flex; align-items:center; gap:10px; flex:1;">
                 <span style="font-weight:bold; font-size:15px; color:#333;">迅雷字幕检索:</span>
-                <input type="text" id="sub-search-input" value="${defaultKw}" style="padding:6px 10px; border:1px solid #dcdfe6; border-radius:4px; font-size:13px; width:60%; outline:none; color:#303133; background:#fff;" placeholder="输入更宽松的标题重新搜索..." />
+                <input type="text" id="sub-search-input" value="${defaultKw}" style="padding:6px 10px; border:1px solid #dcdfe6; border-radius:4px; font-size:13px; width:50%; outline:none; color:#303133; background:#fff;" placeholder="输入更宽松的标题重新搜索..." />
                 <button id="sub-search-btn" style="padding:6px 15px; background:#7b5ea7; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:13px; font-weight:bold;">重新搜索</button>
             </div>
             <span style="cursor:pointer; color:#999; font-size:24px; line-height:1; margin-left:15px;" id="sub-close-btn">&times;</span>
         `;
-
+        
+        // 身体容器：横向 Flex 布局
+        const bodyContainer = document.createElement('div');
+        bodyContainer.style.cssText = 'display: flex; flex: 1; overflow: hidden;';
+        
+        // 左侧：字幕列表区 (50%宽度)
         const contentWrap = document.createElement('div');
-        contentWrap.style.cssText = 'padding: 15px; overflow-y: auto; flex: 1;';
+        contentWrap.style.cssText = 'flex: 1; padding: 15px; overflow-y: auto; border-right: 1px solid #e8e8e8;';
+
+        // 右侧：独立字幕预览区 (50%宽度)
+        const previewWrap = document.createElement('div');
+        previewWrap.style.cssText = 'flex: 1; padding: 15px; display: flex; flex-direction: column; background: #fafafa;';
+        
+        const previewTitle = document.createElement('div');
+        previewTitle.style.cssText = 'font-weight: bold; margin-bottom: 10px; color: #333; display: flex; justify-content: space-between; align-items: center;';
+        previewTitle.innerHTML = '<span>字幕内容预览</span><span id="preview-status" style="font-weight:normal; color:#999; font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:60%;">暂无预览</span>';
 
         const previewBox = document.createElement('textarea');
-        previewBox.style.cssText = 'display:none; width: 100%; height: 200px; margin-top: 15px; padding: 10px; border: 1px solid #e8e8e8; border-radius: 4px; background: #fafafa; resize: none; outline: none; font-size: 13px; color: #333; box-sizing: border-box;';
+        previewBox.style.cssText = 'flex: 1; width: 100%; padding: 10px; border: 1px solid #dcdfe6; border-radius: 4px; background: #fff; resize: none; outline: none; font-size: 13px; color: #333; box-sizing: border-box; font-family: Consolas, monospace; line-height: 1.5;';
         previewBox.readOnly = true;
 
+        previewWrap.appendChild(previewTitle);
+        previewWrap.appendChild(previewBox);
+
+        bodyContainer.appendChild(contentWrap);
+        bodyContainer.appendChild(previewWrap);
+
         box.appendChild(header);
-        box.appendChild(contentWrap);
-        box.appendChild(previewBox);
+        box.appendChild(bodyContainer);
         overlay.appendChild(box);
         document.body.appendChild(overlay);
 
@@ -130,11 +149,15 @@ window.PornSubtitle = class PornSubtitle {
         header.querySelector('#sub-close-btn').onclick = closeModal;
         overlay.onclick = (e) => { if (e.target === overlay) closeModal(); };
 
-        // [ADD] 封装独立搜索方法，支持无刷新重搜
+        // 封装独立搜索方法，支持无刷新重搜
         const performSearch = (kw) => {
             if (!kw) return;
             contentWrap.innerHTML = '<div style="text-align:center; padding: 30px; color:#666;">正在连接迅雷字幕接口，请稍候...</div>';
-            previewBox.style.display = 'none';
+            
+            // 重新搜索时清空右侧预览区，但不隐藏
+            previewBox.value = '';
+            const statusNode = overlay.querySelector('#preview-status');
+            if (statusNode) statusNode.innerText = '暂无预览';
 
             try {
                 GM_xmlhttpRequest({
@@ -161,7 +184,7 @@ window.PornSubtitle = class PornSubtitle {
             }
         };
 
-        // [ADD] 绑定重新搜索事件（点击按钮或回车）
+        // 绑定重新搜索事件（点击按钮或回车）
         header.querySelector('#sub-search-btn').onclick = () => {
             performSearch(header.querySelector('#sub-search-input').value.trim());
         };
@@ -181,12 +204,12 @@ window.PornSubtitle = class PornSubtitle {
                         <th style="padding: 10px; color:#333;">原始字幕名称</th>
                         <th style="padding: 10px; width: 80px; color:#333;">语言</th>
                         <th style="padding: 10px; width: 60px; color:#333;">格式</th>
-                        <th style="padding: 10px; width: 220px; text-align:center; color:#333;">操作</th>
+                        <th style="padding: 10px; width: 170px; text-align:center; color:#333;">操作</th>
                     </tr>
                 </thead>
                 <tbody>
         `;
-
+        
         dataList.forEach((item, index) => {
             const lang = (item.languages && item.languages.length > 0) ? item.languages[0] : '未知';
             tableHtml += `
@@ -195,9 +218,9 @@ window.PornSubtitle = class PornSubtitle {
                     <td style="padding: 10px; color:#666;">${lang}</td>
                     <td style="padding: 10px; font-weight:bold; color:#7b5ea7;">${item.ext || 'srt'}</td>
                     <td style="padding: 10px; text-align:center; white-space:nowrap;">
-                        <button class="sub-action-btn" data-action="preview" data-idx="${index}" style="margin-right:6px; padding:5px 10px; background:#19c5b7; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:12px;">预览</button>
-                        <button class="sub-action-btn" data-action="download" data-idx="${index}" style="margin-right:6px; padding:5px 10px; background:#e6a23c; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:12px;">下载</button>
-                        <button class="sub-action-btn" data-action="upload" data-idx="${index}" style="padding:5px 10px; background:#5470d8; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:12px;">115云推</button>
+                        <button class="sub-action-btn" data-action="preview" data-idx="${index}" style="margin-right:4px; padding:5px 10px; background:#19c5b7; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:12px;">预览</button>
+                        <button class="sub-action-btn" data-action="download" data-idx="${index}" style="margin-right:4px; padding:5px 10px; background:#e6a23c; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:12px;">下载</button>
+                        <button class="sub-action-btn" data-action="upload" data-idx="${index}" style="padding:5px 10px; background:#5470d8; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:12px;">115直传</button>
                     </td>
                 </tr>
             `;
@@ -207,16 +230,15 @@ window.PornSubtitle = class PornSubtitle {
 
         const self = this;
         container.querySelectorAll('.sub-action-btn').forEach(btn => {
-            btn.onclick = async function () {
+            btn.onclick = async function() {
                 const action = this.dataset.action;
                 const item = dataList[this.dataset.idx];
                 const url = item.url;
                 if (!url) return alert('无效的字幕下载直链');
-
+                
                 const format = item.ext || 'srt';
                 // 核心：复用书签模块的命名清洗逻辑，统一字幕与视频的名称
                 const standardName = window.PornBookmark ? window.PornBookmark.getStandardizedFilename() : document.title.replace(/[\\/:*?"<>|]/g, "_").replace(/\s+/g, ' ').trim();
-                // 拼接最终扩展名
                 const finalFilename = `${standardName}.${format}`;
 
                 const originalText = this.textContent;
@@ -225,13 +247,14 @@ window.PornSubtitle = class PornSubtitle {
 
                 try {
                     const buffer = await self.fetchBinary(url);
-
+                    
                     if (action === 'preview') {
-                        // 利用 TextDecoder 解码 ArrayBuffer 并推入文本域
-                        const decoder = new TextDecoder('utf-8');
+                        const decoder = new TextDecoder('utf-8'); 
                         previewBox.value = decoder.decode(buffer);
-                        previewBox.style.display = 'block';
-                    }
+                        // 联动更新右侧预览区的标题状态
+                        const statusNode = document.getElementById('preview-status');
+                        if (statusNode) statusNode.innerText = finalFilename;
+                    } 
                     else if (action === 'download') {
                         const blob = new Blob([buffer], { type: 'application/octet-stream' });
                         const link = document.createElement('a');
@@ -239,28 +262,27 @@ window.PornSubtitle = class PornSubtitle {
                         link.download = finalFilename;
                         link.click();
                         URL.revokeObjectURL(link.href);
-                    }
+                    } 
                     else if (action === 'upload') {
                         const matchedBtn = document.querySelector('.x-match-btn-wide');
                         const targetCid = matchedBtn ? matchedBtn.dataset.cid : null;
                         const ReqClass = typeof Req115 !== 'undefined' ? Req115 : (typeof window.Req115 !== 'undefined' ? window.Req115 : null);
-
+                        
                         if (!targetCid || !ReqClass) throw new Error('未检测到 115 归档目录，请先等待主界面刮削或匹配完毕！');
-
+                        
                         this.textContent = '直传中...';
-
+                        
                         // 强制构造标准 File 实体通过 115 的文件校验层
                         const blob = new Blob([buffer], { type: 'application/octet-stream' });
                         const fileObj = new File([blob], finalFilename, { type: 'application/octet-stream' });
-
+                        
                         const initRes = await ReqClass.sampleInitUpload({ filename: finalFilename, filesize: fileObj.size, cid: targetCid });
                         if (initRes && initRes.host) {
                             await ReqClass.upload({ ...initRes, filename: finalFilename, file: fileObj });
-                            // 上传成功，同步刷新外部按钮状态
                             self.hasSubInCloud = true;
                             self.updateButtonUI('cloud_exists');
                             alert('字幕归档成功，已推入115云端目录！');
-                            overlay.remove(); // 任务完成自动关闭弹窗
+                            overlay.remove(); 
                         } else {
                             throw new Error(initRes?.error_msg || "获取115上传安全凭证被拦截");
                         }
@@ -280,7 +302,7 @@ window.PornSubtitle = class PornSubtitle {
             GM_xmlhttpRequest({
                 method: 'GET',
                 url: url,
-                responseType: 'arraybuffer', // [MOD] 强行以二进制流接收防止乱码
+                responseType: 'arraybuffer',
                 onload: (res) => {
                     if (res.status === 200 && res.response) resolve(res.response);
                     else reject(new Error('字幕流获取失败，HTTP_CODE: ' + res.status));
