@@ -17,15 +17,19 @@ window.PornDataManager = class PornDataManager {
     ];
 
     static ensureButtonExists(doc) {
-        // 挂载在 115 智能控制台的最前方
-        const group = doc.getElementById('jav-filter-group');
+        // [MOD] 强行获取或创建挂载组，防止单独加载（如首页）时找不到节点
+        let group = doc.getElementById('jav-filter-group');
+        if (!group && window.PornDOMTweaks) {
+            group = window.PornDOMTweaks.getOrCreateActionBar(doc);
+        }
         if (!group || doc.getElementById(this.BTN_ID)) return;
 
         const btn = doc.createElement('button');
         btn.id = this.BTN_ID;
         btn.className = 'jav-filter-btn';
         btn.innerHTML = '数据管理';
-        btn.style.cssText = 'margin-right: 10px; background-color: #f3f4f6; color: #4b5563; border-color: #d1d5db;';
+        // [MOD] 增加 inline-flex 保证居中对齐
+        btn.style.cssText = 'margin-right: 10px; background-color: #f3f4f6; color: #4b5563; border-color: #d1d5db; display: inline-flex; align-items: center; justify-content: center;';
         
         btn.onmouseover = () => { btn.style.backgroundColor = '#e5e7eb'; };
         btn.onmouseout = () => { btn.style.backgroundColor = '#f3f4f6'; };

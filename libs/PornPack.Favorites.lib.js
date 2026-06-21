@@ -14,7 +14,7 @@ window.PornFavorites = class PornFavorites {
         // [ADD] 注入高亮字体与交互图标全局样式
         const style = document.createElement('style');
         style.innerHTML = `
-            .pdb-fav-btn { cursor: pointer; display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; margin-left: 4px; vertical-align: -3px; transition: transform 0.1s ease; }
+            .pdb-fav-btn { cursor: pointer; display: inline-flex; align-items: center; justify-content: center; width: 25px; height: 25px; margin-left: 6px; transition: transform 0.1s ease; }
             .pdb-fav-btn:hover { transform: scale(1.25); }
             .pdb-fav-btn svg { width: 100%; height: 100%; }
             .pdb-fav-highlight { color: #e74c3c !important; font-weight: bold !important; text-shadow: 0 0 1px rgba(231,76,60,0.2); }
@@ -99,8 +99,8 @@ window.PornFavorites = class PornFavorites {
                 self.save();
             };
 
-            // 直接附着在 <a> 标签之后同行显示
-            aNode.insertAdjacentElement('afterend', btn);
+            // 作为子元素塞入 a 标签内部末尾，完美共享底色区块与排版
+            aNode.appendChild(btn);
         });
     }
 };
