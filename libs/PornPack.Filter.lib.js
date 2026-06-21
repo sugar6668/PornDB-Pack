@@ -256,8 +256,11 @@ window.PornFilter = class PornFilter {
     }
 
     applyFilter(saveAsDefault = false) {
+        // 分别获取当前页面【打勾】和【没打勾】的厂牌名
         const checkedNormNames = Array.from(this.modal.querySelectorAll('.pdb-checkbox:checked')).map(cb => cb.dataset.normName);
+        const uncheckedNormNames = Array.from(this.modal.querySelectorAll('.pdb-checkbox:not(:checked)')).map(cb => cb.dataset.normName);
 
+        // 控制当前页面卡片的展示与隐藏
         document.querySelectorAll('.grid-cols-scene-card .w-scene-card').forEach(card => {
             const normName = this.normalize(card.dataset.studioName);
             if (checkedNormNames.includes(normName)) {
@@ -267,40 +270,20 @@ window.PornFilter = class PornFilter {
             }
         });
 
+        // [MOD] 核心修复：智能增量合并，绝不覆盖其他页面的历史数据
         if (saveAsDefault) {
-            this.saveWhitelist(checkedNormNames);
+            // 将当前的完整白名单放进 Set 集合中（方便去重和操作）
+            let mergedSet = new Set(this.whitelist);
+
+            // 1. 把当前页面打勾的厂牌，通通加进大名单
+            checkedNormNames.forEach(name => mergedSet.add(name));
+
+            // 2. 把当前页面取消打勾的厂牌，从大名单里踢出去
+            uncheckedNormNames.forEach(name => mergedSet.delete(name));
+
+            // 3. 将合并后的最全名单转换为数组，更新并保存！
+            this.whitelist = Array.from(mergedSet);
+            this.saveWhitelist(this.whitelist);
         }
-    }
-
-    showModal() {
-        this.renderList();
-        this.overlay.style.display = 'block';
-        this.modal.style.display = 'flex';
-    }
-
-    hideModal() {
-        this.overlay.style.display = 'none';
-        this.modal.style.display = 'none';
-    }
-
-    ensureTopButton(doc) {
-        // 【逻辑同步】：过滤按钮也绝不允许在厂牌页(/sites/)出现，防止引起逻辑混乱
-        if (!location.href.includes('/performers/') && !location.href.includes('/performer-sites/')) return;
-        if (doc.getElementById('pdb-top-filter-btn')) return;
-
-        const group = doc.getElementById('jav-filter-group');
-        if (!group) return;
-
-        const btn = doc.createElement('button');
-        btn.id = 'pdb-top-filter-btn';
-        btn.className = 'jav-filter-btn active';
-        btn.innerHTML = `厂牌过滤`;
-
-        btn.onclick = (e) => {
-            e.preventDefault();
-            this.showModal();
-        };
-
-        group.appendChild(btn);
     }
 };
