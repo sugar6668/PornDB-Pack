@@ -77,15 +77,23 @@ window.PornSubtitle = class PornSubtitle {
 
     // 完整的交互式弹窗、左右分栏布局与智能排序机制
     static async openSearchModal() {
-        // [MOD] 终极提纯：只用最简短的番号/前缀，杜绝长标题引发迅雷分词导致结果污染
         const details = document.WESTDETAILS || {};
         const kwInput = document.getElementById('jav-nong-kw');
         const magKw = kwInput ? kwInput.value.trim() : '';
 
+        // [ADD] 安全提取第一位演员的名字
+        let firstActor = '';
+        if (details.actors && details.actors.length > 0) {
+            firstActor = details.actors[0].trim();
+        } else if (details.actor && details.actor !== 'Unknown_Actor') {
+            firstActor = details.actor.split('&')[0].trim();
+        }
+
         let defaultKw = '';
         if (details.matchPrefix) {
-            // [MOD] 保持原生的点号连接（如 Vixen.26.05.12），这是迅雷匹配欧美字幕的最优格式
+            // [MOD] 组合前缀与第一位演员名（如: Vixen.24.01.01 Angela White）
             defaultKw = details.matchPrefix.trim();
+            if (firstActor) defaultKw += ' ' + firstActor;
         } else if (magKw) {
             defaultKw = magKw;
         } else {
@@ -181,14 +189,13 @@ window.PornSubtitle = class PornSubtitle {
                                     const langA = ((a.languages && a.languages[0]) || '').toLowerCase();
                                     const langB = ((b.languages && b.languages[0]) || '').toLowerCase();
 
-                                    // 1. 语言：中文绝对优先 (+100)
+                                    // 1. 匹配度：【修改权重】绝对置顶，无视分隔符差异 (+500)
+                                    if (nameA.replace(/[-_\.\s]/g, '').includes(kwClean)) scoreA += 500;
+                                    if (nameB.replace(/[-_\.\s]/g, '').includes(kwClean)) scoreB += 500;
+
+                                    // 2. 语言：中文次优先 (+100)
                                     if (/zh|cn|chs|cht|中字|简|繁/.test(langA) || /中字|简|繁|chs|cht/.test(nameA)) scoreA += 100;
                                     if (/zh|cn|chs|cht|中字|简|繁/.test(langB) || /中字|简|繁|chs|cht/.test(nameB)) scoreB += 100;
-
-                                    // 2. 匹配度：提纯比对，无视分隔符差异 (+50)
-                                    // [MOD] 文件名比对时同样剔除各种符号，保证绝对精准匹配
-                                    if (nameA.replace(/[-_\.\s]/g, '').includes(kwClean)) scoreA += 50;
-                                    if (nameB.replace(/[-_\.\s]/g, '').includes(kwClean)) scoreB += 50;
 
                                     // 3. 格式：srt / ass 优先 (+20)
                                     if (a.ext === 'srt' || a.ext === 'ass') scoreA += 20;
@@ -197,7 +204,8 @@ window.PornSubtitle = class PornSubtitle {
                                     return scoreB - scoreA;
                                 });
 
-                                this.renderTable(contentWrap, dataList, previewBox, overlay);
+                                // [MOD] 追加传递 kw 参数供高亮使用
+                                this.renderTable(contentWrap, dataList, previewBox, overlay, kw);
                             } else {
                                 contentWrap.innerHTML = '<div style="text-align:center; padding: 30px; color:#999;">未找到相关字幕，请尝试删减搜索框中的关键词（尽量只保留纯英文标题或番号）</div>';
                             }
@@ -226,7 +234,18 @@ window.PornSubtitle = class PornSubtitle {
         performSearch(defaultKw);
     }
 
-    static renderTable(container, dataList, previewBox, overlay) {
+    static renderTable(container, dataList, previewBox, overlay, kw = '') {
+        // [ADD] 预处理高亮正则：将搜索词按空格切分为数组，滤除过短单字
+        const kwWords = kw.split(/\s+/).filter(w => w.length > 1);
+        let highlightRegex = null;
+        if (kwWords.length > 0) {
+            // 转义正则特殊字符，生成全局忽略大小写的正则
+            const escapedWords = kwWords.map(w => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+            highlightRegex = new RegExp('(' + escapedWords.join('|') + ')', 'gi');
+        }
+
+        const kwClean = kw.toLowerCase().replace(/[-_\.\s]/g, '');
+
         let tableHtml = `
             <table style="width:100%; border-collapse: collapse; font-size: 13px; text-align: left;">
                 <thead>
@@ -242,9 +261,27 @@ window.PornSubtitle = class PornSubtitle {
 
         dataList.forEach((item, index) => {
             const lang = (item.languages && item.languages.length > 0) ? item.languages[0] : '未知';
+
+            // [ADD] 高亮与置顶UI逻辑
+            let subName = item.name || item.extra_name || '未知字幕';
+            const subNameClean = subName.toLowerCase().replace(/[-_\.\s]/g, '');
+            const isExactMatch = kwClean && subNameClean.includes(kwClean); // 判定是否完全命中
+
+            let displayName = subName;
+            if (highlightRegex) {
+                // 使用红字加粗替换匹配到的关键词
+                displayName = displayName.replace(highlightRegex, '<span style="color:#e74c3c; font-weight:bold;">$1</span>');
+            }
+
+            // 命中则添加磁力搜索同款的火焰图标与深色加粗字体
+            const topIcon = isExactMatch ? '<span style="color:#e74c3c; font-size:12px; margin-right:4px;" title="精确匹配">🔥</span>' : '';
+            const tdStyle = isExactMatch ? 'color:#333; font-weight:bold;' : 'color:#555;';
+
             tableHtml += `
                 <tr style="border-bottom: 1px dashed #f0f0f0;">
-                    <td style="padding: 10px; word-break: break-all; color:#555;">${item.name || item.extra_name || '未知字幕'}</td>
+                    <td style="padding: 10px; word-break: break-all; ${tdStyle}">
+                        ${topIcon}${displayName}
+                    </td>
                     <td style="padding: 10px; color:#666;">${lang}</td>
                     <td style="padding: 10px; font-weight:bold; color:#7b5ea7;">${item.ext || 'srt'}</td>
                     <td style="padding: 10px; text-align:center; white-space:nowrap;">
