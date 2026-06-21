@@ -42,7 +42,7 @@ window.PornSubtitle = class PornSubtitle {
         const btn = document.getElementById(this.BTN_ID);
         if (!btn) return;
         if (state === 'cloud_exists') {
-            btn.innerHTML = '网盘已有(字幕)';
+            btn.innerHTML = '已有字幕';
             btn.style.cssText = 'margin-left: 6px; transition: all 0.2s; background-color: #67c23a; border-color: #67c23a; color: #fff;';
         } else {
             btn.innerHTML = '字幕搜索';
@@ -111,10 +111,10 @@ window.PornSubtitle = class PornSubtitle {
         bodyContainer.style.cssText = 'display: flex; flex: 1; overflow: hidden;';
         
         const contentWrap = document.createElement('div');
-        contentWrap.style.cssText = 'flex: 7; padding: 15px; overflow-y: auto; border-right: 1px solid #e8e8e8;';
+        contentWrap.style.cssText = 'flex: 7; width: 0; padding: 15px; overflow-y: auto; border-right: 1px solid #e8e8e8;';
 
         const previewWrap = document.createElement('div');
-        previewWrap.style.cssText = 'flex: 3; padding: 15px; display: flex; flex-direction: column; background: #fafafa;';
+        previewWrap.style.cssText = 'flex: 3; width: 0; padding: 15px; display: flex; flex-direction: column; background: #fafafa;';
         
         const previewTitle = document.createElement('div');
         previewTitle.style.cssText = 'font-weight: bold; margin-bottom: 10px; color: #333; display: flex; justify-content: space-between; align-items: center;';
