@@ -156,31 +156,30 @@ window.PornDataManager = class PornDataManager {
 
     // --- 数据组装与恢复逻辑 ---
     static buildBackupData(checks) {
-        const backup = {
-            version: '1.0',
-            timestamp: Date.now(),
-            core_data: {},
-            match_caches: {},
-            dir_caches: {}
-        };
-        // [MOD] 核心数据强制点名提取，杜绝 GM_listValues 漏报
+        const backup = { version: '1.0', timestamp: Date.now(), core_data: {}, match_caches: {}, dir_caches: {} };
+
         if (checks.core) {
             this.CORE_KEYS.forEach(key => {
-                const val = GM_getValue(key);
+                let val = GM_getValue(key);
+                // [MOD] 终极防漏：如果油猴 API 里没存上，去网页原生缓存里找找看
+                if (val === undefined || val === null) {
+                    const localVal = localStorage.getItem(key);
+                    if (localVal) {
+                        try { val = JSON.parse(localVal); }
+                        catch (e) { val = localVal; }
+                    }
+                }
+
                 if (val !== undefined && val !== null) {
                     backup.core_data[key] = val;
                 }
             });
         }
 
-        // 刮削缓存和目录缓存数量庞大，依然走遍历提取
         const allKeys = GM_listValues();
         allKeys.forEach(key => {
-            if (checks.match && key.startsWith('pdb_v4_')) {
-                backup.match_caches[key] = GM_getValue(key);
-            } else if (checks.dir && key === 'pdb_dir_cache_v2') {
-                backup.dir_caches[key] = GM_getValue(key);
-            }
+            if (checks.match && key.startsWith('pdb_v4_')) backup.match_caches[key] = GM_getValue(key);
+            else if (checks.dir && key === 'pdb_dir_cache_v2') backup.dir_caches[key] = GM_getValue(key);
         });
 
         return backup;
@@ -223,8 +222,12 @@ window.PornDataManager = class PornDataManager {
         const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
         const link = document.createElement('a');
         link.href = URL.createObjectURL(blob);
-        const dateStr = new Date().toISOString().split('T')[0];
-        link.download = `porndb_backup_${dateStr}.json`;
+        // [MOD] 精确到秒的时间戳生成器
+        const now = new Date();
+        const pad = n => n.toString().padStart(2, '0');
+        const timeStr = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
+
+        link.download = `porndb_backup_${timeStr}.json`;
         link.click();
         URL.revokeObjectURL(link.href);
     }

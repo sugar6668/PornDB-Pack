@@ -36,18 +36,43 @@ window.PornFilter = class PornFilter {
     }
 
     loadWhitelist(defaultList) {
-        if (typeof GM_getValue !== 'undefined') {
-            const saved = GM_getValue(this.storageKey);
-            if (saved && Array.isArray(saved)) return saved;
+        // 内部辅助函数：安全解析并验证是否为数组
+        const parseValidArray = (val) => {
+            try {
+                const parsed = typeof val === 'string' ? JSON.parse(val) : val;
+                return Array.isArray(parsed) ? parsed : null;
+            } catch (e) {
+                return null;
+            }
+        };
+
+        // 1. 优先尝试从油猴 (GM_getValue) 读取
+        if (typeof GM_getValue === 'function') {
+            const saved = parseValidArray(GM_getValue(this.storageKey));
+            if (saved) return saved; // 读到有效数据直接返回，提前结束函数
         }
+
+        // 2. 兜底尝试从 localStorage 读取
+        try {
+            const localSaved = parseValidArray(localStorage.getItem(this.storageKey));
+            if (localSaved) return localSaved; // 读到兜底数据直接返回
+        } catch (e) { } // 捕获隐身模式下访问 localStorage 可能抛出的异常
+
+        // 3. 都没读到，返回默认列表
         return defaultList;
     }
 
     saveWhitelist(list) {
         this.whitelist = list;
-        if (typeof GM_setValue !== 'undefined') {
-            GM_setValue(this.storageKey, list);
+        const jsonStr = JSON.stringify(list); // 统一序列化，解决原生数组拦截问题
+
+        // 1. 写入油猴沙盒
+        if (typeof GM_setValue === 'function') {
+            try { GM_setValue(this.storageKey, jsonStr); } catch (e) { }
         }
+
+        // 2. 双重备份至 localStorage
+        try { localStorage.setItem(this.storageKey, jsonStr); } catch (e) { }
     }
 
     initCSS() {
