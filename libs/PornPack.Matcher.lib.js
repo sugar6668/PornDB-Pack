@@ -10,6 +10,29 @@ window.PornMatcher = class PornMatcher {
     static REGEX_DATE_FORMAT = /(20\d{2}|\b\d{2})[-._](0[1-9]|1[0-2])[-._](0[1-9]|[12]\d|3[01])/;
 
     /**
+     * [ADD] 核心防误伤分词边界生成器
+     * 完美解决 Tushy 碰瓷 TushyRaw，Mia 碰瓷 Amia 的包含漏洞
+     */
+    static buildExactRegex(targetStr) {
+        if (!targetStr || String(targetStr).toLowerCase() === 'unknown') return null;
+        const tokens = String(targetStr).trim().split(/[-_.\s]+/);
+        if (!tokens.length || !tokens[0]) return null;
+
+        // 允许单词之间有任意的连接符(空格、点、横杠、下划线)，或直接相连
+        const body = tokens.map(t => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('[\\s_.-]*');
+
+        // 动态边界锁定：如果首尾是字母，则相邻的字符绝对不能是字母
+        const firstChar = tokens[0][0];
+        const lastToken = tokens[tokens.length - 1];
+        const lastChar = lastToken[lastToken.length - 1];
+
+        const leftBound = /[a-zA-Z]/.test(firstChar) ? '(^|[^a-zA-Z])' : '(^|[^0-9])';
+        const rightBound = /[a-zA-Z]/.test(lastChar) ? '($|[^a-zA-Z])' : '($|[^0-9])';
+
+        return new RegExp(leftBound + body + rightBound, 'i');
+    }
+
+    /**
      * 计算视频文件名与页面抓取详情的匹配度得分 (网页抓取核心打分)
      */
     static getMatchScore(videoName, details) {
@@ -34,19 +57,19 @@ window.PornMatcher = class PornMatcher {
             }
         }
 
-        // [MOD] 直接读取外层预处理好的干净字符，跳过耗时的正则运算
-        const maker = details.makerClean !== undefined ? details.makerClean : String(details.baseAlpha || '').toLowerCase().replace(this.REGEX_NON_ALPHANUM, '');
-        if (maker && maker !== 'unknown' && nClean.includes(maker)) hasMaker = true;
+        // [MOD] 厂牌判断：使用编译好的边界正则，杜绝 TushyRaw 被 Tushy 截胡
+        if (details.makerRegex && details.makerRegex.test(n)) {
+            hasMaker = true;
+        }
 
+        // 标题由于经常残缺，依然保留宽容的去符号包含算法
         const cleanT = details.titleClean !== undefined ? details.titleClean : (details.titlePart || '').toLowerCase().replace(this.REGEX_NON_ALPHANUM, '');
         if (cleanT.length >= 4 && nClean.includes(cleanT)) hasTitle = true;
 
-        if (details.actorsClean) {
-            details.actorsClean.forEach(ac => { if (ac && nClean.includes(ac)) hasActor = true; });
-        } else if (details.actors && details.actors.length > 0) {
-            details.actors.forEach(actor => {
-                const ac = actor.toLowerCase().replace(this.REGEX_NON_ALPHANUM, '');
-                if (ac && nClean.includes(ac)) hasActor = true;
+        // [MOD] 演员判断：使用编译好的边界正则，杜绝 Mia Malkova 被 Mia 截胡
+        if (details.actorRegexes && details.actorRegexes.length > 0) {
+            details.actorRegexes.forEach(regex => {
+                if (regex.test(n)) hasActor = true;
             });
         }
 
@@ -80,7 +103,7 @@ window.PornMatcher = class PornMatcher {
 
         let score = 0;
         let hasDate = false;
-        let hasYearOnly = false; // 💡 年份降级兜底
+        let hasYearOnly = false;
         let hasMaker = false;
         let actorHits = 0;
 
@@ -103,17 +126,17 @@ window.PornMatcher = class PornMatcher {
             }
         }
 
-        const maker = String(item.baseAlpha || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-        if (maker && maker !== 'unknown' && rawNorm.includes(maker)) {
+        // [MOD] 秒传离线兜底也应用精准边界匹配
+        const makerRegex = this.buildExactRegex(item.baseAlpha);
+        if (makerRegex && makerRegex.test(raw)) {
             hasMaker = true;
             score += 70;
         }
 
         const actors = Array.isArray(item.actors) ? item.actors : [];
         actors.forEach((actor) => {
-            const ac = String(actor || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-            if (!ac || ac.length < 3) return;
-            if (rawNorm.includes(ac)) {
+            const actorRegex = this.buildExactRegex(actor);
+            if (actorRegex && actorRegex.test(raw)) {
                 actorHits += 1;
                 score += 35;
             }
@@ -140,11 +163,13 @@ window.PornMatcher = class PornMatcher {
     static getMatchedVideos(dataArray, details) {
         if (!dataArray || !dataArray.length) return [];
 
-        // [MOD] 性能优化：提前将 details 的正则清洗结果缓存下来，避免在 map 中执行几百次相同的运算
-        const makerClean = String(details.baseAlpha || '').toLowerCase().replace(this.REGEX_NON_ALPHANUM, '');
+        // [MOD] 性能优化：只编译一次边界正则，供整个列表循环使用！杜绝每次打分都去重复生成正则。
+        const makerRegex = this.buildExactRegex(details.baseAlpha);
+        const actorRegexes = (details.actors || []).map(a => this.buildExactRegex(a)).filter(Boolean);
         const titleClean = (details.titlePart || '').toLowerCase().replace(this.REGEX_NON_ALPHANUM, '');
-        const actorsClean = (details.actors || []).map(a => String(a).toLowerCase().replace(this.REGEX_NON_ALPHANUM, '')).filter(Boolean);
-        const cleanedDetails = { ...details, makerClean, titleClean, actorsClean };
+        
+        // 组装新的 details 传给打分器
+        const cleanedDetails = { ...details, makerRegex, actorRegexes, titleClean };
 
         return dataArray
             .map(it => {
