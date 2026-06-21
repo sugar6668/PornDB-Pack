@@ -84,8 +84,8 @@ window.PornSubtitle = class PornSubtitle {
 
         let defaultKw = '';
         if (details.matchPrefix) {
-            // 将 "Blacked.24.01.01" 替换为 "Blacked 24 01 01"，"SSIS-123" 保持不变
-            defaultKw = details.matchPrefix.replace(/\./g, ' ').trim();
+            // [MOD] 保持原生的点号连接（如 Vixen.26.05.12），这是迅雷匹配欧美字幕的最优格式
+            defaultKw = details.matchPrefix.trim();
         } else if (magKw) {
             defaultKw = magKw;
         } else {
@@ -170,9 +170,10 @@ window.PornSubtitle = class PornSubtitle {
                             const root = JSON.parse(res.responseText);
                             if (root.code === 0 && root.data && root.data.length > 0) {
                                 let dataList = root.data;
-                                const kwLower = kw.toLowerCase().replace(/\s+/g, '');
+                                // [MOD] 提纯搜索词：同时剔除空格、横杠、下划线和点号
+                                const kwClean = kw.toLowerCase().replace(/[-_\.\s]/g, '');
 
-                                // [ADD] 本地智能评分与排序逻辑，拯救迅雷糟糕的模糊搜索
+                                // 本地智能评分与排序逻辑，拯救迅雷糟糕的模糊搜索
                                 dataList.sort((a, b) => {
                                     let scoreA = 0, scoreB = 0;
                                     const nameA = (a.name || a.extra_name || '').toLowerCase();
@@ -184,9 +185,10 @@ window.PornSubtitle = class PornSubtitle {
                                     if (/zh|cn|chs|cht|中字|简|繁/.test(langA) || /中字|简|繁|chs|cht/.test(nameA)) scoreA += 100;
                                     if (/zh|cn|chs|cht|中字|简|繁/.test(langB) || /中字|简|繁|chs|cht/.test(nameB)) scoreB += 100;
 
-                                    // 2. 匹配度：文件名越包含我们的搜索词越靠前 (+50)
-                                    if (nameA.replace(/[-_]/g, '').includes(kwLower)) scoreA += 50;
-                                    if (nameB.replace(/[-_]/g, '').includes(kwLower)) scoreB += 50;
+                                    // 2. 匹配度：提纯比对，无视分隔符差异 (+50)
+                                    // [MOD] 文件名比对时同样剔除各种符号，保证绝对精准匹配
+                                    if (nameA.replace(/[-_\.\s]/g, '').includes(kwClean)) scoreA += 50;
+                                    if (nameB.replace(/[-_\.\s]/g, '').includes(kwClean)) scoreB += 50;
 
                                     // 3. 格式：srt / ass 优先 (+20)
                                     if (a.ext === 'srt' || a.ext === 'ass') scoreA += 20;
