@@ -1,7 +1,7 @@
 /**
  * @name         PornPack Archiver Library
  * @description  基于 JavPack 高级封装链路 (Verify -> Clean -> Rename -> Cover) 的智能刮削核心
- * @version      1.0.3
+ * @version      1.0.0
  */
 
 window.PornArchiver = class PornArchiver {
@@ -41,11 +41,12 @@ window.PornArchiver = class PornArchiver {
         let srts = [];
 
         // ==========================================
-        // 步骤 1：handleVerify (高频验证下载状态与提取目标)
+        // 步骤 1：HandleVerify (高频验证下载状态与提取目标)
         // ==========================================
-        for (let i = 0; i < 30; i++) {
-            if (this.updateBtnUI) this.updateBtnUI(item.hash, `验证进度(${i + 1}/30)...`, '#f39c12');
-            await this.sleep(1500);
+        for (let i = 0; i < 15; i++) {
+            if (this.updateBtnUI) this.updateBtnUI(item.hash, `验证进度(${i + 1}/15)...`, '#f39c12');
+            // 自适应间隔：前 5 次 2s，中间 5 次 1.5s，后 5 次 1s
+            await this.sleep(i < 5 ? 2000 : i < 10 ? 1500 : 1000);
 
             const { tasks } = await this.req115.lixianTaskLists();
             const task = tasks.find(t => t.info_hash && t.info_hash.toLowerCase() === item.hash.toLowerCase());
@@ -67,20 +68,17 @@ window.PornArchiver = class PornArchiver {
 
         // 提取视频文件 (强制过滤 > 100MB，保留多集)
         if (this.updateBtnUI) this.updateBtnUI(item.hash, `提取视频...`, '#f39c12');
-        for (let i = 0; i < 10; i++) {
+        // 先检查是否有套娃目录，确定正确的 CID
+        let videoCid = file_id;
+        {
+            const allFiles = await this.req115.filesAll(file_id);
+            const folders = allFiles.data.filter(f => !f.fid && f.cid);
+            if (folders.length > 0) videoCid = folders[0].cid;
+        }
+        for (let i = 0; i < 5; i++) {
             await this.sleep(1000);
-            const { data } = await this.req115.filesAllVideos(file_id);
+            const { data } = await this.req115.filesAllVideos(videoCid);
             videos = data.filter(v => v.s > 100 * 1024 * 1024);
-
-            // 应对恶心种子的单层套娃目录
-            if (!videos.length) {
-                const allFiles = await this.req115.filesAll(file_id);
-                const folders = allFiles.data.filter(f => !f.fid && f.cid);
-                if (folders.length > 0) {
-                    const deepData = await this.req115.filesAllVideos(folders[0].cid);
-                    videos = deepData.data.filter(v => v.s > 100 * 1024 * 1024);
-                }
-            }
             if (videos.length > 0) break;
         }
 
@@ -88,36 +86,26 @@ window.PornArchiver = class PornArchiver {
 
         // 提取原盘附带的字幕文件 (srt, ass, vtt等)
         try {
-            const srtRes = await this.req115.filesAllSRTs(file_id);
+            const srtRes = await this.req115.filesAllSRTs(videoCid);
             srts = srtRes.data || [];
-            if (!srts.length) {
-                const allFiles = await this.req115.filesAll(file_id);
-                const folders = allFiles.data.filter(f => !f.fid && f.cid);
-                if (folders.length > 0) {
-                    const deepSrtRes = await this.req115.filesAllSRTs(folders[0].cid);
-                    srts = deepSrtRes.data || [];
-                }
-            }
         } catch (e) { }
 
-        const keepFiles = [...videos, ...srts]; // 合并我们需要保留的正片和字幕
+        const keepFiles = [...videos, ...srts];
 
         // ==========================================
-        // 步骤 2：handleClean (调用原生清理组件，秒杀广告和空壳)
+        // 步骤 2：HandleClean (调用原生清理组件，秒杀广告和空壳)
         // ==========================================
         if (this.updateBtnUI) this.updateBtnUI(item.hash, `清理杂质...`, '#f39c12');
         await this.req115.handleClean(keepFiles, file_id);
 
         // ==========================================
-        // 步骤 3：handleRename (调用原生重命名组件，含多集编号和中文后缀)
+        // 步骤 3：HandleRename (调用原生重命名组件，含多集编号和中文后缀)
         // ==========================================
         if (this.updateBtnUI) this.updateBtnUI(item.hash, `智能重命名...`, '#f39c12');
 
         // 严谨的中文标识判断机制
         const checkZh = (name) => {
-            // 1. 中字、字幕、以及作为独立单词的 chs/cht/sub 放行
             if (/中字|字幕|\b(chs|cht|sub)\b/i.test(name)) return true;
-            // 2. 只有紧贴在文件扩展名前面，或者位于标题最末尾的 -c / _c 才算作字幕标识
             if (/[-_]c(?=\.[a-zA-Z0-9]+$|$)/i.test(name)) return true;
             return false;
         };
@@ -143,7 +131,7 @@ window.PornArchiver = class PornArchiver {
         await this.req115.rbDelete([file_id], item.cid);
 
         // ==========================================
-        // 步骤 5：handleCover (调用原生封面组件)
+        // 步骤 5：HandleCover (调用原生封面组件)
         // ==========================================
         if (item.coverUrl) {
             if (this.updateBtnUI) this.updateBtnUI(item.hash, `上传封面...`, '#f39c12');
@@ -159,15 +147,12 @@ window.PornArchiver = class PornArchiver {
         // ==========================================
         // 步骤 6：全链路完成，触发界面刷新
         // ==========================================
-        if (this.updateBtnUI) this.updateBtnUI(item.hash, `刮削完成`, '#8e44ad');
+        if (this.updateBtnUI) this.updateBtnUI(item.hash, `制尪完成`, '#8e44ad');
         if (this.triggerAutoMatch) setTimeout(() => this.triggerAutoMatch(), 2500);
 
         return true;
     }
 
-    /**
-     * 控制台手动触发的【详情页现存文件提取归档】
-     */
     async flattenAfterOffline(details, dirArray, directVideo = null) {
         const targetCid = await this.req115.handleDir(dirArray);
         if (!targetCid) throw new Error("无法创建或获取目标目录");
