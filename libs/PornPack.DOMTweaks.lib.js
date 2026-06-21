@@ -14,7 +14,7 @@ window.PornDOMTweaks = class PornDOMTweaks {
             /* 资料与推荐防闪烁隐藏结界 (交由 C++ 原生渲染管线在绘制前抹除) */
             body.west-info-collapsed .w-full.bg-white.shadow-sm.rounded-sm.overflow-hidden.p-4.mb-5,
             body.west-info-collapsed .west-info-tab-node { display: none !important; }
-            body.west-similar-collapsed .grid-cols-performer-card { display: none !important; }
+            body.west-similar-collapsed .west-similar-grid-node { display: none !important; }
         `;
         document.head.appendChild(style);
     }
@@ -126,6 +126,17 @@ window.PornDOMTweaks = class PornDOMTweaks {
 
         const group = this.getOrCreateActionBar(doc);
         if (!group) return;
+
+        // [ADD] 动态寻找推荐网格，并打上隐藏标靶（精准区分作品页和演员页）
+        let similarGrid = null;
+        if (location.href.includes('/scenes/')) {
+            similarGrid = doc.querySelector('.grid-cols-scene-card'); // 详情页的推荐是作品卡片
+        } else {
+            similarGrid = doc.querySelector('.grid-cols-performer-card'); // 演员页的推荐是演员卡片
+        }
+        if (similarGrid && !similarGrid.classList.contains('west-similar-grid-node')) {
+            similarGrid.classList.add('west-similar-grid-node');
+        }
 
         let btn = doc.getElementById('west-similar-toggle');
         if (!btn) {

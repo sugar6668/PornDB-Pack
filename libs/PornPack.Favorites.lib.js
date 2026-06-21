@@ -14,7 +14,7 @@ window.PornFavorites = class PornFavorites {
         // [ADD] 注入高亮字体与交互图标全局样式
         const style = document.createElement('style');
         style.innerHTML = `
-            .pdb-fav-btn { cursor: pointer; display: inline-flex; align-items: center; justify-content: center; width: 25px; height: 25px; margin-left: 6px; transition: transform 0.1s ease; }
+            .pdb-fav-btn { cursor: pointer; display: inline-flex; align-items: center; justify-content: center; width: 25px; height: 25px; min-width: 25px; margin-left: 6px; transition: transform 0.1s ease; flex-shrink: 0; }
             .pdb-fav-btn:hover { transform: scale(1.25); }
             .pdb-fav-btn svg { width: 100%; height: 100%; display: block;}
             .pdb-fav-highlight { color: #e74c3c !important; font-weight: bold !important; text-shadow: 0 0 1px rgba(231,76,60,0.2); }
@@ -60,8 +60,10 @@ window.PornFavorites = class PornFavorites {
             }
 
             aNode.dataset.favProcessed = "1";
-            aNode.style.whiteSpace = "nowrap";
+            aNode.style.display = "inline-flex";
+            aNode.style.alignItems = "center";
             aNode.style.flexWrap = "nowrap";
+            aNode.style.whiteSpace = "nowrap";
 
             // 提取网址中的唯一标识后缀 (例如 /performers/12345-angela-white 提取 12345-angela-white)
             const urlMatch = aNode.href.match(/\/performers\/([^/?#]+)/);

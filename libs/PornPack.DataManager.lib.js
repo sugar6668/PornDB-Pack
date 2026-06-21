@@ -7,30 +7,35 @@
 window.PornDataManager = class PornDataManager {
     static BTN_ID = 'data-manager-btn';
     static WEBDAV_CONF_KEY = 'pdb_webdav_config';
-    
+
     // 定义属于“核心资产”的键名，包含喜爱演员、各种过滤器/白名单设置
     static CORE_KEYS = [
-        'pdb_fav_performers', 
-        'pdb_filter_config', 
+        'pdb_fav_performers',
+        'pdb_filter_config',
         'pdb_maker_whitelist',
         'JavPack_Config'
     ];
 
     static ensureButtonExists(doc) {
-        // [MOD] 强行获取或创建挂载组，防止单独加载（如首页）时找不到节点
+        // [MOD] 核心修复：1. 尝试寻找详情页的 115 控制台标题栏
+        const consoleWrap = doc.querySelector('.x-west-wrap');
+        const consoleTitle = consoleWrap ? consoleWrap.querySelector('div') : null;
+
+        // [MOD] 核心修复：2. 尝试寻找瀑布流页的全局过滤面板
         let group = doc.getElementById('jav-filter-group');
-        if (!group && window.PornDOMTweaks) {
+        if (!consoleTitle && !group && window.PornDOMTweaks) {
             group = window.PornDOMTweaks.getOrCreateActionBar(doc);
         }
-        if (!group || doc.getElementById(this.BTN_ID)) return;
+
+        // 如果既没有控制台也没有过滤面板，或者按钮已存在，则退出
+        if ((!consoleTitle && !group) || doc.getElementById(this.BTN_ID)) return;
 
         const btn = doc.createElement('button');
         btn.id = this.BTN_ID;
         btn.className = 'jav-filter-btn';
         btn.innerHTML = '数据管理';
-        // [MOD] 增加 inline-flex 保证居中对齐
         btn.style.cssText = 'margin-right: 10px; background-color: #f3f4f6; color: #4b5563; border-color: #d1d5db; display: inline-flex; align-items: center; justify-content: center;';
-        
+
         btn.onmouseover = () => { btn.style.backgroundColor = '#e5e7eb'; };
         btn.onmouseout = () => { btn.style.backgroundColor = '#f3f4f6'; };
         btn.onclick = (e) => {
@@ -38,8 +43,12 @@ window.PornDataManager = class PornDataManager {
             this.openManagerModal();
         };
 
-        // 插入到 group 的最前面
-        group.insertBefore(btn, group.firstChild);
+        // [ADD] 根据当前页面环境，精准把按钮插入对应的容器最前方
+        if (consoleTitle) {
+            consoleTitle.insertBefore(btn, consoleTitle.firstChild);
+        } else if (group) {
+            group.insertBefore(btn, group.firstChild);
+        }
     }
 
     static openManagerModal() {
@@ -54,7 +63,7 @@ window.PornDataManager = class PornDataManager {
         const overlay = document.createElement('div');
         overlay.id = overlayId;
         overlay.style.cssText = 'position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.7); z-index: 9999999; display: flex; justify-content: center; align-items: center;';
-        
+
         overlay.innerHTML = `
             <div style="width: 500px; background: #fff; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.15);">
                 <div style="padding: 15px 20px; background: #f8f9fa; border-bottom: 1px solid #e9ecef; display: flex; justify-content: space-between; align-items: center; font-weight: bold; font-size: 16px;">
@@ -124,7 +133,7 @@ window.PornDataManager = class PornDataManager {
         });
 
         document.getElementById('btn-export-local').onclick = () => this.exportLocal(getChecks());
-        
+
         const fileInput = document.getElementById('dm-file-input');
         document.getElementById('btn-import-local').onclick = () => fileInput.click();
         fileInput.onchange = (e) => {
@@ -182,7 +191,7 @@ window.PornDataManager = class PornDataManager {
                         const cloudArr = JSON.parse(value || '[]');
                         const mergedSet = new Set([...localArr, ...cloudArr]);
                         GM_setValue(key, JSON.stringify([...mergedSet]));
-                    } catch(e) {}
+                    } catch (e) { }
                 } else {
                     // 过滤器/白名单 直接覆盖
                     GM_setValue(key, value);
@@ -223,7 +232,7 @@ window.PornDataManager = class PornDataManager {
         let url = conf.url.trim();
         if (!url.endsWith('/')) url += '/';
         url += 'porndb_sync_data.json';
-        
+
         const auth = 'Basic ' + btoa(`${conf.user.trim()}:${conf.pass.trim()}`);
         return { url, auth };
     }
@@ -234,7 +243,7 @@ window.PornDataManager = class PornDataManager {
 
         const data = this.buildBackupData(checks);
         const jsonStr = JSON.stringify(data);
-        
+
         document.getElementById('btn-push-dav').textContent = '推送中...';
 
         GM_xmlhttpRequest({
@@ -272,7 +281,7 @@ window.PornDataManager = class PornDataManager {
                         this.restoreData(data);
                         alert('云端数据恢复成功！页面即将刷新...');
                         location.reload();
-                    } catch(e) { alert('解析云端文件失败'); }
+                    } catch (e) { alert('解析云端文件失败'); }
                 } else if (res.status === 404) {
                     alert('云端未找到备份文件，请先推送一次。');
                 } else {
