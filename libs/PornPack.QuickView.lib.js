@@ -34,7 +34,8 @@ window.PornQuickView = class PornQuickView {
             btn.onclick = (e) => {
                 e.preventDefault();
                 e.stopPropagation();
-                this.openIframeModal(aNode.href);
+                // [MOD] 传递当前的卡片 DOM 节点，供关闭时精准定位
+                this.openIframeModal(aNode.href, card);
             };
 
             // 挂在外层！斩断与 Vue 重绘逻辑的牵连！
@@ -42,7 +43,8 @@ window.PornQuickView = class PornQuickView {
         });
     }
 
-    openIframeModal(url) {
+    // [MOD] 接收传入的源卡片 DOM
+    openIframeModal(url, sourceCard) {
         const overlayId = 'west-quick-view-modal';
         if (document.getElementById(overlayId)) document.getElementById(overlayId).remove();
 
@@ -83,6 +85,10 @@ window.PornQuickView = class PornQuickView {
         const closeModal = () => {
             overlay.remove();
             document.body.style.overflow = originalOverflow;
+            // [MOD] 触发自定义事件，通知主页面小窗已关闭，并传回对应的卡片节点以便刷新
+            if (sourceCard) {
+                window.dispatchEvent(new CustomEvent('West_QuickView_Closed', { detail: { card: sourceCard } }));
+            }
         };
         closeBtn.onclick = closeModal;
         overlay.onclick = (e) => { if (e.target === overlay) closeModal(); };
