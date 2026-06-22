@@ -139,6 +139,7 @@ class Drive115 extends Req {
     policy,
     accessid: OSSAccessKeyId,
     callback,
+    callback_var,
     signature,
     file,
   }) {
@@ -151,6 +152,7 @@ class Drive115 extends Req {
         OSSAccessKeyId,
         success_action_status: "200",
         callback,
+        callback_var,
         signature,
         file,
       },

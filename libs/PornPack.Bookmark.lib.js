@@ -228,8 +228,12 @@ window.PornBookmark = class PornBookmark {
                         const fileObj = this.createPbfFile(pbfContent, fileName);
                         const initRes = await ReqClass.sampleInitUpload({ filename: fileName, filesize: fileObj.size, cid: targetCid });
 
-                        if (initRes && initRes.host) {
-                            await ReqClass.upload({ ...initRes, filename: fileName, file: fileObj });
+                        // [MOD] 增加极速秒传校验，并校验 OSS 真实回调 JSON 结果
+                        if (initRes && (initRes.host || initRes.status === 2 || initRes.statuscode === 0)) {
+                            if (initRes.host) {
+                                const uploadRes = await ReqClass.upload({ ...initRes, filename: fileName, file: fileObj });
+                                if (uploadRes && uploadRes.state === false) throw new Error(uploadRes.error_msg || uploadRes.error || "115 服务器拒绝接收回调");
+                            }
                             // [MOD] 成功后刷新UI变为“网盘已有”模式
                             this.hasPbfInCloud = true;
                             this.updateButtonUI('cloud_exists');

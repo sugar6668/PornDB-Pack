@@ -13,7 +13,7 @@ window.PornSubtitle = class PornSubtitle {
         if (!location.href.includes('/scenes/')) return;
         const pbfBtn = document.getElementById('export-pbf-btn');
         const targetAnchor = pbfBtn ? pbfBtn.parentElement : document.getElementById('btn-copy-kw');
-        
+
         if (targetAnchor && !document.getElementById(this.BTN_ID)) {
             this.createSearchButton(targetAnchor);
             this.checkedCid = null;
@@ -35,7 +35,7 @@ window.PornSubtitle = class PornSubtitle {
             const hasSub = res?.data?.some(f => /\.(srt|ass|ssa|vtt|sub)$/i.test(f.n));
             this.hasSubInCloud = !!hasSub;
             this.updateButtonUI(this.hasSubInCloud ? 'cloud_exists' : 'default');
-        } catch (e) {}
+        } catch (e) { }
     }
 
     static updateButtonUI(state) {
@@ -64,7 +64,7 @@ window.PornSubtitle = class PornSubtitle {
         const details = document.WESTDETAILS || {};
         const kwInput = document.getElementById('jav-nong-kw');
         const magKw = kwInput ? kwInput.value.trim() : '';
-        
+
         // 【核心优化】：提取第一位演员，并将所有内部空格转化为点号
         let firstActor = '';
         if (details.actors && details.actors.length > 0) {
@@ -92,10 +92,10 @@ window.PornSubtitle = class PornSubtitle {
         const overlay = document.createElement('div');
         overlay.id = overlayId;
         overlay.style.cssText = 'position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.85); z-index: 9999999; display: flex; justify-content: center; align-items: center;';
-        
+
         const box = document.createElement('div');
         box.style.cssText = 'width: 90%; max-width: 1200px; height: 85vh; background: #fff; border-radius: 8px; overflow: hidden; display: flex; flex-direction: column; position: relative;';
-        
+
         const header = document.createElement('div');
         header.style.cssText = 'padding: 15px; background: #f5f5f5; border-bottom: 1px solid #e8e8e8; display: flex; justify-content: space-between; align-items: center;';
         header.innerHTML = `
@@ -106,16 +106,16 @@ window.PornSubtitle = class PornSubtitle {
             </div>
             <span style="cursor:pointer; color:#999; font-size:24px; line-height:1; margin-left:15px;" id="sub-close-btn">&times;</span>
         `;
-        
+
         const bodyContainer = document.createElement('div');
         bodyContainer.style.cssText = 'display: flex; flex: 1; overflow: hidden;';
-        
+
         const contentWrap = document.createElement('div');
         contentWrap.style.cssText = 'flex: 7; width: 0; padding: 15px; overflow-y: auto; border-right: 1px solid #e8e8e8;';
 
         const previewWrap = document.createElement('div');
         previewWrap.style.cssText = 'flex: 3; width: 0; padding: 15px; display: flex; flex-direction: column; background: #fafafa;';
-        
+
         const previewTitle = document.createElement('div');
         previewTitle.style.cssText = 'font-weight: bold; margin-bottom: 10px; color: #333; display: flex; justify-content: space-between; align-items: center;';
         previewTitle.innerHTML = '<span>字幕内容预览</span><span id="preview-status" style="font-weight:normal; color:#999; font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:60%;">暂无预览</span>';
@@ -153,18 +153,18 @@ window.PornSubtitle = class PornSubtitle {
                             const root = JSON.parse(res.responseText);
                             if (root.code === 0 && root.data && root.data.length > 0) {
                                 let dataList = root.data;
-                                
+
                                 // 【核心优化】：分词打分器，杜绝完全匹配失效的问题
                                 const kwClean = kw.toLowerCase().replace(/[-_\.\s]/g, '');
                                 const kwTokens = kw.toLowerCase().split(/[-_\.\s]+/).filter(w => w.length > 1);
-                                
+
                                 dataList.sort((a, b) => {
                                     let scoreA = 0, scoreB = 0;
                                     const nameA = (a.name || a.extra_name || '').toLowerCase();
                                     const nameB = (b.name || b.extra_name || '').toLowerCase();
                                     const langA = ((a.languages && a.languages[0]) || '').toLowerCase();
                                     const langB = ((b.languages && b.languages[0]) || '').toLowerCase();
-                                    
+
                                     // 1. 分词累加得分：命中越多的搜索词，得分越高 (+50/词)
                                     kwTokens.forEach(t => {
                                         if (nameA.includes(t)) scoreA += 50;
@@ -180,7 +180,7 @@ window.PornSubtitle = class PornSubtitle {
                                     if (/zh|cn|chs|cht|中字|简|繁/.test(langB) || /中字|简|繁|chs|cht/.test(nameB)) scoreB += 100;
                                     if (a.ext === 'srt' || a.ext === 'ass') scoreA += 20;
                                     if (b.ext === 'srt' || b.ext === 'ass') scoreB += 20;
-                                    
+
                                     return scoreB - scoreA;
                                 });
 
@@ -225,20 +225,20 @@ window.PornSubtitle = class PornSubtitle {
                 </thead>
                 <tbody>
         `;
-        
+
         dataList.forEach((item, index) => {
             const lang = (item.languages && item.languages.length > 0) ? item.languages[0] : '未知';
             let subName = item.name || item.extra_name || '未知字幕';
             const subNameClean = subName.toLowerCase().replace(/[-_\.\s]/g, '');
-            
+
             // 是否包含所有的搜索分词 (决定是否显示🔥图标)
-            const isExactMatch = kwClean && subNameClean.includes(kwClean); 
-            
+            const isExactMatch = kwClean && subNameClean.includes(kwClean);
+
             let displayName = subName;
             if (highlightRegex) {
                 displayName = displayName.replace(highlightRegex, '<span style="color:#e74c3c; font-weight:bold;">$1</span>');
             }
-            
+
             const topIcon = isExactMatch ? '<span style="color:#e74c3c; font-size:12px; margin-right:4px;" title="精确匹配">🔥</span>' : '';
             const tdStyle = isExactMatch ? 'color:#333; font-weight:bold;' : 'color:#555;';
 
@@ -260,12 +260,12 @@ window.PornSubtitle = class PornSubtitle {
 
         const self = this;
         container.querySelectorAll('.sub-action-btn').forEach(btn => {
-            btn.onclick = async function() {
+            btn.onclick = async function () {
                 const action = this.dataset.action;
                 const item = dataList[this.dataset.idx];
                 const url = item.url;
                 if (!url) return alert('无效的字幕下载直链');
-                
+
                 const format = item.ext || 'srt';
                 const standardName = window.PornBookmark ? window.PornBookmark.getStandardizedFilename() : document.title.replace(/[\\/:*?"<>|]/g, "_").replace(/\s+/g, ' ').trim();
                 const finalFilename = `${standardName}.${format}`;
@@ -277,7 +277,7 @@ window.PornSubtitle = class PornSubtitle {
                 try {
                     const buffer = await self.fetchBinary(url);
                     if (action === 'preview') {
-                        const decoder = new TextDecoder('utf-8'); 
+                        const decoder = new TextDecoder('utf-8');
                         previewBox.value = decoder.decode(buffer);
                         const statusNode = document.getElementById('preview-status');
                         if (statusNode) statusNode.innerText = finalFilename;
@@ -293,17 +293,21 @@ window.PornSubtitle = class PornSubtitle {
                         const targetCid = matchedBtn ? matchedBtn.dataset.cid : null;
                         const ReqClass = typeof Req115 !== 'undefined' ? Req115 : (typeof window.Req115 !== 'undefined' ? window.Req115 : null);
                         if (!targetCid || !ReqClass) throw new Error('未检测到 115 归档目录，请先等待主界面刮削或匹配完毕！');
-                        
+
                         this.textContent = '直传中...';
                         const blob = new Blob([buffer], { type: 'application/octet-stream' });
                         const fileObj = new File([blob], finalFilename, { type: 'application/octet-stream' });
                         const initRes = await ReqClass.sampleInitUpload({ filename: finalFilename, filesize: fileObj.size, cid: targetCid });
-                        if (initRes && initRes.host) {
-                            await ReqClass.upload({ ...initRes, filename: finalFilename, file: fileObj });
+                        // [MOD] 增加极速秒传校验，并校验 OSS 真实回调 JSON 结果
+                        if (initRes && (initRes.host || initRes.status === 2 || initRes.statuscode === 0)) {
+                            if (initRes.host) {
+                                const uploadRes = await ReqClass.upload({ ...initRes, filename: finalFilename, file: fileObj });
+                                if (uploadRes && uploadRes.state === false) throw new Error(uploadRes.error_msg || uploadRes.error || "115 服务器拒绝接收回调");
+                            }
                             self.hasSubInCloud = true;
                             self.updateButtonUI('cloud_exists');
                             alert('字幕归档成功，已推入115云端目录！');
-                            overlay.remove(); 
+                            overlay.remove();
                         } else {
                             throw new Error(initRes?.error_msg || "获取115上传安全凭证被拦截");
                         }
