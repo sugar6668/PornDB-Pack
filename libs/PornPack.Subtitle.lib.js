@@ -277,8 +277,21 @@ window.PornSubtitle = class PornSubtitle {
                 try {
                     const buffer = await self.fetchBinary(url);
                     if (action === 'preview') {
-                        const decoder = new TextDecoder('utf-8');
-                        previewBox.value = decoder.decode(buffer);
+                        // [MOD] 增加智能编码嗅探：解决由于写死 UTF-8 导致的老式 GBK 字幕乱码问题
+                        let decoder = new TextDecoder('utf-8');
+                        let textResult = decoder.decode(buffer);
+                        
+                        // [MOD] 修复正则被吞噬的语法错误：使用安全的 \uFFFD 代表乱码字符()，并增加 || [] 防止 null 报错
+                        const errorCount = (textResult.match(/\uFFFD/g) || []).length;
+                        if (errorCount > 3) {
+                            // 若发现明显乱码，切换至中文常用的 gbk 重新解码
+                            decoder = new TextDecoder('gbk');
+                            textResult = decoder.decode(buffer);
+                        }
+                        
+                        previewBox.value = textResult;
+                        
+                        previewBox.value = textResult;
                         const statusNode = document.getElementById('preview-status');
                         if (statusNode) statusNode.innerText = finalFilename;
                     } else if (action === 'download') {
