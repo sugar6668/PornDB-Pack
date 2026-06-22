@@ -112,12 +112,17 @@ window.PornArchiver = class PornArchiver {
 
         const hasZh = videos.some(v => checkZh(v.n)) || srts.length > 0;
 
+        // [MOD] 过滤非法字符，防止目录创建失败或重命名失败导致后续移动报错
+        const safeDirArray = item.finalDirArray.map(d => (d || '').replace(/[\\/:*?"<>|]/g, '').trim());
+        const safeNewName = (item.newName || '').replace(/[\\/:*?"<>|]/g, '').trim();
+
         // 确保最终归档目录被创建
-        const finalCid = await this.req115.handleDir(item.finalDirArray);
+        const finalCid = await this.req115.handleDir(safeDirArray);
+        if (!finalCid) throw new Error("目标归档目录创建失败"); // [ADD] 拦截空目录异常
 
         // 利用 JavPack 的 handleRename 完美分配后缀 (强制关闭破解/无码标签)
         await this.req115.handleRename(keepFiles, file_id, {
-            rename: item.newName,
+            rename: safeNewName, // [MOD] 使用安全文件名
             renameTxt: { zh: " [中文]", crack: "", no: "-${no}", sep: " " },
             zh: hasZh,
             crack: false
@@ -127,8 +132,14 @@ window.PornArchiver = class PornArchiver {
         // 步骤 4：物理转移到最终演员目录，并彻底销毁 BT 空壳
         // ==========================================
         if (this.updateBtnUI) this.updateBtnUI(item.hash, `转移归档...`, '#f39c12');
-        await this.req115.filesMove(keepFiles.map(f => f.fid), finalCid);
-        await this.req115.rbDelete([file_id], item.cid);
+        const moveRes = await this.req115.filesMove(keepFiles.map(f => f.fid), finalCid);
+
+        // [MOD] 严谨校验：只有确认转移成功，才允许删除源文件夹，彻底杜绝数据误删丢失！
+        if (moveRes && moveRes.state) {
+            await this.req115.rbDelete([file_id], item.cid);
+        } else {
+            throw new Error("文件物理转移失败，已终止清理以保护数据");
+        }
 
         // ==========================================
         // 步骤 5：HandleCover (调用原生封面组件)
@@ -147,14 +158,25 @@ window.PornArchiver = class PornArchiver {
         // ==========================================
         // 步骤 6：全链路完成，触发界面刷新
         // ==========================================
-        if (this.updateBtnUI) this.updateBtnUI(item.hash, `制尪完成`, '#8e44ad');
-        if (this.triggerAutoMatch) setTimeout(() => this.triggerAutoMatch(), 2500);
+        if (this.updateBtnUI) this.updateBtnUI(item.hash, `离线完成`, '#8e44ad');
+
+        if (this.triggerAutoMatch) {
+            // [MOD] 强行绕过主脚本内存级缓存：通过给特征码追加空格，触发全新的精确检索，实现无缝刷新
+            if (typeof document !== 'undefined' && document.WESTDETAILS) {
+                const prefixKey = document.WESTDETAILS.matchPrefix || document.WESTDETAILS.dateStr;
+                if (prefixKey && typeof GM_deleteValue !== 'undefined') GM_deleteValue('pdb_v4_' + prefixKey);
+                document.WESTDETAILS.matchPrefix = (document.WESTDETAILS.matchPrefix || '') + ' ';
+            }
+            setTimeout(() => this.triggerAutoMatch(), 3500); // [MOD] 给 115 搜索引擎多留 1 秒缓冲时间
+        }
 
         return true;
     }
 
     async flattenAfterOffline(details, dirArray, directVideo = null) {
-        const targetCid = await this.req115.handleDir(dirArray);
+        // [MOD] 过滤非法字符
+        const safeDirArray = dirArray.map(d => (d || '').replace(/[\\/:*?"<>|]/g, '').trim());
+        const targetCid = await this.req115.handleDir(safeDirArray);
         if (!targetCid) throw new Error("无法创建或获取目标目录");
 
         let video = directVideo; // 直接接收前端传来的精确目标
@@ -189,12 +211,15 @@ window.PornArchiver = class PornArchiver {
 
         // 转移至目标目录并清理旧目录垃圾
         if (String(sourceCid) !== String(targetCid)) {
-            await this.req115.filesMove(keepFiles.map(f => f.fid), targetCid);
-            if (sourceCid !== '0') {
+            const moveRes = await this.req115.filesMove(keepFiles.map(f => f.fid), targetCid);
+            // [MOD] 安全校验：确认转移成功后方可清理源目录
+            if (moveRes && moveRes.state && sourceCid !== '0') {
                 const remaining = await this.req115.filesAllVideos(sourceCid);
                 if (!remaining?.data?.filter(v => v.s > 100 * 1024 * 1024).length) {
                     await this.req115.rbDelete([sourceCid]);
                 }
+            } else if (!moveRes || !moveRes.state) {
+                throw new Error("文件转移失败，归档中止");
             }
             await this.sleep(1200);
         }
@@ -212,7 +237,8 @@ window.PornArchiver = class PornArchiver {
         if (maker && cleanRawTitle.toLowerCase().startsWith(maker.toLowerCase())) {
             cleanRawTitle = cleanRawTitle.substring(maker.length).replace(/^[^a-zA-Z0-9\u4e00-\u9fa5]+/, '').trim();
         }
-        let cleanNewName = (details.matchPrefix ? `${details.matchPrefix} ${cleanRawTitle}` : details.fullTitle).replace(/\s+/g, ' ').trim();
+        // [MOD] 过滤重命名的非法字符
+        let cleanNewName = (details.matchPrefix ? `${details.matchPrefix} ${cleanRawTitle}` : details.fullTitle).replace(/[\\/:*?"<>|]/g, '').replace(/\s+/g, ' ').trim();
 
         // 仅保留中文标签挂载，关闭 crack 标签
         await this.req115.handleRename(keepFiles, targetCid, {
