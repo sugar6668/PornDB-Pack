@@ -72,7 +72,7 @@ window.PornMatcher = class PornMatcher {
         }
 
         if (details.dateStr && !hasDate && !hasYearOnly) {
-            if (this.REGEX_DATE_FORMAT.test(n)) return score; 
+            if (this.REGEX_DATE_FORMAT.test(n)) return score;
         }
 
         // ===============================================
@@ -82,13 +82,21 @@ window.PornMatcher = class PornMatcher {
         if (hasMaker && hasActor) score += 50;    // 厂牌+演员 = 强关联 (50分，过)
         if (hasActor && hasDate) score += 50;     // 演员+日期 = 强关联 (50分，过)
         if (hasActor && hasTitle) score += 40;    // 演员+标题 = 擦边及格 (40分，过)
-        
+
         // 🚨 削弱项：防止标题碰瓷
         if (hasMaker && hasTitle) score += 20;    // 厂牌+标题 = 太容易撞车，只给20分 (不及格！)
         if (hasDate && hasTitle) score += 20;     // 日期+标题 = 证据不足，只给20分 (不及格！)
-        
+
         if (hasMaker && hasYearOnly) {
-            if (hasActor || hasTitle) score += 30; 
+            if (hasActor || hasTitle) score += 30;
+        }
+        // [ADD] 开始：追加标准命名霸体置顶逻辑，无视上述基础分，直接赋予绝对高分
+        const fullTitleClean = details.fullTitleClean !== undefined
+            ? details.fullTitleClean
+            : String(details.fullTitle || '').toLowerCase().replace(this.REGEX_NON_ALPHANUM, '');
+
+        if (fullTitleClean && fullTitleClean.length > 5 && nClean.includes(fullTitleClean)) {
+            score += 2000;
         }
 
         return score;
@@ -109,12 +117,15 @@ window.PornMatcher = class PornMatcher {
     static getMatchedVideos(dataArray, details) {
         if (!dataArray || !dataArray.length) return [];
 
-        const makerName = details.baseAlpha || details.studio || details.maker || '';
-        const makerRegex = this.buildExactRegex(makerName);
-        const actorRegexes = (details.actors || []).map(a => this.buildExactRegex(a)).filter(Boolean);
+        // [MOD] 性能优化：提前将 details 的正则清洗结果缓存下来，避免在 map 中执行几百次相同的运算
+        const makerClean = String(details.baseAlpha || '').toLowerCase().replace(this.REGEX_NON_ALPHANUM, '');
         const titleClean = (details.titlePart || '').toLowerCase().replace(this.REGEX_NON_ALPHANUM, '');
-        
-        const cleanedDetails = { ...details, baseAlpha: makerName, makerRegex, actorRegexes, titleClean };
+        // [ADD] 提取 fullTitle 特征，用于识别是否为已重命名的标准刮削文件
+        const fullTitleClean = String(details.fullTitle || '').toLowerCase().replace(this.REGEX_NON_ALPHANUM, '');
+        const actorsClean = (details.actors || []).map(a => String(a).toLowerCase().replace(this.REGEX_NON_ALPHANUM, '')).filter(Boolean);
+
+        // [MOD] 将 fullTitleClean 一并注入向下传递
+        const cleanedDetails = { ...details, makerClean, titleClean, fullTitleClean, actorsClean };
 
         return dataArray
             .map(it => {
