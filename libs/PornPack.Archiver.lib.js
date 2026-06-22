@@ -23,11 +23,13 @@ window.PornArchiver = class PornArchiver {
         try {
             const success = await this.executePipeline(item);
             if (!success) {
-                if (this.updateBtnUI) this.updateBtnUI(item.hash, `验证失败/超时`, '#dc3545');
+                if (this.updateBtnUI) this.updateBtnUI(item.hash, `验证失败`, '#dc3545');
             }
         } catch (e) {
             console.error("离线高级链路执行异常:", e);
-            if (this.updateBtnUI) this.updateBtnUI(item.hash, `执行异常`, '#dc3545');
+            // [MOD] 捕获抛出的具体错误信息，若没有则显示“执行异常”
+            const msg = (e && e.message && e.message.length <= 15) ? e.message : '执行异常';
+            if (this.updateBtnUI) this.updateBtnUI(item.hash, msg, '#dc3545');
         }
     }
 
@@ -43,12 +45,14 @@ window.PornArchiver = class PornArchiver {
         // ==========================================
         // 步骤 1：HandleVerify (高频验证下载状态与提取目标)
         // ==========================================
-        for (let i = 0; i < 15; i++) {
-            if (this.updateBtnUI) this.updateBtnUI(item.hash, `验证进度(${i + 1}/15)...`, '#f39c12');
-            // 自适应间隔：前 5 次 2s，中间 5 次 1.5s，后 5 次 1s
-            await this.sleep(i < 5 ? 2000 : i < 10 ? 1500 : 1000);
+        // [MOD] 提升重试次数至 60 次（约等待 3 分钟），解决部分非“秒传”资源解析与下载慢导致脚本过早放弃的问题
+        for (let i = 0; i < 60; i++) {
+            if (this.updateBtnUI) this.updateBtnUI(item.hash, `验证进度(${i + 1}/60)...`, '#f39c12');
+            await this.sleep(3000); // [MOD] 统一 3 秒请求间隔，避免高频请求被 115 接口风控
 
-            const { tasks } = await this.req115.lixianTaskLists();
+            // [MOD] 增加安全判断，防止 115 返回空数据时引发 Cannot read properties 的报错中断
+            const taskRes = await this.req115.lixianTaskLists();
+            const tasks = taskRes?.tasks || [];
             const task = tasks.find(t => t.info_hash && t.info_hash.toLowerCase() === item.hash.toLowerCase());
 
             if (task) {
@@ -56,7 +60,7 @@ window.PornArchiver = class PornArchiver {
                     file_id = String(task.file_id);
                     break;
                 } else if (task.status === -1) {
-                    if (this.updateBtnUI) this.updateBtnUI(item.hash, `离线报错`, '#dc3545');
+                    if (this.updateBtnUI) this.updateBtnUI(item.hash, `资源死链报错`, '#dc3545');
                     return false;
                 } else if (task.status === 1) {
                     if (this.updateBtnUI) this.updateBtnUI(item.hash, `下载 ${Math.floor(task.percent)}%`, '#f39c12');
@@ -64,7 +68,8 @@ window.PornArchiver = class PornArchiver {
             }
         }
 
-        if (!file_id) return false;
+        // [MOD] 若超时仍没拿到 file_id，抛出具体原因给 UI 捕获显示，避免干巴巴的 false
+        if (!file_id) throw new Error("下载耗时过长放弃");
 
         // 提取视频文件 (强制过滤 > 100MB，保留多集)
         if (this.updateBtnUI) this.updateBtnUI(item.hash, `提取视频...`, '#f39c12');
@@ -82,7 +87,8 @@ window.PornArchiver = class PornArchiver {
             if (videos.length > 0) break;
         }
 
-        if (!videos.length) return false;
+        // [MOD] 同理，抛出具体错误供 UI 捕获
+        if (!videos.length) throw new Error("未找到大体积视频");
 
         // 提取原盘附带的字幕文件 (srt, ass, vtt等)
         try {
