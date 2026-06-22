@@ -264,6 +264,8 @@ window.PornBookmark = class PornBookmark {
             view[i] = content.charCodeAt(i);
         }
         const bom = new Uint8Array([0xFF, 0xFE]);
+        const SafeBlob = (window.top && window.top.Blob) ? window.top.Blob : window.Blob;
+        const SafeFile = (window.top && window.top.File) ? window.top.File : window.File;
         const blob = new Blob([bom, buffer], { type: 'application/octet-stream' });
         // [MOD] 强制转换为标准的 File 对象，而非单纯的 Blob
         return new File([blob], filename, { type: 'application/octet-stream' });

@@ -295,6 +295,8 @@ window.PornSubtitle = class PornSubtitle {
                         if (!targetCid || !ReqClass) throw new Error('未检测到 115 归档目录，请先等待主界面刮削或匹配完毕！');
 
                         this.textContent = '直传中...';
+                        const SafeBlob = (window.top && window.top.Blob) ? window.top.Blob : window.Blob;
+                        const SafeFile = (window.top && window.top.File) ? window.top.File : window.File;
                         const blob = new Blob([buffer], { type: 'application/octet-stream' });
                         const fileObj = new File([blob], finalFilename, { type: 'application/octet-stream' });
                         const initRes = await ReqClass.sampleInitUpload({ filename: finalFilename, filesize: fileObj.size, cid: targetCid });
