@@ -123,9 +123,12 @@ window.PornMatcher = class PornMatcher {
         // [ADD] 提取 fullTitle 特征，用于识别是否为已重命名的标准刮削文件
         const fullTitleClean = String(details.fullTitle || '').toLowerCase().replace(this.REGEX_NON_ALPHANUM, '');
         const actorsClean = (details.actors || []).map(a => String(a).toLowerCase().replace(this.REGEX_NON_ALPHANUM, '')).filter(Boolean);
+        // [FIX] 构建 makerRegex 和 actorRegexes，恢复 hasMaker/hasActor 评分能力
+        const makerRegex = this.buildExactRegex(details.baseAlpha || details.maker || '');
+        const actorRegexes = (details.actors || []).map(a => this.buildExactRegex(a)).filter(Boolean);
 
         // [MOD] 将 fullTitleClean 一并注入向下传递
-        const cleanedDetails = { ...details, makerClean, titleClean, fullTitleClean, actorsClean };
+        const cleanedDetails = { ...details, makerClean, titleClean, fullTitleClean, actorsClean, makerRegex, actorRegexes  };
 
         return dataArray
             .map(it => {
