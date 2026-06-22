@@ -21,8 +21,8 @@ class Req {
       // 🛡️ 跨 Realm 安全检测：同时使用 instanceof 和 toStringTag，
       //   防止 Tampermonkey 沙箱中 File/Blob 跨上下文导致 instanceof 失效
       const isBlobOrFile = val instanceof Blob || val instanceof File
-        || /^\[object (Blob|File)\]$/.test(Object.prototype.toString.call(val));
-
+        || /^\[object (Blob|File)\]$/.test(Object.prototype.toString.call(val))
+        || (typeof val === "object" && val !== null && typeof val.size === "number" && typeof val.slice === "function");
       if (val !== null && typeof val === "object" && !isBlobOrFile && !(val instanceof Date)) {
         this._serializeToFormData(formData, val, fullKey);
       } else {
