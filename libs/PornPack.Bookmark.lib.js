@@ -231,7 +231,13 @@ window.PornBookmark = class PornBookmark {
                         // [MOD] 增加极速秒传校验，并校验 OSS 真实回调 JSON 结果
                         if (initRes && (initRes.host || initRes.status === 2 || initRes.statuscode === 0)) {
                             if (initRes.host) {
-                                const uploadRes = await ReqClass.upload({ ...initRes, filename: fileName, file: fileObj });
+                                // [MOD] 书签专用的重试机制：精准使用 fileName 变量
+                                let uploadRes = null;
+                                for (let retry = 0; retry < 3; retry++) {
+                                    uploadRes = await ReqClass.upload({ ...initRes, filename: fileName, file: fileObj });
+                                    if (uploadRes && uploadRes.state !== false) break;
+                                    await new Promise(r => setTimeout(r, 1500)); 
+                                }
                                 if (uploadRes && uploadRes.state === false) throw new Error(uploadRes.error_msg || uploadRes.error || "115 服务器拒绝接收回调");
                             }
                             // [MOD] 成功后刷新UI变为“网盘已有”模式

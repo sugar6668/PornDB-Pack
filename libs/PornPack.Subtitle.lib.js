@@ -280,7 +280,7 @@ window.PornSubtitle = class PornSubtitle {
                         // [MOD] 增加智能编码嗅探：解决由于写死 UTF-8 导致的老式 GBK 字幕乱码问题
                         let decoder = new TextDecoder('utf-8');
                         let textResult = decoder.decode(buffer);
-                        
+
                         // [MOD] 修复正则被吞噬的语法错误：使用安全的 \uFFFD 代表乱码字符()，并增加 || [] 防止 null 报错
                         const errorCount = (textResult.match(/\uFFFD/g) || []).length;
                         if (errorCount > 3) {
@@ -288,9 +288,7 @@ window.PornSubtitle = class PornSubtitle {
                             decoder = new TextDecoder('gbk');
                             textResult = decoder.decode(buffer);
                         }
-                        
-                        previewBox.value = textResult;
-                        
+
                         previewBox.value = textResult;
                         const statusNode = document.getElementById('preview-status');
                         if (statusNode) statusNode.innerText = finalFilename;
@@ -314,7 +312,13 @@ window.PornSubtitle = class PornSubtitle {
                         // [MOD] 增加极速秒传校验，并校验 OSS 真实回调 JSON 结果
                         if (initRes && (initRes.host || initRes.status === 2 || initRes.statuscode === 0)) {
                             if (initRes.host) {
-                                const uploadRes = await ReqClass.upload({ ...initRes, filename: finalFilename, file: fileObj });
+                                // [MOD] 字幕专用的重试机制：精准使用 finalFilename 变量
+                                let uploadRes = null;
+                                for (let retry = 0; retry < 3; retry++) {
+                                    uploadRes = await ReqClass.upload({ ...initRes, filename: finalFilename, file: fileObj });
+                                    if (uploadRes && uploadRes.state !== false) break;
+                                    await new Promise(r => setTimeout(r, 1500));
+                                }
                                 if (uploadRes && uploadRes.state === false) throw new Error(uploadRes.error_msg || uploadRes.error || "115 服务器拒绝接收回调");
                             }
                             self.hasSubInCloud = true;
