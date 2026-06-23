@@ -46,6 +46,7 @@ window.PornArchiver = class PornArchiver {
         // 步骤 1：HandleVerify (高频验证下载状态与提取目标)
         // ==========================================
         // [MOD] 提升重试次数至 60 次（约等待 3 分钟），解决部分非“秒传”资源解析与下载慢导致脚本过早放弃的问题
+        let zeroProgressCount = 0; // [ADD] 连续无进度计数器
         for (let i = 0; i < 60; i++) {
             if (this.updateBtnUI) this.updateBtnUI(item.hash, `验证进度(${i + 1}/60)...`, '#f39c12');
             await this.sleep(3000); // [MOD] 统一 3 秒请求间隔，避免高频请求被 115 接口风控
@@ -62,8 +63,22 @@ window.PornArchiver = class PornArchiver {
                 } else if (task.status === -1) {
                     if (this.updateBtnUI) this.updateBtnUI(item.hash, `资源死链报错`, '#dc3545');
                     return false;
-                } else if (task.status === 1) {
-                    if (this.updateBtnUI) this.updateBtnUI(item.hash, `下载 ${Math.floor(task.percent)}%`, '#f39c12');
+                } else {
+                    // [ADD] 智能死种检测：解析当前进度并判断
+                    const currentPercent = Math.floor(task.percent || 0);
+                    if (task.status === 1 && this.updateBtnUI) {
+                        this.updateBtnUI(item.hash, `下载 ${currentPercent}%`, '#f39c12');
+                    }
+
+                    if (currentPercent === 0) {
+                        zeroProgressCount++;
+                        // [ADD] 连续 10 次（约 30 秒）进度为 0 则抛出异常放弃
+                        if (zeroProgressCount >= 10) {
+                            throw new Error("无速度死种放弃");
+                        }
+                    } else {
+                        zeroProgressCount = 0; // [ADD] 进度有动静，立刻重置计数器
+                    }
                 }
             }
         }
