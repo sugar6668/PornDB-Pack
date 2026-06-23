@@ -261,5 +261,6 @@ window.PornArchiver = class PornArchiver {
                 await this.req115.filesEdit(targetCid, coverRes.data.fileid || coverRes.data.file_id);
             }
         }
+        return targetCid;
     }
 };
