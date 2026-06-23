@@ -91,12 +91,13 @@ window.PornMatcher = class PornMatcher {
         if (!hasDate && !hasYearOnly) return 0;
         if (!hasDate && hasYearOnly && !hasActor && !hasTitle) return 0;
 
-        // 基础必要条件得分：厂牌 + 完整日期得 100 分，厂牌 + 仅年份(且有辅助)得 80 分
-        if (hasMaker && hasDate) {
-            score += 100;
-        } else if (hasMaker && hasYearOnly) {
-            score += 80;
+        // [DEL] 彻底废除“厂牌+年份+演员/标题”的宽容模式，防止大量同厂牌同年的作品互相碰瓷
+        if (!hasMaker || !hasDate) {
+            return 0;
         }
+
+        // 基础必要条件得分：厂牌 + 完整日期得 100 分
+        score += 100;
 
         // 附加得分：在满足了上述严苛条件的基础上，如果有演员或标题，增加排序优先级
         if (hasActor) score += 50;
