@@ -18,6 +18,12 @@ window.PornFavorites = class PornFavorites {
             .pdb-fav-btn:hover { transform: scale(1.25); }
             .pdb-fav-btn svg { width: 100%; height: 100%; display: block;}
             .pdb-fav-highlight { color: #e74c3c !important; font-weight: bold !important; text-shadow: 0 0 1px rgba(231,76,60,0.2); }
+            @keyframes favHeartbeat {
+                0% { transform: scale(1); opacity: 1; }
+                50% { transform: scale(1.15); opacity: 0.6; }
+                100% { transform: scale(1); opacity: 1; }
+            }
+            .pdb-fav-btn.is-liked svg { animation: favHeartbeat 1.5s infinite ease-in-out; }
         `;
         document.head.appendChild(style);
 
@@ -79,7 +85,8 @@ window.PornFavorites = class PornFavorites {
 
             // 构建独立交互图标节点
             const btn = doc.createElement('span');
-            btn.className = 'pdb-fav-btn';
+            // [MOD] 初始化时：如果是已收藏状态，给按钮加上 is-liked 类名以触发动画
+            btn.className = isFav ? 'pdb-fav-btn is-liked' : 'pdb-fav-btn';
             btn.innerHTML = isFav ? icons.liked : icons.unliked;
             btn.title = isFav ? '取消喜爱' : '标记喜爱';
 
@@ -94,11 +101,13 @@ window.PornFavorites = class PornFavorites {
                     btn.innerHTML = icons.unliked;
                     btn.title = '标记喜爱';
                     aNode.classList.remove('pdb-fav-highlight');
+                    btn.classList.remove('is-liked'); // [ADD] 移除动画
                 } else {
                     self.favSet.add(performerSlug);
                     btn.innerHTML = icons.liked;
                     btn.title = '取消喜爱';
                     aNode.classList.add('pdb-fav-highlight');
+                    btn.classList.add('is-liked'); // [ADD] 触发变大变小闪烁动画
                 }
                 self.save();
             };
