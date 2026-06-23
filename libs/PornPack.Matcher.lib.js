@@ -75,29 +75,32 @@ window.PornMatcher = class PornMatcher {
             if (this.REGEX_DATE_FORMAT.test(n)) return score;
         }
 
-        // ===============================================
-        // [MOD] 终极防碰瓷及格线体系重构 (40分及格)
-        // ===============================================
-        if (hasMaker && hasDate) score += 100;    // 厂牌+日期 = 绝对真理 (100分，过)
-        if (hasMaker && hasActor) score += 50;    // 厂牌+演员 = 强关联 (50分，过)
-        if (hasActor && hasDate) score += 50;     // 演员+日期 = 强关联 (50分，过)
-        if (hasActor && hasTitle) score += 40;    // 演员+标题 = 擦边及格 (40分，过)
-
-        // 🚨 削弱项：防止标题碰瓷
-        if (hasMaker && hasTitle) score += 20;    // 厂牌+标题 = 太容易撞车，只给20分 (不及格！)
-        if (hasDate && hasTitle) score += 20;     // 日期+标题 = 证据不足，只给20分 (不及格！)
-
-        if (hasMaker && hasYearOnly) {
-            if (hasActor || hasTitle) score += 30;
-        }
-        // [ADD] 开始：追加标准命名霸体置顶逻辑，无视上述基础分，直接赋予绝对高分
+        // [ADD] 开始：追加标准命名霸体置顶逻辑。无视任何拦截，直接赋予绝对高分！
         const fullTitleClean = details.fullTitleClean !== undefined
             ? details.fullTitleClean
             : String(details.fullTitle || '').toLowerCase().replace(this.REGEX_NON_ALPHANUM, '');
 
         if (fullTitleClean && fullTitleClean.length > 5 && nClean.includes(fullTitleClean)) {
             score += 2000;
+            return score; // 直接免检放行
         }
+
+        // [MOD] 终极严苛匹配模式拦截网 (针对未命中霸体名称的散装文件)：
+        // 1. 必须有“厂牌” 2. 必须有“时间信息” 3. 如果只有“年份”，则必须有“演员”或“标题”作为辅助参考
+        if (!hasMaker) return 0;
+        if (!hasDate && !hasYearOnly) return 0;
+        if (!hasDate && hasYearOnly && !hasActor && !hasTitle) return 0;
+
+        // 基础必要条件得分：厂牌 + 完整日期得 100 分，厂牌 + 仅年份(且有辅助)得 80 分
+        if (hasMaker && hasDate) {
+            score += 100;
+        } else if (hasMaker && hasYearOnly) {
+            score += 80;
+        }
+
+        // 附加得分：在满足了上述严苛条件的基础上，如果有演员或标题，增加排序优先级
+        if (hasActor) score += 50;
+        if (hasTitle) score += 40;
 
         return score;
     }
