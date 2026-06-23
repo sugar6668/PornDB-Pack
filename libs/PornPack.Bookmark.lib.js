@@ -231,7 +231,13 @@ window.PornBookmark = class PornBookmark {
                         // [MOD] 增加极速秒传校验，并校验 OSS 真实回调 JSON 结果
                         if (initRes && (initRes.host || initRes.status === 2 || initRes.statuscode === 0)) {
                             if (initRes.host) {
-                                const uploadRes = await ReqClass.upload({ ...initRes, filename: fileName, file: fileObj });
+                                // [MOD] 增加自动重试机制（最多3次），解决 115 OSS 接口网络波动导致的偶尔上传失败问题
+                                let uploadRes = null;
+                                for (let retry = 0; retry < 3; retry++) {
+                                    uploadRes = await ReqClass.upload({ ...initRes, filename: finalFilename, file: fileObj });
+                                    if (uploadRes && uploadRes.state !== false) break;
+                                    await new Promise(r => setTimeout(r, 1500)); // 失败后延迟 1.5 秒再次尝试
+                                }
                                 if (uploadRes && uploadRes.state === false) throw new Error(uploadRes.error_msg || uploadRes.error || "115 服务器拒绝接收回调");
                             }
                             // [MOD] 成功后刷新UI变为“网盘已有”模式
