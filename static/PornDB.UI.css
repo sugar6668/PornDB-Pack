@@ -1,0 +1,93 @@
+/* ==========================================
+   PornDB Match To 115 - 统一 UI 样式表
+   ========================================== */
+
+/* 1. 主界面、控制台、匹配标签样式 */
+.x-west-wrap { display: block !important; padding: 15px !important; background: #fdfdfd; border: 1px dashed #ccc; border-radius: 8px; margin-top: 5px; margin-bottom: 20px;}
+.w-scene-card, .west-detail-player { transition: background 0.4s ease, border 0.4s ease !important; }
+.w-scene-card:has(.x-west-match.is-success), .west-detail-player:has(.x-west-match.is-success) { border-style: solid !important; border-width: 6px !important; border-radius: 8px !important; box-sizing: border-box !important; border-color: rgb(25, 135, 84) !important; background: none !important; }
+.w-scene-card:has(.x-west-match.is-info), .west-detail-player:has(.x-west-match.is-info) { border-style: solid !important; border-width: 6px !important; border-radius: 8px !important; box-sizing: border-box !important; border-color: rgb(13, 110, 253) !important; background: none !important; }
+.w-scene-card:has(.x-west-match.is-warning), .west-detail-player:has(.x-west-match.is-warning) { border-style: solid !important; border-width: 6px !important; border-radius: 8px !important; box-sizing: border-box !important; border-color: rgb(255, 193, 7) !important; background: none !important; }
+.w-scene-card:has(.x-west-match.is-danger), .west-detail-player:has(.x-west-match.is-danger) { border-style: solid !important; border-width: 6px !important; border-radius: 8px !important; box-sizing: border-box !important; border-color: rgb(220, 53, 69) !important; background: none !important; }
+.x-west-match.is-success { background-color: rgb(25, 135, 84) !important; }
+.x-west-match.is-info { background-color: rgb(13, 110, 253) !important; }
+.x-west-match.is-warning { background-color: rgb(255, 193, 7) !important; color: #000 !important; }
+.x-west-match.is-danger { background-color: rgb(220, 53, 69) !important; }
+.x-west-match.is-normal { background-color: #6c757d !important; opacity: 0.7 !important; }
+.zymatch-item-west { display: flex; flex-wrap: wrap; width: 100%; padding: 10px 0; border-bottom: 1px dashed #e8e8e8; align-items: flex-start; gap: 8px; }
+.zymatch-item-west .buttons { flex-basis: 100%; margin: 0; padding-left: 2px; display: flex; gap: .5rem; margin-top: 4px;}
+.zymatch-item-west .buttons button { padding: 4px 12px; border-radius: 4px; border: none; cursor: pointer; color: #fff; font-size: 13px;}
+.zymatch-item-west .buttons button:hover { opacity: 0.85; }
+.zymatch-item-west .buttons button.is-loading { opacity: 0.6; cursor: not-allowed; }
+.zymatch-item-west .buttons button.has-cover { background: #9e9e9e !important; cursor: not-allowed; opacity: 0.8; }
+.is-rename { background: #5470d8; } .is-cover { background: #53d39a; } .is-delviedo, .is-delfolder { background: #ef5a86; } .is-clearmatch { background: #f39c12; } .is-offline { background: #19c5b7; }
+.x-match-btn-wide { flex-basis: 100%; text-align: left; padding: 8px 10px; border: 1px solid transparent; background-color: #f5f5f5; color: #363636; border-radius: 4px; font-size: 0.85rem; cursor: pointer; }
+.x-match-btn-wide:hover { background-color: #eeeeee; }
+.x-match-pc-path { font-size: 12px; color: #777; margin-top: 4px; display: flex; align-items: center; gap: 4px;}
+.west-unified-box { border: 1px solid #e8e8e8; border-radius: 8px; padding: 12px; background: #fff; margin-top: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.02); }
+.west-control-bar { display: flex; gap: 8px; align-items: center; margin-bottom: 12px; flex-wrap: wrap; }
+.west-engine-group { display: flex; gap: 6px; align-items: center; }
+.west-engine-btn { background: #f4f4f5; border: 1px solid #e4e7ed; border-radius: 6px; padding: 6px 12px; font-size: 13px; font-weight: 600; color: #606266; cursor: pointer; transition: all 0.25s; outline: none; }
+.west-engine-btn:hover { background: #e8e8e8; color: #303133; }
+.west-engine-btn.active { background: #7b5ea7; border-color: #7b5ea7; color: #fff; }
+.west-pl-btn { background: #19c5b7; border-color: #19c5b7; color: #fff; }
+.west-pl-btn:hover { background: #15a095; border-color: #15a095; color: #fff; }
+.west-copy-btn { background: #5470d8; border-color: #5470d8; color: #fff; }
+    .west-copy-btn:hover { background: #455ec0; border-color: #455ec0; color: #fff; }
+.west-divider { width: 1px; height: 18px; background: #dcdfe6; margin: 0 4px; }
+.west-kw-input { border: 1px solid #dcdfe6; border-radius: 6px; padding: 6px 10px; font-size: 13px; outline: none; flex-grow: 1; min-width: 140px; color: #303133; background: #fafafa; font-weight: 500; }
+#jav-nong-table-wrap { width: 100%; margin: 8px 0; max-height: 450px; overflow-y: auto; background: #fff; border: 1px solid #e8e8e8; border-radius: 6px; }
+#jav-nong-table { width: 100%; color: #363636; font-size: 13px; text-align: left; border-collapse: collapse; }
+#jav-nong-table th, #jav-nong-table td { padding: 8px 10px; border-bottom: 1px solid #f0f0f0; vertical-align: middle; }
+#jav-nong-table .nong-head-row th { background: #f9f9f9; font-weight: bold; position: sticky; top: 0; z-index: 10; border-bottom: 2px solid #e8e8e8;}
+.nong-copy { color: #5470d8 !important; cursor: pointer; text-decoration: none; font-weight: bold; }
+.nong-offline-115 { color: #19c5b7 !important; cursor: pointer; text-decoration: none; font-weight: bold; }
+.jav-filter-group { display: inline-flex; margin-left: auto; align-items: center; gap: 8px; padding-right: 15px; }
+.jav-filter-btn { background: #e7e7e7; border: 1px solid #e4e7ed; border-radius: 6px; padding: 4px 12px; font-size: 13px; font-weight: 600; color: #606266; cursor: pointer; transition: all 0.25s; }
+.jav-filter-btn:hover { background: #e8e8e8; color: #303133; }
+.jav-filter-btn.active { background: #7b5ea7; border-color: #7b5ea7; color: #fff; }
+body.filter-mode-matched .w-scene-card:not(:has(.x-west-match:not(.is-normal))) { display: none !important; }
+body.filter-mode-unmatched .w-scene-card:has(.x-west-match:not(.is-normal)) { display: none !important; }
+.west-global-toggle-btn { display: flex; align-items: center; justify-content: center; width: 100%; padding: 12px; margin-bottom: 20px; background: #ffffff; color: #7b5ea7; font-size: 14px; font-weight: bold; border: 1px dashed #7b5ea7; border-radius: 8px; cursor: pointer; transition: all 0.3s; box-shadow: 0 2px 6px rgba(0,0,0,0.03);}
+.west-global-toggle-btn:hover { background: #f4f0fa; border-style: solid;}
+.w-scene-card a[href*="/scenes/"] { position: relative !important; display: block !important; }
+
+/* 2. DOMTweaks 模块 - 防闪烁隐藏结界 */
+body.west-info-collapsed .w-full.bg-white.shadow-sm.rounded-sm.overflow-hidden.p-4.mb-5,
+body.west-info-collapsed .west-info-tab-node { display: none !important; }
+body.west-similar-collapsed .west-similar-grid-node { display: none !important; }
+
+/* 3. Filter 模块 - 厂牌白名单模态框样式 */
+.grid-cols-scene-card .w-scene-card[data-studio-hidden="1"] { display: none !important; }
+#pdb-filter-overlay { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.6); backdrop-filter: blur(4px); z-index: 999998; display: none; }
+#pdb-filter-modal { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 999999; background: #1f2937; color: #f3f4f6; border: 1px solid #374151; border-radius: 12px; width: 380px; max-height: 85vh; display: none; flex-direction: column; box-shadow: 0 20px 40px rgba(0,0,0,0.5); font-family: sans-serif; }
+.pdb-modal-header { padding: 16px 20px; border-bottom: 1px solid #374151; display: flex; justify-content: space-between; align-items: center; }
+.pdb-modal-header h3 { margin: 0; font-size: 16px; color: #fff; font-weight: 600; display:flex; align-items:center; gap:8px;}
+.pdb-modal-body { padding: 12px 20px; overflow-y: auto; flex: 1; }
+.pdb-modal-footer { padding: 16px 20px; border-top: 1px solid #374151; background: #111827; border-radius: 0 0 12px 12px; display: flex; flex-direction: column; gap: 10px; }
+.pdb-filter-item { display: flex; justify-content: space-between; align-items: center; padding: 10px 12px; margin-bottom: 8px; background: #374151; border-radius: 8px; cursor: pointer; transition: 0.2s; border: 1px solid transparent; }
+.pdb-filter-item:hover { background: #4b5563; border-color: #6b7280; }
+.pdb-filter-item.is-active { border-color: #10b981; background: rgba(16, 185, 129, 0.1); }
+.pdb-checkbox { width: 18px; height: 18px; accent-color: #10b981; cursor: pointer; }
+.pdb-studio-name { font-size: 14px; font-weight: 500; flex: 1; margin-left: 10px; }
+.pdb-studio-count { font-size: 12px; background: #4b5563; padding: 2px 8px; border-radius: 12px; color: #d1d5db; font-weight: bold; }
+.pdb-btn-row { display: flex; gap: 10px; }
+.pdb-btn { flex: 1; padding: 9px 0; border: none; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer; transition: 0.2s; text-align: center; }
+.pdb-btn-primary { background: #10b981; color: #fff; }
+.pdb-btn-primary:hover { background: #059669; }
+.pdb-btn-warning { background: #f59e0b; color: #fff; }
+.pdb-btn-warning:hover { background: #d97706; }
+.pdb-btn-secondary { background: #4b5563; color: #fff; }
+.pdb-btn-secondary:hover { background: #6b7280; }
+
+/* 4. Favorites 模块 - 喜爱演员高亮与动画 */
+.pdb-fav-btn { cursor: pointer; display: inline-flex; align-items: center; justify-content: center; width: 25px; height: 25px; min-width: 25px; margin-left: 6px; transition: transform 0.1s ease; flex-shrink: 0; }
+.pdb-fav-btn:hover { transform: scale(1.25); }
+.pdb-fav-btn svg { width: 100%; height: 100%; display: block;}
+.pdb-fav-highlight { color: #e74c3c !important; font-weight: bold !important; text-shadow: 0 0 1px rgba(231,76,60,0.2); }
+@keyframes favHeartbeat {
+    0% { transform: scale(1); opacity: 1; }
+    50% { transform: scale(1.15); opacity: 0.6; }
+    100% { transform: scale(1); opacity: 1; }
+}
+.pdb-fav-btn.is-liked svg { animation: favHeartbeat 1.5s infinite ease-in-out; }

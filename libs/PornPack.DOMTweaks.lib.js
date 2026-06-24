@@ -7,16 +7,7 @@
 window.PornDOMTweaks = class PornDOMTweaks {
     // 1. 注入防闪烁全局 CSS 结界
     static initGlobalStyles() {
-        if (document.getElementById('west-dom-tweaks-css')) return;
-        const style = document.createElement('style');
-        style.id = 'west-dom-tweaks-css';
-        style.innerHTML = `
-            /* 资料与推荐防闪烁隐藏结界 (交由 C++ 原生渲染管线在绘制前抹除) */
-            body.west-info-collapsed .w-full.bg-white.shadow-sm.rounded-sm.overflow-hidden.p-4.mb-5,
-            body.west-info-collapsed .west-info-tab-node { display: none !important; }
-            body.west-similar-collapsed .west-similar-grid-node { display: none !important; }
-        `;
-        document.head.appendChild(style);
+       
     }
 
     // 2. 统一寻找挂载容器（独立安全容器版）

@@ -58,42 +58,7 @@ window.PornFilter = class PornFilter {
     }
 
     initCSS() {
-        const style = document.createElement('style');
-        style.innerHTML = `
-            .grid-cols-scene-card .w-scene-card[data-studio-hidden="1"] { display: none !important; }
-            #pdb-filter-overlay {
-                position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
-                background: rgba(0,0,0,0.6); backdrop-filter: blur(4px); z-index: 999998; display: none;
-            }
-            #pdb-filter-modal {
-                position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
-                z-index: 999999; background: #1f2937; color: #f3f4f6; border: 1px solid #374151;
-                border-radius: 12px; width: 380px; max-height: 85vh; display: none;
-                flex-direction: column; box-shadow: 0 20px 40px rgba(0,0,0,0.5); font-family: sans-serif;
-            }
-            .pdb-modal-header { padding: 16px 20px; border-bottom: 1px solid #374151; display: flex; justify-content: space-between; align-items: center; }
-            .pdb-modal-header h3 { margin: 0; font-size: 16px; color: #fff; font-weight: 600; display:flex; align-items:center; gap:8px;}
-            .pdb-modal-body { padding: 12px 20px; overflow-y: auto; flex: 1; }
-            .pdb-modal-footer { padding: 16px 20px; border-top: 1px solid #374151; background: #111827; border-radius: 0 0 12px 12px; display: flex; flex-direction: column; gap: 10px; }
-            .pdb-filter-item { 
-                display: flex; justify-content: space-between; align-items: center; 
-                padding: 10px 12px; margin-bottom: 8px; background: #374151; border-radius: 8px; cursor: pointer; transition: 0.2s; border: 1px solid transparent;
-            }
-            .pdb-filter-item:hover { background: #4b5563; border-color: #6b7280; }
-            .pdb-filter-item.is-active { border-color: #10b981; background: rgba(16, 185, 129, 0.1); }
-            .pdb-checkbox { width: 18px; height: 18px; accent-color: #10b981; cursor: pointer; }
-            .pdb-studio-name { font-size: 14px; font-weight: 500; flex: 1; margin-left: 10px; }
-            .pdb-studio-count { font-size: 12px; background: #4b5563; padding: 2px 8px; border-radius: 12px; color: #d1d5db; font-weight: bold; }
-            .pdb-btn-row { display: flex; gap: 10px; }
-            .pdb-btn { flex: 1; padding: 9px 0; border: none; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer; transition: 0.2s; text-align: center; }
-            .pdb-btn-primary { background: #10b981; color: #fff; }
-            .pdb-btn-primary:hover { background: #059669; }
-            .pdb-btn-warning { background: #f59e0b; color: #fff; }
-            .pdb-btn-warning:hover { background: #d97706; }
-            .pdb-btn-secondary { background: #4b5563; color: #fff; }
-            .pdb-btn-secondary:hover { background: #6b7280; }
-        `;
-        document.head.appendChild(style);
+        
     }
 
     startFastTagger() {

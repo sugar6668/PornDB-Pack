@@ -11,21 +11,6 @@ window.PornFavorites = class PornFavorites {
     static init() {
         if (this.isInit) return;
 
-        // [ADD] 注入高亮字体与交互图标全局样式
-        const style = document.createElement('style');
-        style.innerHTML = `
-            .pdb-fav-btn { cursor: pointer; display: inline-flex; align-items: center; justify-content: center; width: 25px; height: 25px; min-width: 25px; margin-left: 6px; transition: transform 0.1s ease; flex-shrink: 0; }
-            .pdb-fav-btn:hover { transform: scale(1.25); }
-            .pdb-fav-btn svg { width: 100%; height: 100%; display: block;}
-            .pdb-fav-highlight { color: #e74c3c !important; font-weight: bold !important; text-shadow: 0 0 1px rgba(231,76,60,0.2); }
-            @keyframes favHeartbeat {
-                0% { transform: scale(1); opacity: 1; }
-                50% { transform: scale(1.15); opacity: 0.6; }
-                100% { transform: scale(1); opacity: 1; }
-            }
-            .pdb-fav-btn.is-liked svg { animation: favHeartbeat 1.5s infinite ease-in-out; }
-        `;
-        document.head.appendChild(style);
 
         // O(1) 内存化加载硬盘数据
         const localData = GM_getValue('pdb_fav_performers', '[]');
