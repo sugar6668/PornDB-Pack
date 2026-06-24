@@ -129,7 +129,7 @@ window.PornBookmark = class PornBookmark {
 
         dropBtn.onclick = (e) => {
             e.stopPropagation();
-            menu.style.display = menu.style.display === 'none' ? 'block' : 'none';
+            menu.style.display = menu.style.display === 'block' ? 'none' : 'block';
         };
         document.addEventListener('click', () => menu.style.display = 'none');
 
