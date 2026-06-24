@@ -86,19 +86,25 @@ window.PornArchiver = class PornArchiver {
         // [MOD] 若超时仍没拿到 file_id，抛出具体原因给 UI 捕获显示，避免干巴巴的 false
         if (!file_id) throw new Error("下载耗时过长放弃");
 
-        // 提取视频文件 (强制过滤 > 100MB，保留多集)
+        // 提取视频文件 (强制过滤 > 150MB，保留多集)
         if (this.updateBtnUI) this.updateBtnUI(item.hash, `提取视频...`, '#f39c12');
         // 先检查是否有套娃目录，确定正确的 CID
         let videoCid = file_id;
         {
             const allFiles = await this.req115.filesAll(file_id);
+            // [ADD] 检查当前根目录是否直接包含大于 150MB 的视频文件
+            const hasLargeFileInRoot = allFiles.data.some(f => f.fid && f.s > 150 * 1024 * 1024);
             const folders = allFiles.data.filter(f => !f.fid && f.cid);
-            if (folders.length > 0) videoCid = folders[0].cid;
+
+            // [MOD] 修复Bug：只有当根目录【没有】大视频，且【存在】子文件夹时，才认为是套娃并下钻。防止被同级广告文件夹骗走
+            if (!hasLargeFileInRoot && folders.length > 0) {
+                videoCid = folders[0].cid;
+            }
         }
         for (let i = 0; i < 5; i++) {
             await this.sleep(1000);
             const { data } = await this.req115.filesAllVideos(videoCid);
-            videos = data.filter(v => v.s > 100 * 1024 * 1024);
+            videos = data.filter(v => v.s > 150 * 1024 * 1024);
             if (videos.length > 0) break;
         }
 
