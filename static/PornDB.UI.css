@@ -9,6 +9,7 @@
 .w-scene-card:has(.x-west-match.is-info), .west-detail-player:has(.x-west-match.is-info) { border-style: solid !important; border-width: 6px !important; border-radius: 8px !important; box-sizing: border-box !important; border-color: rgb(13, 110, 253) !important; background: none !important; }
 .w-scene-card:has(.x-west-match.is-warning), .west-detail-player:has(.x-west-match.is-warning) { border-style: solid !important; border-width: 6px !important; border-radius: 8px !important; box-sizing: border-box !important; border-color: rgb(255, 193, 7) !important; background: none !important; }
 .w-scene-card:has(.x-west-match.is-danger), .west-detail-player:has(.x-west-match.is-danger) { border-style: solid !important; border-width: 6px !important; border-radius: 8px !important; box-sizing: border-box !important; border-color: rgb(220, 53, 69) !important; background: none !important; }
+.x-west-match { position: absolute; top: 6px; right: 6px; z-index: 999; padding: 4px 10px; border-radius: 4px; color: #fff; font-size: 13px; font-weight: bold; text-decoration: none; box-shadow: 0 2px 6px rgba(0,0,0,0.5); transition: opacity 0.2s ease; }
 .x-west-match.is-success { background-color: rgb(25, 135, 84) !important; }
 .x-west-match.is-info { background-color: rgb(13, 110, 253) !important; }
 .x-west-match.is-warning { background-color: rgb(255, 193, 7) !important; color: #000 !important; }
@@ -33,7 +34,7 @@
 .west-pl-btn { background: #19c5b7; border-color: #19c5b7; color: #fff; }
 .west-pl-btn:hover { background: #15a095; border-color: #15a095; color: #fff; }
 .west-copy-btn { background: #5470d8; border-color: #5470d8; color: #fff; }
-    .west-copy-btn:hover { background: #455ec0; border-color: #455ec0; color: #fff; }
+.west-copy-btn:hover { background: #455ec0; border-color: #455ec0; color: #fff; }
 .west-divider { width: 1px; height: 18px; background: #dcdfe6; margin: 0 4px; }
 .west-kw-input { border: 1px solid #dcdfe6; border-radius: 6px; padding: 6px 10px; font-size: 13px; outline: none; flex-grow: 1; min-width: 140px; color: #303133; background: #fafafa; font-weight: 500; }
 #jav-nong-table-wrap { width: 100%; margin: 8px 0; max-height: 450px; overflow-y: auto; background: #fff; border: 1px solid #e8e8e8; border-radius: 6px; }
