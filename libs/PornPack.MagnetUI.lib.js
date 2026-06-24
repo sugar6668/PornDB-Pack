@@ -135,7 +135,7 @@ window.PornMagnetUI = class PornMagnetUI {
                     btn.style.color = '#28a745';
                 } catch (e) {
                     alert('磁力离线刮削失败：\n' + e.message);
-                    cconst failIcon = window.PornUIAssets.icons.fail14;
+                    const failIcon = window.PornUIAssets.icons.fail14;
                     btn.innerHTML = failIcon + '<span>失败</span>';
                     btn.style.color = '#dc3545';
                     setTimeout(() => { btn.dataset.busy = '0'; btn.innerHTML = '<span>离线刮削</span>'; btn.style.color = '#7b5ea7'; }, 5000);
