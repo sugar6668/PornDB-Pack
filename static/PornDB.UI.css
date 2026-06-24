@@ -91,3 +91,29 @@ body.west-similar-collapsed .west-similar-grid-node { display: none !important; 
     100% { transform: scale(1); opacity: 1; }
 }
 .pdb-fav-btn.is-liked svg { animation: favHeartbeat 1.5s infinite ease-in-out; }
+
+/* 5. DataManager 模块 - 数据管理弹窗 */
+.pdb-dm-overlay { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.7); z-index: 9999999; display: flex; justify-content: center; align-items: center; }
+.pdb-dm-modal { width: 500px; background: #fff; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.15); }
+.pdb-dm-header { padding: 15px 20px; background: #f8f9fa; border-bottom: 1px solid #e9ecef; display: flex; justify-content: space-between; align-items: center; font-weight: bold; font-size: 16px; }
+.pdb-dm-close { cursor: pointer; color: #999; font-size: 20px; transition: color 0.2s; }
+.pdb-dm-close:hover { color: #f56c6c; } /* 顺手加了个悬停变红的体验优化 */
+.pdb-dm-body { padding: 20px; font-size: 13px; color: #333; }
+.pdb-dm-section { margin-bottom: 20px; padding: 15px; border: 1px solid #e5e7eb; border-radius: 6px; background: #fcfcfc; }
+.pdb-dm-title { font-weight: bold; margin-bottom: 10px; color: #4b5563; }
+.pdb-dm-col { display: flex; flex-direction: column; gap: 8px; }
+.pdb-dm-row { display: flex; gap: 10px; }
+.pdb-dm-input { padding: 6px 10px; border: 1px solid #d1d5db; border-radius: 4px; width: 100%; box-sizing: border-box; outline: none; transition: border-color 0.2s; }
+.pdb-dm-input:focus { border-color: #7b5ea7; }
+.pdb-dm-input.flex-1 { flex: 1; }
+.pdb-dm-checkbox-label { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; cursor: pointer; }
+.pdb-dm-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.pdb-dm-btn { border: none; border-radius: 4px; cursor: pointer; transition: opacity 0.2s; color: #fff; text-align: center; }
+.pdb-dm-btn:hover { opacity: 0.85; }
+.pdb-dm-btn-sm { padding: 6px; margin-top: 4px; }
+.pdb-dm-btn-lg { padding: 10px; font-weight: bold; }
+.pdb-dm-btn-blue { background: #3b82f6; }
+.pdb-dm-btn-green { background: #10b981; }
+.pdb-dm-btn-orange { background: #f59e0b; }
+.pdb-dm-btn-purple { background: #8b5cf6; }
+.pdb-dm-btn-pink { background: #ec4899; }

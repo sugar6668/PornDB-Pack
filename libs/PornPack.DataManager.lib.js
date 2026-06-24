@@ -60,51 +60,52 @@ window.PornDataManager = class PornDataManager {
         const defaultUser = conf.user || '';
         const defaultPass = conf.pass || '';
 
+        // [MOD] 彻底干掉内联样式，全部由 porndb-ui.css 接管
         const overlay = document.createElement('div');
         overlay.id = overlayId;
-        overlay.style.cssText = 'position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.7); z-index: 9999999; display: flex; justify-content: center; align-items: center;';
+        overlay.className = 'pdb-dm-overlay';
 
         overlay.innerHTML = `
-            <div style="width: 500px; background: #fff; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.15);">
-                <div style="padding: 15px 20px; background: #f8f9fa; border-bottom: 1px solid #e9ecef; display: flex; justify-content: space-between; align-items: center; font-weight: bold; font-size: 16px;">
+            <div class="pdb-dm-modal">
+                <div class="pdb-dm-header">
                     <span>脚本数据管理与云同步</span>
-                    <span id="dm-close-btn" style="cursor: pointer; color: #999; font-size: 20px;">&times;</span>
+                    <span id="dm-close-btn" class="pdb-dm-close">&times;</span>
                 </div>
                 
-                <div style="padding: 20px; font-size: 13px; color: #333;">
-                    <div style="margin-bottom: 20px; padding: 15px; border: 1px solid #e5e7eb; border-radius: 6px; background: #fcfcfc;">
-                        <div style="font-weight: bold; margin-bottom: 10px; color: #4b5563;">WebDAV 同步配置 (选填)</div>
-                        <div style="display: flex; flex-direction: column; gap: 8px;">
-                            <input type="text" id="dm-dav-url" placeholder="WebDAV 链接 (例如 https://dav.jianguoyun.com/dav/)" value="${defaultUrl}" style="padding: 6px 10px; border: 1px solid #d1d5db; border-radius: 4px; width: 100%; box-sizing: border-box;">
-                            <div style="display: flex; gap: 10px;">
-                                <input type="text" id="dm-dav-user" placeholder="账号" value="${defaultUser}" style="padding: 6px 10px; border: 1px solid #d1d5db; border-radius: 4px; flex: 1;">
-                                <input type="password" id="dm-dav-pass" placeholder="应用密码" value="${defaultPass}" style="padding: 6px 10px; border: 1px solid #d1d5db; border-radius: 4px; flex: 1;">
+                <div class="pdb-dm-body">
+                    <div class="pdb-dm-section">
+                        <div class="pdb-dm-title">WebDAV 同步配置 (选填)</div>
+                        <div class="pdb-dm-col">
+                            <input type="text" id="dm-dav-url" class="pdb-dm-input" placeholder="WebDAV 链接 (例如 https://dav.jianguoyun.com/dav/)" value="${defaultUrl}">
+                            <div class="pdb-dm-row">
+                                <input type="text" id="dm-dav-user" class="pdb-dm-input flex-1" placeholder="账号" value="${defaultUser}">
+                                <input type="password" id="dm-dav-pass" class="pdb-dm-input flex-1" placeholder="应用密码" value="${defaultPass}">
                             </div>
-                            <button id="dm-save-dav" style="padding: 6px; background: #3b82f6; color: #fff; border: none; border-radius: 4px; cursor: pointer; margin-top: 4px;">保存配置</button>
+                            <button id="dm-save-dav" class="pdb-dm-btn pdb-dm-btn-sm pdb-dm-btn-blue">保存配置</button>
                         </div>
                     </div>
 
                     <div style="margin-bottom: 20px;">
-                        <div style="font-weight: bold; margin-bottom: 8px; color: #4b5563;">包含的数据范围</div>
-                        <label style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px; cursor: pointer;">
+                        <div class="pdb-dm-title">包含的数据范围</div>
+                        <label class="pdb-dm-checkbox-label">
                             <input type="checkbox" id="chk-core" checked> 
                             <span><b>核心资产数据</b> (喜爱演员名单、厂牌白名单及各类设置项)</span>
                         </label>
-                        <label style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px; cursor: pointer;">
+                        <label class="pdb-dm-checkbox-label">
                             <input type="checkbox" id="chk-match"> 
                             <span><b>影片匹配刮削缓存</b> (庞大，非必要，丢失可重新刮削)</span>
                         </label>
-                        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                        <label class="pdb-dm-checkbox-label">
                             <input type="checkbox" id="chk-dir"> 
                             <span><b>115目录树缓存</b> (底层加速用，换网盘账号会失效)</span>
                         </label>
                     </div>
 
-                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
-                        <button id="btn-export-local" style="padding: 10px; background: #10b981; color: #fff; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;">导出到本地文件</button>
-                        <button id="btn-import-local" style="padding: 10px; background: #f59e0b; color: #fff; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;">从本地文件恢复</button>
-                        <button id="btn-push-dav" style="padding: 10px; background: #8b5cf6; color: #fff; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;">推送备份到 WebDAV</button>
-                        <button id="btn-pull-dav" style="padding: 10px; background: #ec4899; color: #fff; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;">从 WebDAV 恢复</button>
+                    <div class="pdb-dm-grid">
+                        <button id="btn-export-local" class="pdb-dm-btn pdb-dm-btn-lg pdb-dm-btn-green">导出到本地文件</button>
+                        <button id="btn-import-local" class="pdb-dm-btn pdb-dm-btn-lg pdb-dm-btn-orange">从本地文件恢复</button>
+                        <button id="btn-push-dav" class="pdb-dm-btn pdb-dm-btn-lg pdb-dm-btn-purple">推送备份到 WebDAV</button>
+                        <button id="btn-pull-dav" class="pdb-dm-btn pdb-dm-btn-lg pdb-dm-btn-pink">从 WebDAV 恢复</button>
                     </div>
                 </div>
             </div>
