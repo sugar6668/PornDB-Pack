@@ -108,11 +108,10 @@ window.PornParser = class PornParser {
                 const ogTitle = doc.querySelector('meta[property="og:title"]');
                 if (ogTitle) {
                     let rawTitle = ogTitle.getAttribute('content') || '';
+                    // [MOD] 仅剔除站点后缀标识，彻底删除极度危险的 " in " 和 " - " 暴力腰斩逻辑，保护原始标题完整性
                     rawTitle = rawTitle.replace(/\s*[-|]\s*ThePornDB\s*$/i, '').trim();
-                    // 剔除 "Actor in Title" 或 "Actor - Title" 格式的污染
-                    if (rawTitle.includes(' in ')) rawTitle = rawTitle.split(' in ').pop();
-                    else if (rawTitle.includes(' - ')) rawTitle = rawTitle.split(' - ').pop();
-                    details.titlePart = rawTitle.trim();
+
+                    details.titlePart = rawTitle;
                 }
             }
 
@@ -149,7 +148,7 @@ window.PornParser = class PornParser {
                         }
                     }
                 }
-                
+
                 // 原有的兜底逻辑
                 if (!details.maker && /onlyfans|fansdb/i.test(doc.body.textContent)) {
                     details.maker = 'FansDB';
