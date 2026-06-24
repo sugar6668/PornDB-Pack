@@ -55,17 +55,11 @@ window.PornQuickView = class PornQuickView {
         overlay.id = overlayId;
         overlay.className = 'pdb-qv-overlay';
 
-        const loading = document.createElement('div');
-        loading.innerHTML = '正在加载原生详情页...';
-        loading.className = 'pdb-qv-loading';
-        overlay.appendChild(loading);
+        overlay.innerHTML = window.PornUIAssets.templates.quickViewModal('正在加载原生详情页...');
+        document.body.appendChild(overlay);
 
-        const box = document.createElement('div');
-        box.className = 'pdb-qv-modal';
-
-        const closeBtn = document.createElement('button');
-        closeBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-x-icon lucide-x"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>';
-        closeBtn.className = 'pdb-qv-close';
+        const box = overlay.querySelector('.pdb-qv-modal');
+        const closeBtn = overlay.querySelector('.pdb-qv-close');
 
         const closeModal = () => {
             overlay.remove();
@@ -78,9 +72,8 @@ window.PornQuickView = class PornQuickView {
         closeBtn.onclick = closeModal;
         overlay.onclick = (e) => { if (e.target === overlay) closeModal(); };
 
-        const iframe = document.createElement('iframe');
+        const iframe = overlay.querySelector('.pdb-qv-iframe');
         iframe.src = url;
-        iframe.className = 'pdb-qv-iframe';
 
         iframe.onload = () => {
             try {

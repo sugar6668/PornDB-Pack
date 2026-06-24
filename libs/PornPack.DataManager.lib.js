@@ -64,53 +64,9 @@ window.PornDataManager = class PornDataManager {
         const overlay = document.createElement('div');
         overlay.id = overlayId;
         overlay.className = 'pdb-dm-overlay';
-
-        overlay.innerHTML = `
-            <div class="pdb-dm-modal">
-                <div class="pdb-dm-header">
-                    <span>脚本数据管理与云同步</span>
-                    <span id="dm-close-btn" class="pdb-dm-close">&times;</span>
-                </div>
-                
-                <div class="pdb-dm-body">
-                    <div class="pdb-dm-section">
-                        <div class="pdb-dm-title">WebDAV 同步配置 (选填)</div>
-                        <div class="pdb-dm-col">
-                            <input type="text" id="dm-dav-url" class="pdb-dm-input" placeholder="WebDAV 链接 (例如 https://dav.jianguoyun.com/dav/)" value="${defaultUrl}">
-                            <div class="pdb-dm-row">
-                                <input type="text" id="dm-dav-user" class="pdb-dm-input flex-1" placeholder="账号" value="${defaultUser}">
-                                <input type="password" id="dm-dav-pass" class="pdb-dm-input flex-1" placeholder="应用密码" value="${defaultPass}">
-                            </div>
-                            <button id="dm-save-dav" class="pdb-dm-btn pdb-dm-btn-sm pdb-dm-btn-blue">保存配置</button>
-                        </div>
-                    </div>
-
-                    <div style="margin-bottom: 20px;">
-                        <div class="pdb-dm-title">包含的数据范围</div>
-                        <label class="pdb-dm-checkbox-label">
-                            <input type="checkbox" id="chk-core" checked> 
-                            <span><b>核心资产数据</b> (喜爱演员名单、厂牌白名单及各类设置项)</span>
-                        </label>
-                        <label class="pdb-dm-checkbox-label">
-                            <input type="checkbox" id="chk-match"> 
-                            <span><b>影片匹配刮削缓存</b> (庞大，非必要，丢失可重新刮削)</span>
-                        </label>
-                        <label class="pdb-dm-checkbox-label">
-                            <input type="checkbox" id="chk-dir"> 
-                            <span><b>115目录树缓存</b> (底层加速用，换网盘账号会失效)</span>
-                        </label>
-                    </div>
-
-                    <div class="pdb-dm-grid">
-                        <button id="btn-export-local" class="pdb-dm-btn pdb-dm-btn-lg pdb-dm-btn-green">导出到本地文件</button>
-                        <button id="btn-import-local" class="pdb-dm-btn pdb-dm-btn-lg pdb-dm-btn-orange">从本地文件恢复</button>
-                        <button id="btn-push-dav" class="pdb-dm-btn pdb-dm-btn-lg pdb-dm-btn-purple">推送备份到 WebDAV</button>
-                        <button id="btn-pull-dav" class="pdb-dm-btn pdb-dm-btn-lg pdb-dm-btn-pink">从 WebDAV 恢复</button>
-                    </div>
-                </div>
-            </div>
-            <input type="file" id="dm-file-input" accept=".json" style="display:none;">
-        `;
+        
+        // [MOD] 彻底删除内联面条代码，直接从全局资源库调用模板函数，并传入所需的变量
+        overlay.innerHTML = window.PornUIAssets.templates.dataManagerModal(defaultUrl, defaultUser, defaultPass);
 
         document.body.appendChild(overlay);
 

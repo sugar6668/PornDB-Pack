@@ -160,30 +160,12 @@ window.PornMagnetUI = class PornMagnetUI {
     }
 
     createMagnetWidget(details) {
-        const wrapper = document.createElement('div'); wrapper.className = 'west-unified-box';
+        const wrapper = document.createElement('div'); 
+        wrapper.className = 'west-unified-box';
         const initKw = this.buildSmartKeyword(details);
-        wrapper.innerHTML = `
-            <div class="west-control-bar">
-                <button class="west-engine-btn west-pl-btn" id="btn-pl-jump" title="新标签页打开 Pornolab 搜索">Pornolab</button>
-                <button class="west-engine-btn west-copy-btn" id="btn-copy-kw">复制词条</button>
-                <div class="west-divider"></div>
-                <div class="west-engine-group" id="engine-btn-group">
-                    <button class="west-engine-btn" data-engine="BTDigg">BTDigg</button>
-                    <button class="west-engine-btn" data-engine="PirateBay">PirateBay</button>
-                    <button class="west-engine-btn active" data-engine="BitSearch">BitSearch</button>
-                </div>
-                <input type="text" id="jav-nong-kw" class="west-kw-input" title="修改关键词后回车重搜" value="${initKw}" placeholder="输入关键词回车重搜..." />
-            </div>
-            <div id="jav-nong-table-wrap">
-                <table id="jav-nong-table">
-                    <tr class="nong-head-row">
-                        <th>资源名称</th>
-                        <th style="width:80px; text-align:center;">大小</th>
-                        <th style="width:60px; text-align:center;">操作</th>
-                        <th style="width:150px; text-align:center;">离线</th>
-                    </tr>
-                </table>
-            </div>`;
+        
+        // [MOD] 一键注入磁力控制台模板
+        wrapper.innerHTML = window.PornUIAssets.templates.magnetWidget(initKw);
         const kwInput = wrapper.querySelector('#jav-nong-kw'), table = wrapper.querySelector('#jav-nong-table'), btns = wrapper.querySelectorAll('#engine-btn-group .west-engine-btn');
         const getActiveEngine = () => wrapper.querySelector('#engine-btn-group .west-engine-btn.active').dataset.engine;
 

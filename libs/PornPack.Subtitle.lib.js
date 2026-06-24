@@ -96,42 +96,11 @@ window.PornSubtitle = class PornSubtitle {
         const box = document.createElement('div');
         box.className = 'pdb-sub-modal';
 
-        const header = document.createElement('div');
-        header.className = 'pdb-sub-header';
-        header.innerHTML = `
-            <div class="pdb-sub-search-wrap">
-                <span class="pdb-sub-title">迅雷字幕检索:</span>
-                <input type="text" id="sub-search-input" value="${defaultKw}" class="pdb-sub-input" placeholder="输入检索词..." />
-                <button id="sub-search-btn" class="pdb-sub-btn">重新搜索</button>
-            </div>
-            <span class="pdb-sub-close" id="sub-close-btn">&times;</span>
-        `;
-
-        const bodyContainer = document.createElement('div');
-        bodyContainer.className = 'pdb-sub-body';
-
-        const contentWrap = document.createElement('div');
-        contentWrap.className = 'pdb-sub-content';
-
-        const previewWrap = document.createElement('div');
-        previewWrap.className = 'pdb-sub-preview-wrap';
-
-        const previewTitle = document.createElement('div');
-        previewTitle.className = 'pdb-sub-preview-header';
-        previewTitle.innerHTML = '<span>字幕内容预览</span><span id="preview-status" class="pdb-sub-preview-status">暂无预览</span>';
-
-        const previewBox = document.createElement('textarea');
-        previewBox.className = 'pdb-sub-textarea';
-        previewBox.readOnly = true;
-
-        previewWrap.appendChild(previewTitle);
-        previewWrap.appendChild(previewBox);
-        bodyContainer.appendChild(contentWrap);
-        bodyContainer.appendChild(previewWrap);
-        box.appendChild(header);
-        box.appendChild(bodyContainer);
-        overlay.appendChild(box);
+        overlay.innerHTML = window.PornUIAssets.templates.subtitleModal(defaultKw);
         document.body.appendChild(overlay);
+        const header = overlay.querySelector('.pdb-sub-header');
+        const contentWrap = overlay.querySelector('.pdb-sub-content');
+        const previewBox = overlay.querySelector('.pdb-sub-textarea');
 
         const closeModal = () => { overlay.remove(); previewBox.value = ''; };
         header.querySelector('#sub-close-btn').onclick = closeModal;
