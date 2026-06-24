@@ -1,4 +1,4 @@
-/**
+﻿/**
  * @name         PornPack Subtitle Library
  * @description  基于迅雷接口的字幕检索与 115 云端直传模块
  * @version      1.0.0
@@ -91,37 +91,37 @@ window.PornSubtitle = class PornSubtitle {
 
         const overlay = document.createElement('div');
         overlay.id = overlayId;
-        overlay.style.cssText = 'position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.85); z-index: 9999999; display: flex; justify-content: center; align-items: center;';
+        overlay.className = 'pdb-sub-overlay';
 
         const box = document.createElement('div');
-        box.style.cssText = 'width: 90%; max-width: 1200px; height: 85vh; background: #fff; border-radius: 8px; overflow: hidden; display: flex; flex-direction: column; position: relative;';
+        box.className = 'pdb-sub-modal';
 
         const header = document.createElement('div');
-        header.style.cssText = 'padding: 15px; background: #f5f5f5; border-bottom: 1px solid #e8e8e8; display: flex; justify-content: space-between; align-items: center;';
+        header.className = 'pdb-sub-header';
         header.innerHTML = `
-            <div style="display:flex; align-items:center; gap:10px; flex:1;">
-                <span style="font-weight:bold; font-size:15px; color:#333;">迅雷字幕检索:</span>
-                <input type="text" id="sub-search-input" value="${defaultKw}" style="padding:6px 10px; border:1px solid #dcdfe6; border-radius:4px; font-size:13px; width:50%; outline:none; color:#303133; background:#fff;" placeholder="输入检索词..." />
-                <button id="sub-search-btn" style="padding:6px 15px; background:#7b5ea7; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:13px; font-weight:bold;">重新搜索</button>
+            <div class="pdb-sub-search-wrap">
+                <span class="pdb-sub-title">迅雷字幕检索:</span>
+                <input type="text" id="sub-search-input" value="${defaultKw}" class="pdb-sub-input" placeholder="输入检索词..." />
+                <button id="sub-search-btn" class="pdb-sub-btn">重新搜索</button>
             </div>
-            <span style="cursor:pointer; color:#999; font-size:24px; line-height:1; margin-left:15px;" id="sub-close-btn">&times;</span>
+            <span class="pdb-sub-close" id="sub-close-btn">&times;</span>
         `;
 
         const bodyContainer = document.createElement('div');
-        bodyContainer.style.cssText = 'display: flex; flex: 1; overflow: hidden;';
+        bodyContainer.className = 'pdb-sub-body';
 
         const contentWrap = document.createElement('div');
-        contentWrap.style.cssText = 'flex: 7; width: 0; padding: 15px; overflow-y: auto; border-right: 1px solid #e8e8e8;';
+        contentWrap.className = 'pdb-sub-content';
 
         const previewWrap = document.createElement('div');
-        previewWrap.style.cssText = 'flex: 3; width: 0; padding: 15px; display: flex; flex-direction: column; background: #fafafa;';
+        previewWrap.className = 'pdb-sub-preview-wrap';
 
         const previewTitle = document.createElement('div');
-        previewTitle.style.cssText = 'font-weight: bold; margin-bottom: 10px; color: #333; display: flex; justify-content: space-between; align-items: center;';
-        previewTitle.innerHTML = '<span>字幕内容预览</span><span id="preview-status" style="font-weight:normal; color:#999; font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:60%;">暂无预览</span>';
+        previewTitle.className = 'pdb-sub-preview-header';
+        previewTitle.innerHTML = '<span>字幕内容预览</span><span id="preview-status" class="pdb-sub-preview-status">暂无预览</span>';
 
         const previewBox = document.createElement('textarea');
-        previewBox.style.cssText = 'flex: 1; width: 100%; padding: 10px; border: 1px solid #dcdfe6; border-radius: 4px; background: #fff; resize: none; outline: none; font-size: 13px; color: #333; box-sizing: border-box; font-family: Consolas, monospace; line-height: 1.5;';
+        previewBox.className = 'pdb-sub-textarea';
         previewBox.readOnly = true;
 
         previewWrap.appendChild(previewTitle);
@@ -139,7 +139,7 @@ window.PornSubtitle = class PornSubtitle {
 
         const performSearch = (kw) => {
             if (!kw) return;
-            contentWrap.innerHTML = '<div style="text-align:center; padding: 30px; color:#666;">正在连接迅雷字幕接口，请稍候...</div>';
+            contentWrap.innerHTML = '<div class="pdb-sub-msg">正在连接迅雷字幕接口，请稍候...</div>';
             previewBox.value = '';
             const statusNode = overlay.querySelector('#preview-status');
             if (statusNode) statusNode.innerText = '暂无预览';
@@ -186,15 +186,15 @@ window.PornSubtitle = class PornSubtitle {
 
                                 this.renderTable(contentWrap, dataList, previewBox, overlay, kw);
                             } else {
-                                contentWrap.innerHTML = '<div style="text-align:center; padding: 30px; color:#999;">未找到相关字幕，请尝试删减搜索词</div>';
+                                contentWrap.innerHTML = '<div class="pdb-sub-msg">未找到相关字幕，请尝试删减搜索词</div>';
                             }
                         } catch (e) {
-                            contentWrap.innerHTML = '<div style="text-align:center; padding: 30px; color:#dc3545;">API 数据解析失败</div>';
+                            contentWrap.innerHTML = '<div class="pdb-sub-msg pdb-sub-error">API 数据解析失败</div';
                         }
                     },
-                    onerror: () => { contentWrap.innerHTML = '<div style="text-align:center; padding: 30px; color:#dc3545;">请求失败，请检查网络设置</div>'; }
+                    onerror: () => { contentWrap.innerHTML = '<div class="pdb-sub-msg pdb-sub-error">请求失败，请检查网络设置</div>'; }
                 });
-            } catch (e) { contentWrap.innerHTML = `<div style="text-align:center; padding: 30px; color:#dc3545;">${e.message}</div>`; }
+            } catch (e) { contentWrap.innerHTML = `<div class="pdb-sub-msg pdb-sub-error">${e.message}</div>`; }
         };
 
         header.querySelector('#sub-search-btn').onclick = () => performSearch(header.querySelector('#sub-search-input').value.trim());
@@ -214,13 +214,13 @@ window.PornSubtitle = class PornSubtitle {
         const kwClean = kw.toLowerCase().replace(/[-_\.\s]/g, '');
 
         let tableHtml = `
-            <table style="width:100%; border-collapse: collapse; font-size: 13px; text-align: left;">
+            <table class="pdb-sub-table">
                 <thead>
-                    <tr style="background: #f9f9f9; border-bottom: 2px solid #e8e8e8;">
-                        <th style="padding: 10px; color:#333;">原始字幕名称</th>
-                        <th style="padding: 10px; width: 80px; color:#333;">语言</th>
-                        <th style="padding: 10px; width: 60px; color:#333;">格式</th>
-                        <th style="padding: 10px; width: 170px; text-align:center; color:#333;">操作</th>
+                    <tr>
+                        <th class="pdb-sub-th">原始字幕名称</th>
+                        <th class="pdb-sub-th" style="width: 80px;">语言</th>
+                        <th class="pdb-sub-th" style="width: 60px;">格式</th>
+                        <th class="pdb-sub-th" style="width: 170px; text-align:center;">操作</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -243,14 +243,14 @@ window.PornSubtitle = class PornSubtitle {
             const tdStyle = isExactMatch ? 'color:#333; font-weight:bold;' : 'color:#555;';
 
             tableHtml += `
-                <tr style="border-bottom: 1px dashed #f0f0f0;">
-                    <td style="padding: 10px; word-break: break-all; ${tdStyle}">${topIcon}${displayName}</td>
-                    <td style="padding: 10px; color:#666;">${lang}</td>
-                    <td style="padding: 10px; font-weight:bold; color:#7b5ea7;">${item.ext || 'srt'}</td>
-                    <td style="padding: 10px; text-align:center; white-space:nowrap;">
-                        <button class="sub-action-btn" data-action="preview" data-idx="${index}" style="margin-right:4px; padding:5px 10px; background:#19c5b7; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:12px;">预览</button>
-                        <button class="sub-action-btn" data-action="download" data-idx="${index}" style="margin-right:4px; padding:5px 10px; background:#e6a23c; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:12px;">下载</button>
-                        <button class="sub-action-btn" data-action="upload" data-idx="${index}" style="padding:5px 10px; background:#5470d8; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:12px;">115直传</button>
+                <tr class="pdb-sub-tr">
+                    <td class="pdb-sub-td" style="${tdStyle}">${topIcon}${displayName}</td>
+                    <td class="pdb-sub-td-lang">${lang}</td>
+                    <td class="pdb-sub-td-ext">${item.ext || 'srt'}</td>
+                    <td class="pdb-sub-td-actions">
+                        <button class="sub-action-btn pdb-sub-action-btn pdb-sub-btn-preview" data-action="preview" data-idx="${index}">预览</button>
+                        <button class="sub-action-btn pdb-sub-action-btn pdb-sub-btn-download" data-action="download" data-idx="${index}">下载</button>
+                        <button class="sub-action-btn pdb-sub-action-btn pdb-sub-btn-upload" data-action="upload" data-idx="${index}">115直传</button>
                     </td>
                 </tr>
             `;

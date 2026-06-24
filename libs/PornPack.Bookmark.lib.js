@@ -50,43 +50,24 @@ window.PornBookmark = class PornBookmark {
         const dropBtn = mainBtn ? mainBtn.nextElementSibling : null;
         if (!mainBtn || !dropOption || !dropBtn) return;
 
+        // [MOD] 彻底删除 JS 事件模拟的 hover，全权交由 CSS 的 class 切换处理
         if (state === 'cloud_exists') {
-            const color = '#67c23a'; const hoverColor = '#85ce61';
-            const fontColor = '#ffffff'; // [ADD] 在此定义网盘已有状态的字体颜色
-
             mainBtn.innerHTML = '网盘已有';
-            mainBtn.style.backgroundColor = color; mainBtn.style.borderColor = color;
-            mainBtn.style.color = fontColor; // [ADD] 赋值字体颜色
-            mainBtn.onmouseover = () => mainBtn.style.backgroundColor = hoverColor;
-            mainBtn.onmouseout = () => mainBtn.style.backgroundColor = color;
+            mainBtn.className = 'west-engine-btn pdb-bm-btn pdb-bm-main-btn pdb-bm-state-cloud';
             mainBtn.onclick = () => this.handleExport('cloud', mainBtn);
 
-            dropBtn.style.backgroundColor = color; dropBtn.style.borderColor = color;
-            dropBtn.style.color = fontColor; // [ADD] 箭头颜色同步
-            dropBtn.onmouseover = () => dropBtn.style.backgroundColor = hoverColor;
-            dropBtn.onmouseout = () => dropBtn.style.backgroundColor = color;
-
+            dropBtn.className = 'west-engine-btn pdb-bm-btn pdb-bm-drop-btn pdb-bm-state-cloud';
             dropOption.innerHTML = '导出书签';
             dropOption.onclick = () => {
                 document.getElementById('pbf-dropdown-menu').style.display = 'none';
                 this.handleExport('local', mainBtn);
             };
         } else {
-            const color = '#e6a23c'; const hoverColor = '#ebb563';
-            const fontColor = '#ffffff'; // [ADD] 在此定义默认状态的字体颜色
-
             mainBtn.innerHTML = '导出书签';
-            mainBtn.style.backgroundColor = color; mainBtn.style.borderColor = color;
-            mainBtn.style.color = fontColor; // [ADD] 赋值字体颜色
-            mainBtn.onmouseover = () => mainBtn.style.backgroundColor = hoverColor;
-            mainBtn.onmouseout = () => mainBtn.style.backgroundColor = color;
+            mainBtn.className = 'west-engine-btn pdb-bm-btn pdb-bm-main-btn pdb-bm-state-local';
             mainBtn.onclick = () => this.handleExport('local', mainBtn);
 
-            dropBtn.style.backgroundColor = color; dropBtn.style.borderColor = color;
-            dropBtn.style.color = fontColor; // [ADD] 箭头颜色同步
-            dropBtn.onmouseover = () => dropBtn.style.backgroundColor = hoverColor;
-            dropBtn.onmouseout = () => dropBtn.style.backgroundColor = color;
-
+            dropBtn.className = 'west-engine-btn pdb-bm-btn pdb-bm-drop-btn pdb-bm-state-local';
             dropOption.innerHTML = '上传书签';
             dropOption.onclick = () => {
                 document.getElementById('pbf-dropdown-menu').style.display = 'none';
@@ -122,29 +103,23 @@ window.PornBookmark = class PornBookmark {
     }
 
     static createExportButton(targetAnchor) {
+        // [MOD] 删除长串的 style.cssText
         const wrapper = document.createElement('div');
-        // [MOD] 核心修复：使用 align-items: stretch 强制拉伸子元素高度完全一致
-        wrapper.style.cssText = 'position: relative; display: inline-flex; align-items: stretch; margin-left: 4px; vertical-align: top;';
+        wrapper.className = 'pdb-bm-wrapper';
 
         const mainBtn = document.createElement('button');
         mainBtn.id = this.BTN_ID;
-        mainBtn.className = 'west-engine-btn';
-        mainBtn.style.cssText = `border-top-right-radius: 0; border-bottom-right-radius: 0; border-right: 1px solid rgba(255,255,255,0.3); transition: all 0.2s;`;
 
         const dropBtn = document.createElement('button');
-        dropBtn.className = 'west-engine-btn';
         dropBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>`;
-        dropBtn.style.cssText = `border-top-left-radius: 0; border-bottom-left-radius: 0; padding: 0 6px; display: inline-flex; align-items: center; justify-content: center; transition: all 0.2s;`;
 
         const menu = document.createElement('div');
         menu.id = 'pbf-dropdown-menu';
-        menu.style.cssText = `display: none; position: absolute; top: 100%; right: 0; margin-top: 4px; background: #fff; border: 1px solid #e4e7ed; border-radius: 4px; box-shadow: 0 2px 12px 0 rgba(0,0,0,.1); z-index: 9999; min-width: 90px; overflow: hidden;`;
+        menu.className = 'pdb-bm-menu';
 
         const uploadOption = document.createElement('div');
         uploadOption.id = 'pbf-drop-option';
-        uploadOption.style.cssText = `padding: 8px 15px; font-size: 13px; font-weight: 600; color: #606266; cursor: pointer; text-align: center; transition: background 0.2s;`;
-        uploadOption.onmouseover = () => uploadOption.style.backgroundColor = '#f5f7fa';
-        uploadOption.onmouseout = () => uploadOption.style.backgroundColor = '#fff';
+        uploadOption.className = 'pdb-bm-option';
 
         menu.appendChild(uploadOption);
         wrapper.appendChild(mainBtn);
@@ -158,21 +133,21 @@ window.PornBookmark = class PornBookmark {
         };
         document.addEventListener('click', () => menu.style.display = 'none');
 
-        // 初始化绑定事件与状态
         this.hasPbfInCloud = false;
         this.updateButtonUI('default');
     }
 
     // [ADD] 灵活的临时状态文字提示方法
     static setTempBtnState(btn, fallbackText, newText, tempColor) {
-        const baseColor = this.hasPbfInCloud ? '#67c23a' : '#e6a23c';
+        // 临时状态（比如3秒钟的绿色成功提示）依然允许使用内联样式最高优先级覆盖
         btn.innerHTML = newText;
         btn.style.backgroundColor = tempColor;
         btn.style.borderColor = tempColor;
         setTimeout(() => {
+            // [MOD] 3秒后清空内联样式，自动恢复为当前 class 应该有的颜色
+            btn.style.backgroundColor = '';
+            btn.style.borderColor = '';
             btn.innerHTML = this.hasPbfInCloud ? '网盘已有' : fallbackText;
-            btn.style.backgroundColor = this.hasPbfInCloud ? '#67c23a' : '#e6a23c';
-            btn.style.borderColor = this.hasPbfInCloud ? '#67c23a' : '#e6a23c';
         }, 3000);
     }
 
@@ -236,7 +211,7 @@ window.PornBookmark = class PornBookmark {
                                 for (let retry = 0; retry < 3; retry++) {
                                     uploadRes = await ReqClass.upload({ ...initRes, filename: fileName, file: fileObj });
                                     if (uploadRes && uploadRes.state !== false) break;
-                                    await new Promise(r => setTimeout(r, 1500)); 
+                                    await new Promise(r => setTimeout(r, 1500));
                                 }
                                 if (uploadRes && uploadRes.state === false) throw new Error(uploadRes.error_msg || uploadRes.error || "115 服务器拒绝接收回调");
                             }

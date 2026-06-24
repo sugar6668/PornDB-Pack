@@ -27,7 +27,7 @@ window.PornMagnetUI = class PornMagnetUI {
         table.querySelectorAll('tr:not(.nong-head-row)').forEach(r => r.remove());
 
         if (!data || !data.length) {
-            table.insertAdjacentHTML('beforeend', `<tr><td colspan="4" style="text-align:center; padding: 20px; color:#909399;">未找到结果，试试删减上方的关键词，或点击跳转搜索</td></tr>`);
+            table.insertAdjacentHTML('beforeend', `<tr><td colspan="4" class="pdb-mag-empty">未找到结果，试试删减上方的关键词，或点击跳转搜索</td></tr>`);
             return;
         }
 
@@ -51,7 +51,7 @@ window.PornMagnetUI = class PornMagnetUI {
 
         const sortedData = processedData.filter(item => item.score >= 40).sort((a, b) => b.score !== a.score ? b.score - a.score : b.sizeMB - a.sizeMB).slice(0, 10);
 
-        if (!sortedData.length) { table.insertAdjacentHTML('beforeend', `<tr><td colspan="4" style="text-align:center; padding: 20px; color:#909399;">资源均被过滤（可能是超大合集），请尝试修改关键词</td></tr>`); return; }
+        if (!sortedData.length) { table.insertAdjacentHTML('beforeend', `<tr><td colspan="4" class="pdb-mag-empty">资源均被过滤（可能是超大合集），请尝试修改关键词</td></tr>`); return; }
 
         sortedData.forEach(item => {
             if (!item.maglink) return;
@@ -59,17 +59,19 @@ window.PornMagnetUI = class PornMagnetUI {
             const isTop = item.score >= 40 ? '<span style="color:#e74c3c;font-size:12px;margin-right:4px;" title="高清推荐">🔥</span>' : '';
             const normalizeTitle = (s) => (s || '').toLowerCase().replace(/[\s._\-:()\[\]]+/g, '');
             const isExactMatch = (normalizeTitle(details.matchPrefix) && normalizeTitle(item.title).includes(normalizeTitle(details.matchPrefix))) || (normalizeTitle(details.fullTitle) && normalizeTitle(item.title) === normalizeTitle(details.fullTitle));
+            // [MOD] 彻底清理内联样式，使用精准分配的 Class
+            const linkClass = isExactMatch ? 'pdb-mag-link pdb-mag-link-exact' : 'pdb-mag-link pdb-mag-link-normal';
 
             tr.innerHTML = `
                 <td>
-                    <span class="nong-magnet-name" style="display:block; word-break:break-all; line-height:1.5;" title="${item.title}">
-                        ${isTop} <a href="${item.src}" target="_blank" style="color:${isExactMatch ? '#e74c3c' : '#303133'}; font-weight:${isExactMatch ? '700' : '500'}; text-decoration:none;">${item.title}</a>
+                    <span class="nong-magnet-name pdb-mag-name-box" title="${item.title}">
+                        ${isTop} <a href="${item.src}" target="_blank" class="${linkClass}">${item.title}</a>
                     </span>
                     ${item.extraHtml || ''} 
                 </td>
-                <td style="white-space:nowrap; text-align:center; color:#606266; font-weight:bold;">${item.size}</td>
-                <td style="white-space:nowrap; text-align:center;"><a class="nong-copy" data-mag="${item.maglink}">复制</a></td>
-                <td style="white-space:nowrap; text-align:center;"><a class="nong-offline-115" data-mag="${item.maglink}">离线刮削</a></td>
+                <td class="pdb-mag-size-td">${item.size}</td>
+                <td class="pdb-mag-action-td"><a class="nong-copy" data-mag="${item.maglink}">复制</a></td>
+                <td class="pdb-mag-action-td"><a class="nong-offline-115" data-mag="${item.maglink}">离线刮削</a></td>
             `;
 
             tr.querySelector('.nong-offline-115').onclick = async (e) => {
@@ -147,13 +149,13 @@ window.PornMagnetUI = class PornMagnetUI {
 
     async runSearch(table, kw, engineName, details) {
         table.querySelectorAll('tr:not(.nong-head-row)').forEach(r => r.remove());
-        table.insertAdjacentHTML('beforeend', `<tr><td colspan="4" style="text-align:center; padding:20px; color:#7b5ea7; font-weight:bold;"><svg width="18" height="18" viewBox="0 0 24 24" style="vertical-align:middle; animation: spin 1s linear infinite;" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-6.219-8.56"></path></svg> 正在检索 [ ${kw} ] ... <style>@keyframes spin { 100% { transform: rotate(360deg); } }</style></td></tr>`);
+        table.insertAdjacentHTML('beforeend', `<tr><td colspan="4" class="pdb-mag-loading"><svg width="18" height="18" viewBox="0 0 24 24" style="vertical-align:middle; animation: spin 1s linear infinite;" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-6.219-8.56"></path></svg> 正在检索 [ ${kw} ] ... <style>@keyframes spin { 100% { transform: rotate(360deg); } }</style></td></tr>`);
         try {
             const data = await new window.PornMagnetSearch(this.gmFetch).search(engineName, kw);
             this.fillTable(table, data, details);
         } catch (e) {
             table.querySelectorAll('tr:not(.nong-head-row)').forEach(r => r.remove());
-            table.insertAdjacentHTML('beforeend', `<tr><td colspan="4" style="text-align:center; padding:20px; color:#dc3545;">搜索引擎连接失败：${(e && e.message) ? e.message : '请检查网络'}</td></tr>`);
+            table.insertAdjacentHTML('beforeend', `<tr><td colspan="4" class="pdb-mag-error">搜索引擎连接失败：${(e && e.message) ? e.message : '请检查网络'}</td></tr>`);
         }
     }
 

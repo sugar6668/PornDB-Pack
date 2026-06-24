@@ -51,15 +51,13 @@ class MagnetSearcher {
             const excerptNode = el.querySelector('.torrent_excerpt');
             if (excerptNode) {
                 let inner = excerptNode.innerHTML || '';
-                excerptHtml = `<div style="margin-top: 8px; padding: 8px 10px; background: #fafafa; border: 1px solid #ebeef5; border-radius: 4px; font-size: 11.5px; color: #606266; max-height: 120px; overflow-y: auto; word-break: break-all; line-height: 1.6;">
-                    ${inner.replace(/white-space:\s*nowrap/ig, 'white-space: normal')}
-                </div>`;
+                excerptHtml = `<div class="pdb-mag-excerpt">${inner.replace(/white-space:\s*nowrap/ig, 'white-space: normal')}</div>`;
             }
 
-            const extraHtml = `<div style="font-size:11.5px; margin-top:6px; display:inline-flex; gap:12px; background:#f4f4f5; padding:4px 10px; border-radius:4px; border:1px solid #e4e7ed;">
-                ${age ? `<span style="color:#606266; font-weight:bold;" title="Age">时间 ${age}</span>` : ''}
-                ${files ? `<span style="color:#198754; font-weight:bold;" title="Files">文件 ${files.replace('files', '文件')}</span>` : ''}
-                ${size ? `<span style="color:#0dcaf0; font-weight:bold;" title="Size">大小 ${size}</span>` : ''}
+            const extraHtml = `<div class="pdb-mag-extra-box">
+                ${age ? `<span class="pdb-c-gray" title="Age">时间 ${age}</span>` : ''}
+                ${files ? `<span class="pdb-c-green" title="Files">文件 ${files.replace('files', '文件')}</span>` : ''}
+                ${size ? `<span class="pdb-c-blue" title="Size">大小 ${size}</span>` : ''}
             </div>${excerptHtml}`;
 
             return {
@@ -90,12 +88,12 @@ class MagnetSearcher {
                 const date = new Date(parseInt(item.added) * 1000);
                 const dateStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 
-                const extraHtml = `<div style="font-size:11.5px; margin-top:6px; display:inline-flex; gap:12px; background:#f4f4f5; padding:4px 10px; border-radius:4px; border:1px solid #e4e7ed;">
-                    <span style="color:#606266; font-weight:bold;" title="收录时间">时间 ${dateStr}</span>
-                    ${item.num_files && item.num_files !== '0' ? `<span style="color:#198754; font-weight:bold;" title="文件数">文件 ${item.num_files} 文件</span>` : ''}
-                    <span style="color:#198754; font-weight:bold;" title="做种数(Seeders)">做种 ${item.seeders}</span>
-                    <span style="color:#dc3545; font-weight:bold;" title="下载数(Leechers)">下载 ${item.leechers}</span>
-                    ${item.username && item.username !== 'Anonymous' ? `<span style="color:#888; font-weight:bold;" title="上传者">上传者 ${item.username}</span>` : ''}
+                const extraHtml = `<div class="pdb-mag-extra-box">
+                    <span class="pdb-c-gray" title="收录时间">时间 ${dateStr}</span>
+                    ${item.num_files && item.num_files !== '0' ? `<span class="pdb-c-green" title="文件数">文件 ${item.num_files} 文件</span>` : ''}
+                    <span class="pdb-c-green" title="做种数(Seeders)">做种 ${item.seeders}</span>
+                    <span class="pdb-c-red" title="下载数(Leechers)">下载 ${item.leechers}</span>
+                    ${item.username && item.username !== 'Anonymous' ? `<span class="pdb-c-muted" title="上传者">上传者 ${item.username}</span>` : ''}
                 </div>`;
 
                 return {
@@ -139,11 +137,11 @@ class MagnetSearcher {
             });
 
             const extraHtml = `
-                <div style="font-size:11.5px; margin-top:6px; display:inline-flex; gap:12px; background:#f4f4f5; padding:4px 10px; border-radius:4px; border:1px solid #e4e7ed;">
-                    <span style="color:#606266; font-weight:bold;">添加日期: ${dateStr}</span>
-                    <span style="color:#198754; font-weight:bold;" title="做种数(Seeders)">做种: ${seeders}</span>
-                    <span style="color:#dc3545; font-weight:bold;" title="下载中(Leechers)">下载中: ${leechers}</span>
-                    <span style="color:#0dcaf0; font-weight:bold;" title="已完成下载(Downloads)">已完成: ${downloads}</span>
+                <div class="pdb-mag-extra-box">
+                    <span class="pdb-c-gray">添加日期: ${dateStr}</span>
+                    <span class="pdb-c-green" title="做种数(Seeders)">做种: ${seeders}</span>
+                    <span class="pdb-c-red" title="下载中(Leechers)">下载中: ${leechers}</span>
+                    <span class="pdb-c-blue" title="已完成下载(Downloads)">已完成: ${downloads}</span>
                 </div>`;
 
             return {
