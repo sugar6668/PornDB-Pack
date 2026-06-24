@@ -276,17 +276,21 @@ window.PornSubtitle = class PornSubtitle {
 
                 try {
                     const buffer = await self.fetchBinary(url);
-                    if (action === 'preview') {
-                        // [MOD] 增加智能编码嗅探：解决由于写死 UTF-8 导致的老式 GBK 字幕乱码问题
-                        let decoder = new TextDecoder('utf-8');
-                        let textResult = decoder.decode(buffer);
+                    // [ADD] 核心防御：提前解码拦截阿里云 OSS 的失效报错，防止垃圾代码污染预览、下载或 115 直传
+                    let defaultDecoder = new TextDecoder('utf-8');
+                    let baseText = defaultDecoder.decode(buffer);
+                    if (baseText.includes('<?xml') && baseText.includes('<Code>NoSuchKey</Code>')) {
+                        throw new Error('该字幕在迅雷云端已失效丢失 (NoSuchKey)');
+                    }
 
-                        // [MOD] 修复正则被吞噬的语法错误：使用安全的 \uFFFD 代表乱码字符()，并增加 || [] 防止 null 报错
+                    if (action === 'preview') {
+                        let textResult = baseText; // [MOD] 复用上面已解码的文本，提升性能
+
+                        // 乱码探测与 GBK 降级兜底
                         const errorCount = (textResult.match(/\uFFFD/g) || []).length;
                         if (errorCount > 3) {
-                            // 若发现明显乱码，切换至中文常用的 gbk 重新解码
-                            decoder = new TextDecoder('gbk');
-                            textResult = decoder.decode(buffer);
+                            let gbkDecoder = new TextDecoder('gbk');
+                            textResult = gbkDecoder.decode(buffer);
                         }
 
                         previewBox.value = textResult;
