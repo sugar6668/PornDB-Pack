@@ -136,7 +136,7 @@ body.west-similar-collapsed .west-similar-grid-node { display: none !important; 
 .pdb-sub-preview-wrap { flex: 3; width: 0; padding: 15px; display: flex; flex-direction: column; background: #fafafa; }
 .pdb-sub-preview-header { font-weight: bold; margin-bottom: 10px; color: #333; display: flex; justify-content: space-between; align-items: center; }
 .pdb-sub-preview-status { font-weight: normal; color: #999; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 60%; }
-.pdb-sub-textarea { flex: 1; width: 100%; padding: 10px; border: 1px solid #dcdfe6; border-radius: 4px; background: #fff; resize: none; outline: none; font-size: 13px; color: #333; box-sizing: border-box; font-family: Consolas, monospace; line-height: 1.5; }
+.pdb-sub-textarea { flex: 1; width: 100%; padding: 10px; border: 1px solid #dcdfe6; border-radius: 4px; background: #fff; resize: none; outline: none; font-size: 13px; color: #333; box-sizing: border-box; font-family: inherit; line-height: 1.6; }
 
 /* 6.1 Subtitle 模块 - 字幕表格与按钮 */
 .pdb-sub-table { width: 100%; border-collapse: collapse; font-size: 13px; text-align: left; }
