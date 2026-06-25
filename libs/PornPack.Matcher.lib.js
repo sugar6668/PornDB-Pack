@@ -28,96 +28,26 @@ window.PornMatcher = class PornMatcher {
         const n = String(videoName || '').toLowerCase();
         const nClean = n.replace(this.REGEX_NON_ALPHANUM, '');
 
-        let score = 0;
-        let hasDate = false, hasMaker = false, hasTitle = false, hasActor = false;
-        let hasYearOnly = false;
+        // 提取必要特征
+        const makerFirst = String(details.maker || '').split(/[^a-zA-Z0-9]/)[0].toLowerCase();
+        const hasMaker = (details.makerRegex && details.makerRegex.test(n)) || (makerFirst.length >= 3 && nClean.includes(makerFirst));
+        const hasDate = details.dateStr && (n.includes(details.dateStr) || n.includes(details.dateStr.replace(/\./g, '')));
+        const hasYear = details.dateStr && n.includes("20" + details.dateStr.split(/[-.]/)[0]);
+        const hasTitle = (details.titleClean && nClean.includes(details.titleClean)) || (details.titleKeyword && nClean.includes(details.titleKeyword.toLowerCase().replace(this.REGEX_NON_ALPHANUM, '')));
+        const hasActor = details.actorRegexes && details.actorRegexes.some(r => r.test(n));
 
-        // [MOD] 修复 baseAlpha 获取不到的情况，增加 details.studio 作为坚实后盾
-        const makerName = String(details.baseAlpha || details.studio || details.maker || '').trim();
-        if (makerName && makerName.toLowerCase() !== 'unknown') {
-            const suffixes = ['raw', 'network', 'vr', 'plus', 'premium', 'gold', 'vip', 'black', 'extra'];
-            suffixes.forEach(suffix => {
-                const suffixRegex = new RegExp(`\\b${suffix}\\b`, 'i');
-                if (!suffixRegex.test(makerName)) {
-                    const collisionRegex = new RegExp(makerName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '[\\s_.-]*' + suffix, 'i');
-                    if (collisionRegex.test(n)) score -= 1000; // 致命惩罚
-                }
-            });
+        // 1. 第一优先级：标准格式（厂牌 + 精确日期）
+        if (hasMaker && hasDate) {
+            return 1000 + (hasTitle ? 100 : 0);
         }
 
-        if (details.dateStr) {
-            const cleanDate = details.dateStr.replace(/\./g, '');
-            const dashDate = details.dateStr.replace(/\./g, '-');
-            const fullYearDate = `20${details.dateStr}`;
-            const fullYearDash = `20${dashDate}`;
-
-            if (n.includes(details.dateStr) || n.includes(cleanDate) || n.includes(dashDate) || n.includes(fullYearDate) || n.includes(fullYearDash)) {
-                hasDate = true;
-            } else {
-                const year = "20" + details.dateStr.split(/[-.]/)[0];
-                if (n.includes(year)) hasYearOnly = true;
-            }
+        // 2. 备选格式：必须凑齐 演员 + 厂牌 + 年份 + 标题 (严禁混入无关项)
+        // 这一步逻辑：必须 4 个全部为 true，否则一律给 0 分，防止误匹配
+        if (hasMaker && hasYear && hasActor && hasTitle) {
+            return 100; // 只要凑齐这4个，给予备选通过分
         }
 
-        if (details.makerRegex && details.makerRegex.test(n)) {
-            hasMaker = true;
-        } else {
-            // [ADD] 容错：如果正则由于 .com 被吞掉而失败，降级只校验厂牌的第一个单词 (如 Blacked)
-            const makerFirst = String(details.maker || '').split(/[^a-zA-Z0-9]/)[0].toLowerCase();
-            if (makerFirst.length >= 3 && nClean.includes(makerFirst)) hasMaker = true;
-        }
-
-        const cleanT = details.titleClean !== undefined ? details.titleClean : (details.titlePart || '').toLowerCase().replace(this.REGEX_NON_ALPHANUM, '');
-        const titleKwClean = (details.titleKeyword || '').toLowerCase().replace(this.REGEX_NON_ALPHANUM, '');
-
-        // [ADD] 容错：防止原标题带有 "The" 等词但文件精简了，导致全词判断失败，引入 titleKeyword 核心词作为双重保险
-        if (cleanT.length >= 5 && nClean.includes(cleanT)) {
-            hasTitle = true;
-        } else if (titleKwClean.length >= 5 && nClean.includes(titleKwClean)) {
-            hasTitle = true;
-        }
-
-        if (details.actorRegexes && details.actorRegexes.length > 0) {
-            details.actorRegexes.forEach(regex => {
-                if (regex.test(n)) hasActor = true;
-            });
-        }
-
-        if (details.dateStr && !hasDate && !hasYearOnly) {
-            if (this.REGEX_DATE_FORMAT.test(n)) return score;
-        }
-
-        // [ADD] 开始：追加标准命名霸体置顶逻辑。无视任何拦截，直接赋予绝对高分！
-        const fullTitleClean = details.fullTitleClean !== undefined
-            ? details.fullTitleClean
-            : String(details.fullTitle || '').toLowerCase().replace(this.REGEX_NON_ALPHANUM, '');
-
-        if (fullTitleClean && fullTitleClean.length > 5 && nClean.includes(fullTitleClean)) {
-            score += 2000;
-            return score; // 直接免检放行
-        }
-
-        // [MOD] 终极严苛匹配模式拦截网 (针对未命中霸体名称的散装文件)：
-        // 1. 必须有“厂牌” 2. 必须有“时间信息” 3. 如果只有“年份”，则必须有“演员”或“标题”作为辅助参考
-        if (!hasMaker) return 0;
-        if (!hasDate && !hasYearOnly) return 0;
-        if (!hasDate && hasYearOnly && !hasActor && !hasTitle) return 0;
-
-        // [MOD] 偏门资源特例放行：如果缺失精确到日的日期，只有“年份”，则必须【同时】具备“演员”和“标题”进行双重校验，防止同厂牌同年碰瓷！
-        if (!hasDate && hasYearOnly) {
-            if (!hasActor || !hasTitle) {
-                return 0;
-            }
-        }
-
-        // 基础必要条件得分：厂牌 + 完整日期得 100 分
-        score += 100;
-
-        // 附加得分：在满足了上述严苛条件的基础上，如果有演员或标题，增加排序优先级
-        if (hasActor) score += 50;
-        if (hasTitle) score += 40;
-
-        return score;
+        return 0; // 不匹配任何模式，一律丢弃
     }
 
     static getOfflineRescueScore(name, item) {
