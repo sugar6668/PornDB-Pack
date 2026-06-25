@@ -21,8 +21,8 @@ window.PornDOMTweaks = class PornDOMTweaks {
             group = doc.createElement('div');
             group.id = 'jav-filter-group';
             group.className = 'jav-filter-group';
-            // [ADD] 针对 Search 行定制无缝版面样式：inline-flex 居中对齐，使用 margin-right: auto 优雅地将 Search 强行推至最右侧
-            group.style.cssText = 'display: flex; align-items: center; gap: 8px; margin-left: 0 !important; margin-right: auto !important; flex-wrap: wrap; box-sizing: border-box;';
+            // [ADD] 针对 Search 行定制无缝版面样式
+            group.style.cssText = 'display: flex; align-items: center; gap: 8px; margin: 0 15px 0 0 !important; padding: 0; flex-wrap: wrap; box-sizing: border-box;';
             // [ADD] 将轻量化容器插到该行的最左侧（firstChild 守护位）
             searchRow.insertBefore(group, searchRow.firstChild);
             return group;
