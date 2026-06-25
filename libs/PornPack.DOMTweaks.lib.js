@@ -15,14 +15,25 @@ window.PornDOMTweaks = class PornDOMTweaks {
         let group = doc.getElementById('jav-filter-group');
         if (group) return group;
 
-        // 【终极安全挂载点】：彻底放弃与 Tab 标签组的纠缠！
-        // 直接找到展示作品的网格，插在网格正上方。这里是绝对安全的块级区域，不会挤压任何原生排版。
+        // [ADD] 核心级高优先级拦截：完美瞄准原网页 Search 按钮所在的右对齐整行容器
+        const searchRow = doc.querySelector('.flex.justify-end.mb-3');
+        if (searchRow) {
+            group = doc.createElement('div');
+            group.id = 'jav-filter-group';
+            group.className = 'jav-filter-group';
+            // [ADD] 针对 Search 行定制无缝版面样式：inline-flex 居中对齐，使用 margin-right: auto 优雅地将 Search 强行推至最右侧
+            group.style.cssText = 'display: inline-flex; align-items: center; gap: 8px; margin-right: auto; flex-wrap: wrap; box-sizing: border-box;';
+            // [ADD] 将轻量化容器插到该行的最左侧（firstChild 守护位）
+            searchRow.insertBefore(group, searchRow.firstChild);
+            return group;
+        }
+
+        // [MOD] 平滑兜底：若当前页面没有 Search 这一行，则退回原本安全的瀑布流网格上方块级方案
         const grid = doc.querySelector('.grid-cols-scene-card') || doc.querySelector('.grid-cols-performer-site-card');
         if (grid) {
             group = doc.createElement('div');
             group.id = 'jav-filter-group';
             group.className = 'jav-filter-group';
-            // 加一个漂亮的控制台底框，让它自成一派，视觉上也更整洁
             group.style.cssText = 'display: flex; width: 100%; margin: 5px 0 15px 0; padding: 12px; background: #fdfdfd; border: 1px dashed #7b5ea7; border-radius: 8px; justify-content: flex-start; align-items: center; gap: 8px; flex-wrap: wrap; box-sizing: border-box;';
             grid.parentNode.insertBefore(group, grid);
             return group;
