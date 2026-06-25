@@ -211,41 +211,31 @@ window.PornArchiver = class PornArchiver {
         // 只有在前端没传精确目标时，才去执行它原本的“盲搜”兜底
         if (!video) {
             const safeSearchKw = (kw) => (kw || '').replace(/[^a-zA-Z0-9\u4e00-\u9fa5\s]/g, ' ').replace(/\s+/g, ' ').trim();
-            let searchRes = await this.req115.filesSearchAllVideos(safeSearchKw(details.matchPrefix).substring(0, 40));
-            let videos = window.PornMatcher ? window.PornMatcher.getMatchedVideos(searchRes?.data || [], details) : [];
-            video = videos[0];
+            const fullYear = details.dateStr ? "20" + details.dateStr.split(/[-.]/)[0] : "";
+            const firstActor = (details.actors && details.actors.length > 0) ? details.actors[0] : (details.actor !== 'Unknown_Actor' ? details.actor.split('&')[0].trim() : '');
+            const makerFirst = String(details.maker || '').split(/[^a-zA-Z0-9]/)[0];
+            const tKw = details.titleKeyword || '';
 
-            // [ADD] 归档备选：极简特征检索
-            if (!video) {
-                const fullYear = details.dateStr ? "20" + details.dateStr.split(/[-.]/)[0] : "";
-                const firstActor = (details.actors && details.actors.length > 0) ? details.actors[0] : (details.actor !== 'Unknown_Actor' ? details.actor.split('&')[0].trim() : '');
-                const makerFirst = String(details.maker || '').split(/[^a-zA-Z0-9]/)[0];
+            // [MOD] 归档系统同步更新高精度搜索组合
+            const searchStrategies = [
+                details.matchPrefix,
+                [firstActor, tKw].filter(Boolean).join(' '),
+                [makerFirst, tKw].filter(Boolean).join(' '),
+                tKw,
+                [firstActor, fullYear].filter(Boolean).join(' ')
+            ];
 
-                const obscureKw1 = safeSearchKw([firstActor, fullYear].filter(Boolean).join(' ')).substring(0, 40);
-                if (obscureKw1 && obscureKw1.length >= 4) {
-                    let fbSearch2 = await this.req115.filesSearchAllVideos(obscureKw1);
-                    let fbVideos2 = window.PornMatcher ? window.PornMatcher.getMatchedVideos(fbSearch2?.data || [], details) : [];
-                    video = fbVideos2[0];
+            for (let rawKw of searchStrategies) {
+                if (!rawKw || rawKw.trim().length < 3) continue;
+                let kw = safeSearchKw(rawKw).substring(0, 40);
+                if (!kw || kw.length < 3) continue;
+
+                let searchRes = await this.req115.filesSearchAllVideos(kw);
+                let videos = window.PornMatcher ? window.PornMatcher.getMatchedVideos(searchRes?.data || [], details) : [];
+                if (videos.length > 0) {
+                    video = videos[0];
+                    break;
                 }
-
-                if (!video) {
-                    const obscureKw2 = safeSearchKw([makerFirst, fullYear].filter(Boolean).join(' ')).substring(0, 40);
-                    if (obscureKw2 && obscureKw2.length >= 4) {
-                        let fbSearch3 = await this.req115.filesSearchAllVideos(obscureKw2);
-                        let fbVideos3 = window.PornMatcher ? window.PornMatcher.getMatchedVideos(fbSearch3?.data || [], details) : [];
-                        video = fbVideos3[0];
-                    }
-                }
-            }
-
-            if (!video && details.titleKeyword) {
-                let fbSearch = await this.req115.filesSearchAllVideos(safeSearchKw(details.titleKeyword).substring(0, 40));
-                let fbVideos = window.PornMatcher ? window.PornMatcher.getMatchedVideos(fbSearch?.data || [], details) : [];
-                if (details.dateStr) {
-                    const year = details.dateStr.split(/[-.]/)[0];
-                    fbVideos = fbVideos.filter(v => (v.n || '').includes(year));
-                }
-                video = fbVideos[0];
             }
         }
 
