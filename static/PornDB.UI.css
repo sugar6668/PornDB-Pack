@@ -52,6 +52,8 @@ body.filter-mode-unmatched .w-scene-card:has(.x-west-match:not(.is-normal)) { di
 .west-global-toggle-btn { display: flex; align-items: center; justify-content: center; width: 100%; padding: 12px; margin-bottom: 20px; background: #ffffff; color: #7b5ea7; font-size: 14px; font-weight: bold; border: 1px dashed #7b5ea7; border-radius: 8px; cursor: pointer; transition: all 0.3s; box-shadow: 0 2px 6px rgba(0,0,0,0.03);}
 .west-global-toggle-btn:hover { background: #f4f0fa; border-style: solid;}
 .w-scene-card a[href*="/scenes/"] { position: relative !important; display: block !important; }
+.west-console-title { font-weight: bold; font-size: 16px; margin-bottom: 8px; display: flex; align-items: center; }
+.west-match-status { display: inline-flex; align-items: center; font-size: 12px; color: #888; margin-left: 8px; font-weight: normal; }
 
 /* 2. DOMTweaks 模块 - 防闪烁隐藏结界 */
 body.west-info-collapsed .w-full.bg-white.shadow-sm.rounded-sm.overflow-hidden.p-4.mb-5,

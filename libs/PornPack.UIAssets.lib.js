@@ -120,6 +120,48 @@
                     </tr>
                 </table>
             </div>
+        `,
+        // [ADD] 4. 磁力表格单行数据模板
+        magnetTableRow: (item, isTop, linkClass) => `
+            <td>
+                <span class="nong-magnet-name pdb-mag-name-box" title="${item.title}">
+                    ${isTop} <a href="${item.src}" target="_blank" class="${linkClass}">${item.title}</a>
+                </span>
+                ${item.extraHtml || ''} 
+            </td>
+            <td class="pdb-mag-size-td">${item.size}</td>
+            <td class="pdb-mag-action-td"><a class="nong-copy" data-mag="${item.maglink}">复制</a></td>
+            <td class="pdb-mag-action-td"><a class="nong-offline-115" data-mag="${item.maglink}">离线刮削</a></td>
+        `,
+
+        // [ADD] 5. 智能控制台外壳模板 (已剔除内联样式)
+        smartConsoleWrapper: () => `
+            <div class="x-west-wrap">
+                <div class="west-console-title">
+                    115 智能控制台
+                    <span class="west-match-status">等待搜索...</span>
+                </div>
+                <div class="west-match-list" style="width:100%; display:flex; flex-direction:column;"></div>
+                <div class="west-magnet-slot"></div>
+            </div>
+        `,
+
+        // [ADD] 6. 智能控制台单条影片模板
+        smartConsoleItem: (item, tip, chnPath, targetDir, coverBtnClass, coverBtnText) => `
+            <div class="zymatch-item-west">
+                <button class="x-match-btn-wide" title="${tip}" data-cid="${item.cid}">
+                    ${item.n}
+                    <div class="x-match-pc-path" id="west-path-${item.cid}">${chnPath}</div>
+                </button>
+                <div class="buttons">
+                    <button class="is-offline x-west-offline-btn" data-dir="${targetDir}" title="移动此文件到：${targetDir}">刮削归档</button>
+                    <button class="is-rename" data-action="rename" data-cid="${item.cid}" data-fid="${item.fid}" data-n="${item.n}">重命名</button>
+                    <button class="${coverBtnClass}" id="west-cover-${item.cid}" data-action="cover" data-cid="${item.cid}">${coverBtnText}</button>
+                    <button class="is-delviedo" data-action="delv" data-cid="${item.cid}" data-fid="${item.fid}">删视频</button>
+                    <button class="is-delfolder" data-action="delf" data-cid="${item.cid}">删文件夹</button>
+                    <button class="is-clearmatch" data-action="clearmatch" data-cid="${item.cid}" data-fid="${item.fid}">清除匹配</button>
+                </div>
+            </div>
         `
     }
 };

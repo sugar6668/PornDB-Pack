@@ -62,17 +62,7 @@ window.PornMagnetUI = class PornMagnetUI {
             // [MOD] 彻底清理内联样式，使用精准分配的 Class
             const linkClass = isExactMatch ? 'pdb-mag-link pdb-mag-link-exact' : 'pdb-mag-link pdb-mag-link-normal';
 
-            tr.innerHTML = `
-                <td>
-                    <span class="nong-magnet-name pdb-mag-name-box" title="${item.title}">
-                        ${isTop} <a href="${item.src}" target="_blank" class="${linkClass}">${item.title}</a>
-                    </span>
-                    ${item.extraHtml || ''} 
-                </td>
-                <td class="pdb-mag-size-td">${item.size}</td>
-                <td class="pdb-mag-action-td"><a class="nong-copy" data-mag="${item.maglink}">复制</a></td>
-                <td class="pdb-mag-action-td"><a class="nong-offline-115" data-mag="${item.maglink}">离线刮削</a></td>
-            `;
+            tr.innerHTML = window.PornUIAssets.templates.magnetTableRow(item, isTop, linkClass);
 
             tr.querySelector('.nong-offline-115').onclick = async (e) => {
                 const btn = e.currentTarget;
