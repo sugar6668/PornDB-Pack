@@ -65,7 +65,6 @@ window.PornDOMTweaks = class PornDOMTweaks {
     // ==========================================
     static ensurePerformerPanelToggle(doc) {
         if (!location.href.includes('/performers/') && !location.href.includes('/performer-sites/')) return;
-        this.initGlobalStyles();
 
         // 无论 Vue 怎么重建 DOM，只要进入演员页，立刻在 body 上加结界锁
         if (!doc.body.classList.contains('west-info-collapsed') && !doc.body.dataset.panelInit) {
@@ -108,7 +107,6 @@ window.PornDOMTweaks = class PornDOMTweaks {
     // ==========================================
     static ensureSimilarScenesToggle(doc) {
         if (!location.href.includes('/scenes/') && !location.href.includes('/performers/') && !location.href.includes('/performer-sites/')) return;
-        this.initGlobalStyles();
 
         if (!doc.body.classList.contains('west-similar-collapsed') && !doc.body.dataset.similarInit) {
             doc.body.classList.add('west-similar-collapsed');

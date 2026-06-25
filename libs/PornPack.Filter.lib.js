@@ -15,7 +15,6 @@ window.PornFilter = class PornFilter {
         this.whitelist = [...new Set([...defaults, ...cached])];
 
         if (this.saveWhitelist) this.saveWhitelist(this.whitelist);
-        this.initCSS();
 
         if (typeof this.initModal === 'function') this.initModal();
         else if (typeof this.createModal === 'function') this.createModal();
@@ -55,10 +54,6 @@ window.PornFilter = class PornFilter {
             try { GM_setValue(this.storageKey, jsonStr); } catch (e) { }
         }
         try { localStorage.setItem(this.storageKey, jsonStr); } catch (e) { }
-    }
-
-    initCSS() {
-        
     }
 
     startFastTagger() {
