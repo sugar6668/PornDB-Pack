@@ -91,9 +91,11 @@ window.PornMatcher = class PornMatcher {
         if (!hasDate && !hasYearOnly) return 0;
         if (!hasDate && hasYearOnly && !hasActor && !hasTitle) return 0;
 
-        // [DEL] 彻底废除“厂牌+年份+演员/标题”的宽容模式，防止大量同厂牌同年的作品互相碰瓷
-        if (!hasMaker || !hasDate) {
-            return 0;
+        // [MOD] 偏门资源特例放行：如果缺失精确到日的日期，只有“年份”，则必须【同时】具备“演员”和“标题”进行双重校验，防止同厂牌同年碰瓷！
+        if (!hasDate && hasYearOnly) {
+            if (!hasActor || !hasTitle) {
+                return 0; 
+            }
         }
 
         // 基础必要条件得分：厂牌 + 完整日期得 100 分

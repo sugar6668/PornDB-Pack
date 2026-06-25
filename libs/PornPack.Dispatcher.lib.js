@@ -66,6 +66,18 @@ window.PornDispatcher = class PornDispatcher {
                     let { data = [] } = await req.filesSearchAllVideos(prefix);
                     let videos = window.PornMatcher.getMatchedVideos(data, sampleDetails);
 
+                    // [ADD] 瀑布流备选方案 1：偏门资源检索 (演员+厂牌+年份+标题)
+                    if (!videos.length) {
+                        const fullYear = sampleDetails.dateStr ? "20" + sampleDetails.dateStr.split(/[-.]/)[0] : "";
+                        const firstActor = (sampleDetails.actors && sampleDetails.actors.length > 0) ? sampleDetails.actors[0] : (sampleDetails.actor !== 'Unknown_Actor' ? sampleDetails.actor.split('&')[0].trim() : '');
+                        const obscureKw = [firstActor, sampleDetails.maker, fullYear, sampleDetails.titleKeyword].filter(Boolean).join(' ');
+
+                        if (obscureKw && obscureKw.length >= 3) {
+                            const fb2 = await req.filesSearchAllVideos(obscureKw);
+                            videos = window.PornMatcher.getMatchedVideos(fb2.data, sampleDetails);
+                        }
+                    }
+
                     if (!videos.length && sampleDetails.titleKeyword) {
                         const fb = await req.filesSearchAllVideos(sampleDetails.titleKeyword);
                         videos = window.PornMatcher.getMatchedVideos(fb.data, sampleDetails);

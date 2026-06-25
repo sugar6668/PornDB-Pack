@@ -215,6 +215,19 @@ window.PornArchiver = class PornArchiver {
             let videos = window.PornMatcher ? window.PornMatcher.getMatchedVideos(searchRes?.data || [], details) : [];
             video = videos[0];
 
+            // [ADD] 归档备选：演员+厂牌+年份+标题
+            if (!video) {
+                const fullYear = details.dateStr ? "20" + details.dateStr.split(/[-.]/)[0] : "";
+                const firstActor = (details.actors && details.actors.length > 0) ? details.actors[0] : (details.actor !== 'Unknown_Actor' ? details.actor.split('&')[0].trim() : '');
+                const obscureKw = safeSearchKw([firstActor, details.maker, fullYear, details.titleKeyword].filter(Boolean).join(' ')).substring(0, 40);
+
+                if (obscureKw && obscureKw.length >= 3) {
+                    let fbSearch2 = await this.req115.filesSearchAllVideos(obscureKw);
+                    let fbVideos2 = window.PornMatcher ? window.PornMatcher.getMatchedVideos(fbSearch2?.data || [], details) : [];
+                    video = fbVideos2[0];
+                }
+            }
+
             if (!video && details.titleKeyword) {
                 let fbSearch = await this.req115.filesSearchAllVideos(safeSearchKw(details.titleKeyword).substring(0, 40));
                 let fbVideos = window.PornMatcher ? window.PornMatcher.getMatchedVideos(fbSearch?.data || [], details) : [];
