@@ -59,11 +59,23 @@ window.PornMatcher = class PornMatcher {
             }
         }
 
-        if (details.makerRegex && details.makerRegex.test(n)) hasMaker = true;
+        if (details.makerRegex && details.makerRegex.test(n)) {
+            hasMaker = true;
+        } else {
+            // [ADD] 容错：如果正则由于 .com 被吞掉而失败，降级只校验厂牌的第一个单词 (如 Blacked)
+            const makerFirst = String(details.maker || '').split(/[^a-zA-Z0-9]/)[0].toLowerCase();
+            if (makerFirst.length >= 3 && nClean.includes(makerFirst)) hasMaker = true;
+        }
 
-        // [MOD] 将标题匹配长度提高到 6，过滤掉极其容易撞车的通用短词汇
         const cleanT = details.titleClean !== undefined ? details.titleClean : (details.titlePart || '').toLowerCase().replace(this.REGEX_NON_ALPHANUM, '');
-        if (cleanT.length >= 6 && nClean.includes(cleanT)) hasTitle = true;
+        const titleKwClean = (details.titleKeyword || '').toLowerCase().replace(this.REGEX_NON_ALPHANUM, '');
+
+        // [ADD] 容错：防止原标题带有 "The" 等词但文件精简了，导致全词判断失败，引入 titleKeyword 核心词作为双重保险
+        if (cleanT.length >= 5 && nClean.includes(cleanT)) {
+            hasTitle = true;
+        } else if (titleKwClean.length >= 5 && nClean.includes(titleKwClean)) {
+            hasTitle = true;
+        }
 
         if (details.actorRegexes && details.actorRegexes.length > 0) {
             details.actorRegexes.forEach(regex => {
@@ -94,7 +106,7 @@ window.PornMatcher = class PornMatcher {
         // [MOD] 偏门资源特例放行：如果缺失精确到日的日期，只有“年份”，则必须【同时】具备“演员”和“标题”进行双重校验，防止同厂牌同年碰瓷！
         if (!hasDate && hasYearOnly) {
             if (!hasActor || !hasTitle) {
-                return 0; 
+                return 0;
             }
         }
 
@@ -134,7 +146,7 @@ window.PornMatcher = class PornMatcher {
         const actorRegexes = (details.actors || []).map(a => this.buildExactRegex(a)).filter(Boolean);
 
         // [MOD] 将 fullTitleClean 一并注入向下传递
-        const cleanedDetails = { ...details, makerClean, titleClean, fullTitleClean, actorsClean, makerRegex, actorRegexes  };
+        const cleanedDetails = { ...details, makerClean, titleClean, fullTitleClean, actorsClean, makerRegex, actorRegexes };
 
         return dataArray
             .map(it => {

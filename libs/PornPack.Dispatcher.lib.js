@@ -66,15 +66,26 @@ window.PornDispatcher = class PornDispatcher {
                     let { data = [] } = await req.filesSearchAllVideos(prefix);
                     let videos = window.PornMatcher.getMatchedVideos(data, sampleDetails);
 
-                    // [ADD] 瀑布流备选方案 1：偏门资源检索 (演员+厂牌+年份+标题)
+                    // [ADD] 瀑布流备选方案 1：极简特征检索
                     if (!videos.length) {
                         const fullYear = sampleDetails.dateStr ? "20" + sampleDetails.dateStr.split(/[-.]/)[0] : "";
                         const firstActor = (sampleDetails.actors && sampleDetails.actors.length > 0) ? sampleDetails.actors[0] : (sampleDetails.actor !== 'Unknown_Actor' ? sampleDetails.actor.split('&')[0].trim() : '');
-                        const obscureKw = [firstActor, sampleDetails.maker, fullYear, sampleDetails.titleKeyword].filter(Boolean).join(' ');
+                        const makerFirst = String(sampleDetails.maker || '').split(/[^a-zA-Z0-9]/)[0];
 
-                        if (obscureKw && obscureKw.length >= 3) {
-                            const fb2 = await req.filesSearchAllVideos(obscureKw);
+                        // 先搜演员+年份
+                        const obscureKw1 = [firstActor, fullYear].filter(Boolean).join(' ');
+                        if (obscureKw1 && obscureKw1.length >= 4) {
+                            const fb2 = await req.filesSearchAllVideos(obscureKw1);
                             videos = window.PornMatcher.getMatchedVideos(fb2.data, sampleDetails);
+                        }
+
+                        // 若无果，再搜厂牌+年份
+                        if (!videos.length) {
+                            const obscureKw2 = [makerFirst, fullYear].filter(Boolean).join(' ');
+                            if (obscureKw2 && obscureKw2.length >= 4) {
+                                const fb3 = await req.filesSearchAllVideos(obscureKw2);
+                                videos = window.PornMatcher.getMatchedVideos(fb3.data, sampleDetails);
+                            }
                         }
                     }
 
