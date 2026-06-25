@@ -14,6 +14,11 @@ window.PornDriveAPI = class PornDriveAPI {
 
     static dirCache = null;
 
+    // --- 高频匹配缓冲池 ---
+    static matchCache = new Map();
+    static pendingDiskWrites = new Map();
+    static cacheWriteTimer = null;
+
     // --- 基础通信与辅助工具 ---
     static tryJSON(r) { try { return JSON.parse(r.responseText); } catch { return null; } }
     static sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
@@ -82,6 +87,61 @@ window.PornDriveAPI = class PornDriveAPI {
         const j = this.tryJSON(await this.safeReq115('POST', this.API_115.fileAdd, new URLSearchParams({ pid: String(pid), cname: name }).toString(), 1800, 3200));
         if (!j || !j.cid) throw new Error('创建目录失败');
         this.dirCache[key] = { cid: String(j.cid), ts: Date.now() }; this.saveDirCache(); return String(j.cid);
+    }
+
+    // --- 获取真实中文目录路径 ---
+    static fetchRealChinesePath(cid) {
+        return new Promise((resolve) => {
+            GM_xmlhttpRequest({
+                method: "GET",
+                url: `https://webapi.115.com/files?aid=1&cid=${cid}&show_dir=1&limit=1&format=json`,
+                responseType: "json",
+                withCredentials: true,
+                headers: { 'Origin': 'https://115.com', 'Referer': 'https://115.com/' },
+                onload: (res) => {
+                    try {
+                        let data = res.response;
+                        if (typeof data === 'string') data = JSON.parse(data);
+                        else if (!data) data = JSON.parse(res.responseText);
+                        resolve(data?.path?.map(x => x.name).filter(n => n && n !== '网盘').join('/') || '');
+                    } catch (e) { resolve(''); }
+                },
+                onerror: () => resolve('')
+            });
+        });
+    }
+
+    // --- 影片匹配缓存读写中心 ---
+    static getMatchCache(key) {
+        if (this.matchCache.has(key)) return this.matchCache.get(key);
+        try {
+            const cache = GM_getValue('pdb_v4_' + key);
+            if (!cache || !cache.ts || Date.now() - cache.ts > ((cache.data && cache.data.length) ? 2592000000 : 1800000)) {
+                this.matchCache.set(key, null); // 记忆击穿
+                return null;
+            }
+            this.matchCache.set(key, cache.data);
+            return cache.data;
+        } catch (e) {
+            this.matchCache.set(key, null);
+            return null;
+        }
+    }
+
+    static setMatchCache(key, data) {
+        this.matchCache.set(key, data);
+        this.pendingDiskWrites.set('pdb_v4_' + key, { ts: Date.now(), data });
+        if (this.cacheWriteTimer) clearTimeout(this.cacheWriteTimer);
+        this.cacheWriteTimer = setTimeout(() => {
+            this.pendingDiskWrites.forEach((value, k) => GM_setValue(k, value));
+            this.pendingDiskWrites.clear();
+        }, 1500);
+    }
+
+    static deleteMatchCache(key) {
+        this.matchCache.delete(key);
+        this.pendingDiskWrites.delete('pdb_v4_' + key);
+        GM_deleteValue('pdb_v4_' + key);
     }
 
     // --- 影片匹配缓存的垃圾回收 ---
