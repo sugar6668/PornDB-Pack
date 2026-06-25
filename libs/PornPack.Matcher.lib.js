@@ -28,26 +28,37 @@ window.PornMatcher = class PornMatcher {
         const n = String(videoName || '').toLowerCase();
         const nClean = n.replace(this.REGEX_NON_ALPHANUM, '');
 
-        // 提取必要特征
+        // 1. 厂牌识别：正则或纯文本包含
         const makerFirst = String(details.maker || '').split(/[^a-zA-Z0-9]/)[0].toLowerCase();
         const hasMaker = (details.makerRegex && details.makerRegex.test(n)) || (makerFirst.length >= 3 && nClean.includes(makerFirst));
+
+        // 2. 日期/年份识别
         const hasDate = details.dateStr && (n.includes(details.dateStr) || n.includes(details.dateStr.replace(/\./g, '')));
         const hasYear = details.dateStr && n.includes("20" + details.dateStr.split(/[-.]/)[0]);
-        const hasTitle = (details.titleClean && nClean.includes(details.titleClean)) || (details.titleKeyword && nClean.includes(details.titleKeyword.toLowerCase().replace(this.REGEX_NON_ALPHANUM, '')));
-        const hasActor = details.actorRegexes && details.actorRegexes.some(r => r.test(n));
 
-        // 1. 第一优先级：标准格式（厂牌 + 精确日期）
+        // 3. 标题识别：正则或关键词包含
+        const titleClean = (details.titleClean || '').toLowerCase().replace(this.REGEX_NON_ALPHANUM, '');
+        const titleKwClean = (details.titleKeyword || '').toLowerCase().replace(this.REGEX_NON_ALPHANUM, '');
+        const hasTitle = (titleClean.length >= 4 && nClean.includes(titleClean)) || (titleKwClean.length >= 4 && nClean.includes(titleKwClean));
+
+        // 4. 演员识别：正则或名称包含
+        const actorNamesClean = (details.actors || []).map(a => a.toLowerCase().replace(this.REGEX_NON_ALPHANUM, ''));
+        const hasActor = (details.actorRegexes && details.actorRegexes.some(r => r.test(n))) || (actorNamesClean.some(act => act.length >= 4 && nClean.includes(act)));
+
+        // --- 逻辑判断分层 ---
+
+        // 第一优先级：标准格式（厂牌 + 精确日期）
         if (hasMaker && hasDate) {
             return 1000 + (hasTitle ? 100 : 0);
         }
 
-        // 2. 备选格式：必须凑齐 演员 + 厂牌 + 年份 + 标题 (严禁混入无关项)
-        // 这一步逻辑：必须 4 个全部为 true，否则一律给 0 分，防止误匹配
+        // 第二优先级（备选格式）：必须四要素全齐 (厂牌 + 年份 + 演员 + 标题)
+        // 任何一项缺失，或者这四项中有一项匹配不上，直接返回 0
         if (hasMaker && hasYear && hasActor && hasTitle) {
-            return 100; // 只要凑齐这4个，给予备选通过分
+            return 100;
         }
 
-        return 0; // 不匹配任何模式，一律丢弃
+        return 0; // 不匹配，直接丢弃
     }
 
     static getOfflineRescueScore(name, item) {
