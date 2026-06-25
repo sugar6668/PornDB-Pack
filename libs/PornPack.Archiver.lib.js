@@ -236,14 +236,31 @@ window.PornArchiver = class PornArchiver {
         const srts = srtRes?.data || [];
         const keepFiles = [video, ...srts];
 
-        // 转移至目标目录并清理旧目录垃圾
+        // 转移至目标目录并执行【智能风控】清理
         if (String(sourceCid) !== String(targetCid)) {
             const moveRes = await this.req115.filesMove(keepFiles.map(f => f.fid), targetCid);
-            // [MOD] 安全校验：确认转移成功后方可清理源目录
+
+            // [MOD] 智能安全校验：确认转移成功后，探测源目录是否为真正的废弃空壳
             if (moveRes && moveRes.state && sourceCid !== '0') {
-                const remaining = await this.req115.filesAllVideos(sourceCid);
-                if (!remaining?.data?.filter(v => v.s > 100 * 1024 * 1024).length) {
-                    await this.req115.rbDelete([sourceCid]);
+                // 1. 获取源目录下所有的剩余内容（不包含套娃深层，只看当前层）
+                const remaining = await this.req115.filesAll(sourceCid);
+                const allItems = remaining?.data || [];
+
+                // 2. 统计子文件夹数量（115 中没有 fid 且有 cid 的为文件夹）
+                const folderCount = allItems.filter(f => !f.fid && f.cid).length;
+
+                // 3. 【新版安全阈值】：子文件夹数量在 3 个以内（容忍少量广告文件夹）
+                if (folderCount <= 3) {
+                    // 4. 再次确认有没有大视频被遗漏 (大于 100MB 的算作正经视频)
+                    const hasLargeVideo = allItems.some(v => v.fid && v.s > 100 * 1024 * 1024);
+                    if (!hasLargeVideo) {
+                        await this.req115.rbDelete([sourceCid]); // 确认为 BT 垃圾空壳，安全销毁
+                    } else {
+                        console.log(`[PornArchiver保护机制] 源目录仍包含大体积视频，已拦截删除操作。`);
+                    }
+                } else {
+                    // 超过 3 个目录，触发保护机制，仅移动目标视频，保留源目录！
+                    console.log(`[PornArchiver保护机制] 源目录包含 ${folderCount} 个子文件夹，超出安全阈值，已拦截删除操作。`);
                 }
             } else if (!moveRes || !moveRes.state) {
                 throw new Error("文件转移失败，归档中止");
