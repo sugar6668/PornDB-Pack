@@ -24,24 +24,26 @@ window.PornMatcher = class PornMatcher {
         return new RegExp(leftBound + body + rightBound, 'i');
     }
 
+    static normalize(str) {
+        if (!str) return '';
+        // 将空格、点、括号等所有非字母数字符号全部抹掉，强制转小写
+        return String(str).toLowerCase().replace(/[^a-z0-9]/g, '');
+    }
+
     static getMatchScore(videoName, details) {
         const n = String(videoName || '').toLowerCase();
-        const nClean = n.replace(this.REGEX_NON_ALPHANUM, '');
+        // 1. 标准化视频文件名
+        const nClean = this.normalize(n);
 
-        // 【优化】厂牌识别：不仅靠正则，还要靠包含匹配 (去符号比对)
-        const makerFirst = String(details.maker || '').split(/[^a-zA-Z0-9]/)[0].toLowerCase();
-        const hasMaker = (details.makerRegex && details.makerRegex.test(n)) || (makerFirst.length >= 3 && nClean.includes(makerFirst));
+        // 2. 标准化厂牌
+        const makerClean = this.normalize(details.maker);
 
-        // 【优化】年份识别：不仅找 2021，还要找括号内或单独的数字
-        const yearMatch = n.match(/(?:^|[^0-9])(20\d{2})(?:$|[^0-9])/);
-        const hasYear = (details.dateStr && n.includes("20" + details.dateStr.split(/[-.]/)[0])) || (yearMatch && yearMatch[1] === details.dateStr.split(/[-.]/)[0]);
+        // 严格比对 不再使用正则，而是直接比对去符号后的原始名
+        const hasMaker = nClean.includes(makerClean);
 
-        const titleClean = (details.titleClean || '').toLowerCase().replace(this.REGEX_NON_ALPHANUM, '');
-        const titleKwClean = (details.titleKeyword || '').toLowerCase().replace(this.REGEX_NON_ALPHANUM, '');
-        const hasTitle = (titleClean.length >= 4 && nClean.includes(titleClean)) || (titleKwClean.length >= 4 && nClean.includes(titleKwClean));
-
-        const actorNamesClean = (details.actors || []).map(a => a.toLowerCase().replace(this.REGEX_NON_ALPHANUM, ''));
-        const hasActor = (details.actorRegexes && details.actorRegexes.some(r => r.test(n))) || (actorNamesClean.some(act => act.length >= 4 && nClean.includes(act)));
+        // 3. 演员与标题标准化
+        const titleClean = this.normalize(details.titleKeyword);
+        const hasTitle = nClean.includes(titleClean);
 
         // 1. 第一优先级：标准格式（厂牌 + 精确日期）
         const hasDate = details.dateStr && (n.includes(details.dateStr) || n.includes(details.dateStr.replace(/\./g, '')));
