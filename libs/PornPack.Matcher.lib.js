@@ -28,9 +28,8 @@ window.PornMatcher = class PornMatcher {
         const n = String(videoName || '').toLowerCase();
         const nClean = n.replace(this.REGEX_NON_ALPHANUM, '');
 
-        // 【优化】厂牌识别：不仅靠正则，还要靠包含匹配 (去符号比对)
-        const makerFirst = String(details.maker || '').split(/[^a-zA-Z0-9]/)[0].toLowerCase();
-        const hasMaker = (details.makerRegex && details.makerRegex.test(n)) || (makerFirst.length >= 3 && nClean.includes(makerFirst));
+        // 【优化】厂牌识别：严格边界校验
+        const hasMaker = (details.makerRegex && details.makerRegex.test(n)) || false;
 
         // 【优化】年份识别：不仅找 2021，还要找括号内或单独的数字
         const yearMatch = n.match(/(?:^|[^0-9])(20\d{2})(?:$|[^0-9])/);
