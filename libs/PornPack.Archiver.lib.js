@@ -188,14 +188,16 @@ window.PornArchiver = class PornArchiver {
         if (this.updateBtnUI) this.updateBtnUI(item.hash, `离线完成`, '#8e44ad');
 
         if (this.triggerAutoMatch) {
-            // [MOD] 移除暴力追加空格的特征码污染逻辑，并将旧缓存清理延迟到搜索前一刻，保护小窗提前关闭时的数据完整性
             setTimeout(() => {
-                if (typeof document !== 'undefined' && document.WESTDETAILS) {
-                    const prefixKey = document.WESTDETAILS.matchPrefix || document.WESTDETAILS.dateStr;
-                    if (prefixKey && typeof GM_deleteValue !== 'undefined') GM_deleteValue('pdb_v4_' + prefixKey);
+                // 用任务自身的数据构造 prefixKey，不依赖 document.WESTDETAILS
+                const prefixKey = (item.matchPrefix || item.baseAlpha || '') + (item.dateStr || '');
+                if (prefixKey) {
+                    // 同时清除 GM 持久层 + 内存层缓存
+                    if (typeof GMdeleteValue !== 'undefined') GMdeleteValue('pdbv4' + prefixKey);
+                    if (window.PornDriveAPI) window.PornDriveAPI.deleteMatchCache(prefixKey);
                 }
                 this.triggerAutoMatch();
-            }, 3500); // [MOD] 给 115 搜索引擎多留缓冲时间
+            }, 3500);
         }
 
         return true;
@@ -219,11 +221,13 @@ window.PornArchiver = class PornArchiver {
 
             // [MOD] 归档系统同步更新高精度搜索组合
             const searchStrategies = [
-                details.matchPrefix,
+                details.baseAlpha && details.dateStr
+                    ? details.baseAlpha + ' ' + details.dateStr   // ← 用 baseAlpha + dateStr 分开传，更精准且不经 safeSearchKw 破坏
+                    : details.matchPrefix,
                 [firstActor, tKw].filter(Boolean).join(' '),
                 [makerFirst, tKw].filter(Boolean).join(' '),
                 tKw,
-                [firstActor, fullYear].filter(Boolean).join(' ')
+                [firstActor, fullYear].filter(Boolean).join(' '),
             ];
 
             for (let rawKw of searchStrategies) {

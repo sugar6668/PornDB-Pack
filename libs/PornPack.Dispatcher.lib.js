@@ -30,7 +30,7 @@ window.PornDispatcher = class PornDispatcher {
         // 【P1 优化】调用方已检查过缓存时跳过二次检查
         if (!skipCacheCheck) {
             const cachedVideos = this.getWestCache(prefix);
-            if (cachedVideos) {
+            if (cachedVideos && cachedVideos.length > 0) {  // ← 明确区分「有结果缓存」与「空结果」
                 this.applyMatchTagState(item, cachedVideos);
                 return;
             }
@@ -95,12 +95,11 @@ window.PornDispatcher = class PornDispatcher {
                         }
                     }
 
-                    this.setWestCache(prefix, videos);
-
-                    // 批量渲染：一网打尽网页上所有相同的影片卡片
-                    pendingItems.forEach(({ item }) => {
-                        this.applyMatchTagState(item, videos);
-                    });
+                    // 只在有结果时才写入缓存；空结果不缓存，保留下次重搜的机会
+                    if (videos.length > 0) {
+                        this.setWestCache(prefix, videos);
+                    }
+                    pendingItems.forEach(({ item }) => this.applyMatchTagState(item, videos));
                 }
             } catch (e) {
                 pendingItems.forEach(({ item }) => this.applyMatchTagState(item, []));
