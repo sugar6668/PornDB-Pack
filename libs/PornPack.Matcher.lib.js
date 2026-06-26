@@ -27,6 +27,9 @@ window.PornMatcher = class PornMatcher {
     static getMatchScore(videoName, details) {
         const n = String(videoName || '').toLowerCase();
         const nClean = n.replace(this.REGEX_NON_ALPHANUM, '');
+        // [ADD] 提取 115 接口返回的视频时长
+        const play_long = parseFloat(item.play_long) || 0;
+        const nClean = n.replace(this.REGEX_NON_ALPHANUM, '');
 
         // 【优化】厂牌识别：严格边界校验
         const hasMaker = (details.makerRegex && details.makerRegex.test(n)) || false;
@@ -43,6 +46,14 @@ window.PornMatcher = class PornMatcher {
 
         const actorNamesClean = (details.actors || []).map(a => a.toLowerCase().replace(this.REGEX_NON_ALPHANUM, ''));
         const hasActor = (details.actorRegexes && details.actorRegexes.some(r => r.test(n))) || (actorNamesClean.some(act => act.length >= 4 && nClean.includes(act)));
+
+        // [ADD] 终极防御：时长校验。仅在网页与网盘都存在时长时进行比对
+        let isDurationOk = true;
+        if (details.duration > 0 && play_long > 0) {
+            if (details.isExactDuration) {
+                isDurationOk = Math.abs(play_long - details.duration) <= 10; // 严格执行 10 秒以内的容差校验
+            } 
+        }
 
         // 1. 第一优先级：标准格式（厂牌 + 精确日期）
         const hasDate = details.dateStr && (n.includes(details.dateStr) || n.includes(details.dateStr.replace(/\./g, '')));
@@ -83,7 +94,7 @@ window.PornMatcher = class PornMatcher {
         // [ADD] 提取 fullTitle 特征，用于识别是否为已重命名的标准刮削文件
         const fullTitleClean = String(details.fullTitle || '').toLowerCase().replace(this.REGEX_NON_ALPHANUM, '');
         const actorsClean = (details.actors || []).map(a => String(a).toLowerCase().replace(this.REGEX_NON_ALPHANUM, '')).filter(Boolean);
-        
+
         // [MOD] 构建 makerRegex 时优先使用包含空格的 maker，防止 "Reality Kings" 被压缩成 "RealityKings" 导致正则匹配失效
         const makerRegex = this.buildExactRegex(details.maker || details.baseAlpha || '');
         const actorRegexes = (details.actors || []).map(a => this.buildExactRegex(a)).filter(Boolean);
