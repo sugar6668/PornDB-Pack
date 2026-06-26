@@ -126,19 +126,20 @@ window.PornParser = class PornParser {
                 if (m) dateRawStr = m[0];
             }
             if (dateRawStr) details.dateStr = this.parseDate(dateRawStr);
+
             // [ADD] 提取精确视频时长（转换为秒）
             details.duration = 0;
             details.isExactDuration = false;
 
             // 1. 读取精确时长
             const timeNodes = doc.querySelectorAll('.flex.place-items-center');
-            for (let node of timeNodes) {
-                const txt = node.textContent.trim();
+            for (let i = 0; i < timeNodes.length; i++) {
+                const txt = timeNodes[i].textContent.trim();
                 const timeMatch = txt.match(/^(?:(\d{1,2}):)?(\d{1,2}):(\d{2})$/);
                 if (timeMatch) {
-                    const h = parseInt(timeMatch[1] || 0);
-                    const m = parseInt(timeMatch[2]);
-                    const s = parseInt(timeMatch[3]);
+                    const h = parseInt(timeMatch[1] || "0", 10);
+                    const m = parseInt(timeMatch[2], 10);
+                    const s = parseInt(timeMatch[3], 10);
                     details.duration = h * 3600 + m * 60 + s;
                     details.isExactDuration = true;
                     break;
