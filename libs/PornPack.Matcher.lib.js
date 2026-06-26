@@ -29,7 +29,6 @@ window.PornMatcher = class PornMatcher {
         const nClean = n.replace(this.REGEX_NON_ALPHANUM, '');
         // [ADD] 提取 115 接口返回的视频时长
         const play_long = parseFloat(item.play_long) || 0;
-        const nClean = n.replace(this.REGEX_NON_ALPHANUM, '');
 
         // 【优化】厂牌识别：严格边界校验
         const hasMaker = (details.makerRegex && details.makerRegex.test(n)) || false;
@@ -74,7 +73,7 @@ window.PornMatcher = class PornMatcher {
     }
 
     static getOfflineRescueScore(name, item) {
-        return this.getMatchScore(name, {
+        return this.getMatchScore({ n: name }, {
             baseAlpha: item.baseAlpha,
             studio: item.baseAlpha,
             dateStr: item.dateStr,
@@ -104,7 +103,7 @@ window.PornMatcher = class PornMatcher {
 
         return dataArray
             .map(it => {
-                it.matchScore = this.getMatchScore(it.n, cleanedDetails);
+                it.matchScore = this.getMatchScore(it, cleanedDetails);
                 return it;
             })
             .filter(it => it.matchScore >= 40) // 铁面无私及格线
