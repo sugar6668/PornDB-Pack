@@ -38,6 +38,8 @@ window.PornMatcher = class PornMatcher {
         const titleClean = (details.titleClean || '').toLowerCase().replace(this.REGEX_NON_ALPHANUM, '');
         const titleKwClean = (details.titleKeyword || '').toLowerCase().replace(this.REGEX_NON_ALPHANUM, '');
         const hasTitle = (titleClean.length >= 4 && nClean.includes(titleClean)) || (titleKwClean.length >= 4 && nClean.includes(titleKwClean));
+        const titleWords = String(details.titlePart || '').toLowerCase().split(/[^a-z0-9]/).filter(w => w.length >= 4);
+        const hasPartialTitle = hasTitle || titleWords.some(w => n.includes(w));
 
         const actorNamesClean = (details.actors || []).map(a => a.toLowerCase().replace(this.REGEX_NON_ALPHANUM, ''));
         const hasActor = (details.actorRegexes && details.actorRegexes.some(r => r.test(n))) || (actorNamesClean.some(act => act.length >= 4 && nClean.includes(act)));
@@ -52,8 +54,8 @@ window.PornMatcher = class PornMatcher {
         if (hasMaker && hasYear && hasActor && hasTitle) {
             return 100;
         }
-        // 3. 宽容合集格式：凑齐 演员 + 厂牌 + 年份 (允许标题存在拼写差异，专门针对外部合集命名)
-        if (hasMaker && hasYear && hasActor) {
+        // 3. 宽容合集格式：凑齐 演员 + 厂牌 + 年份 + 任意标题关键词
+        if (hasMaker && hasYear && hasActor && hasPartialTitle) {
             return 80;
         }
 
