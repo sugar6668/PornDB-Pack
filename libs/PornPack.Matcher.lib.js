@@ -25,7 +25,7 @@ window.PornMatcher = class PornMatcher {
     }
 
     static getMatchScore(videoName, details) {
-        const n = String(videoName || '').toLowerCase();
+        const n = String((videoName && typeof videoName === 'object' ? videoName.n : videoName) || '').toLowerCase();
         const nClean = n.replace(this.REGEX_NON_ALPHANUM, '');
 
         // 【优化】厂牌识别：严格边界校验
@@ -45,7 +45,7 @@ window.PornMatcher = class PornMatcher {
         const hasActor = (details.actorRegexes && details.actorRegexes.some(r => r.test(n))) || (actorNamesClean.some(act => act.length >= 4 && nClean.includes(act)));
 
         // 1. 第一优先级：标准格式（厂牌 + 精确日期）
-        const hasDate = details.dateStr && (n.includes(details.dateStr) || n.includes(details.dateStr.replace(/\./g, '')));
+        const hasDate = details.dateStr && (n.includes(details.dateStr) || n.includes(details.dateStr.replace(/\./g, '')) || n.includes('20' + details.dateStr.replace(/\./g, '-')));
         if (hasMaker && hasDate) {
             return 1000 + (hasTitle ? 100 : 0);
         }
