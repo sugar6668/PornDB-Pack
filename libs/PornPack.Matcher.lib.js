@@ -19,7 +19,7 @@ window.PornMatcher = class PornMatcher {
         const lastChar = lastToken[lastToken.length - 1];
 
         const leftBound = /[a-zA-Z]/.test(firstChar) ? '(^|[^a-zA-Z])' : '(^|[^0-9])';
-        const rightBound = /[a-zA-Z]/.test(lastChar) ? '($|[^a-zA-Z]|com($|[^a-zA-Z]))' : '($|[^0-9])';
+        const rightBound = /[a-zA-Z]/.test(lastChar) ? '($|(?![\\s.][a-zA-Z])[^a-zA-Z]|com($|[^a-zA-Z]))' : '($|[^0-9])';
 
         return new RegExp(leftBound + body + rightBound, 'i');
     }
