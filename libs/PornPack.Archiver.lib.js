@@ -188,13 +188,14 @@ window.PornArchiver = class PornArchiver {
         if (this.updateBtnUI) this.updateBtnUI(item.hash, `离线完成`, '#8e44ad');
 
         if (this.triggerAutoMatch) {
-            // [MOD] 强行绕过主脚本内存级缓存：通过给特征码追加空格，触发全新的精确检索，实现无缝刷新
-            if (typeof document !== 'undefined' && document.WESTDETAILS) {
-                const prefixKey = document.WESTDETAILS.matchPrefix || document.WESTDETAILS.dateStr;
-                if (prefixKey && typeof GM_deleteValue !== 'undefined') GM_deleteValue('pdb_v4_' + prefixKey);
-                document.WESTDETAILS.matchPrefix = (document.WESTDETAILS.matchPrefix || '') + ' ';
-            }
-            setTimeout(() => this.triggerAutoMatch(), 3500); // [MOD] 给 115 搜索引擎多留 1 秒缓冲时间
+            // [MOD] 移除暴力追加空格的特征码污染逻辑，并将旧缓存清理延迟到搜索前一刻，保护小窗提前关闭时的数据完整性
+            setTimeout(() => {
+                if (typeof document !== 'undefined' && document.WESTDETAILS) {
+                    const prefixKey = document.WESTDETAILS.matchPrefix || document.WESTDETAILS.dateStr;
+                    if (prefixKey && typeof GM_deleteValue !== 'undefined') GM_deleteValue('pdb_v4_' + prefixKey);
+                }
+                this.triggerAutoMatch();
+            }, 3500); // [MOD] 给 115 搜索引擎多留缓冲时间
         }
 
         return true;

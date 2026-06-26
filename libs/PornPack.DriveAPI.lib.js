@@ -131,11 +131,10 @@ window.PornDriveAPI = class PornDriveAPI {
     static setMatchCache(key, data) {
         this.matchCache.set(key, data);
         this.pendingDiskWrites.set('pdb_v4_' + key, { ts: Date.now(), data });
+        // [MOD] 取消 1.5 秒的异步延迟写入，改为立即写入，防止小窗(iframe)提前关闭时导致内存数据未落盘而丢失
         if (this.cacheWriteTimer) clearTimeout(this.cacheWriteTimer);
-        this.cacheWriteTimer = setTimeout(() => {
-            this.pendingDiskWrites.forEach((value, k) => GM_setValue(k, value));
-            this.pendingDiskWrites.clear();
-        }, 1500);
+        this.pendingDiskWrites.forEach((value, k) => GM_setValue(k, value));
+        this.pendingDiskWrites.clear();
     }
 
     static deleteMatchCache(key) {

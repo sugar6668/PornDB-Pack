@@ -63,7 +63,12 @@ window.PornDispatcher = class PornDispatcher {
                 const sampleDetails = pendingItems[0]?.details;
                 if (sampleDetails) {
                     const req = this.getReq();
-                    let { data = [] } = await req.filesSearchAllVideos(prefix);
+                    let res = await req.filesSearchAllVideos(prefix);
+                    // [ADD] 防止 115 接口风控(如 911 验证码)导致返回空数据，从而把空数组误写入全局缓存
+                    if (res && res.state === false) {
+                        throw new Error(res.error_msg || "115搜索接口异常");
+                    }
+                    let data = res.data || [];
                     let videos = window.PornMatcher.getMatchedVideos(data, sampleDetails);
 
                     // [MOD] 瀑布流同步更新高精度搜索组合
@@ -83,7 +88,9 @@ window.PornDispatcher = class PornDispatcher {
                         for (let kw of fallbacks) {
                             if (!kw || kw.trim().length < 3) continue;
                             const fb = await req.filesSearchAllVideos(kw);
-                            videos = window.PornMatcher.getMatchedVideos(fb.data, sampleDetails);
+                            // [ADD] 兜底搜索同样需要防止 115 接口风控
+                            if (fb && fb.state === false) throw new Error(fb.error_msg || "115搜索接口异常");
+                            videos = window.PornMatcher.getMatchedVideos(fb.data || [], sampleDetails);
                             if (videos.length > 0) break;
                         }
                     }
