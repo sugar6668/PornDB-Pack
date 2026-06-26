@@ -19,7 +19,7 @@ window.PornMatcher = class PornMatcher {
         const lastChar = lastToken[lastToken.length - 1];
 
         const leftBound = /[a-zA-Z]/.test(firstChar) ? '(^|[^a-zA-Z])' : '(^|[^0-9])';
-        const rightBound = /[a-zA-Z]/.test(lastChar) ? '($|[^a-zA-Z])' : '($|[^0-9])';
+        const rightBound = /[a-zA-Z]/.test(lastChar) ? '($|[^a-zA-Z]|com($|[^a-zA-Z]))' : '($|[^0-9])';
 
         return new RegExp(leftBound + body + rightBound, 'i');
     }
@@ -52,6 +52,10 @@ window.PornMatcher = class PornMatcher {
         if (hasMaker && hasYear && hasActor && hasTitle) {
             return 100;
         }
+        // 3. 宽容合集格式：凑齐 演员 + 厂牌 + 年份 (允许标题存在拼写差异，专门针对外部合集命名)
+        if (hasMaker && hasYear && hasActor) {
+            return 80;
+        }
 
         return 0;
     }
@@ -77,8 +81,9 @@ window.PornMatcher = class PornMatcher {
         // [ADD] 提取 fullTitle 特征，用于识别是否为已重命名的标准刮削文件
         const fullTitleClean = String(details.fullTitle || '').toLowerCase().replace(this.REGEX_NON_ALPHANUM, '');
         const actorsClean = (details.actors || []).map(a => String(a).toLowerCase().replace(this.REGEX_NON_ALPHANUM, '')).filter(Boolean);
-        // [FIX] 构建 makerRegex 和 actorRegexes，恢复 hasMaker/hasActor 评分能力
-        const makerRegex = this.buildExactRegex(details.baseAlpha || details.maker || '');
+        
+        // [MOD] 构建 makerRegex 时优先使用包含空格的 maker，防止 "Reality Kings" 被压缩成 "RealityKings" 导致正则匹配失效
+        const makerRegex = this.buildExactRegex(details.maker || details.baseAlpha || '');
         const actorRegexes = (details.actors || []).map(a => this.buildExactRegex(a)).filter(Boolean);
 
         // [MOD] 将 fullTitleClean 一并注入向下传递
