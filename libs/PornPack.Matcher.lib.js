@@ -24,8 +24,8 @@ window.PornMatcher = class PornMatcher {
         return new RegExp(leftBound + body + rightBound, 'i');
     }
 
-    static getMatchScore(videoName, details) {
-        const n = String(videoName || '').toLowerCase();
+    static getMatchScore(item, details) {
+        const n = String(item || '').toLowerCase();
         const nClean = n.replace(this.REGEX_NON_ALPHANUM, '');
         // [ADD] 提取 115 接口返回的视频时长
         const play_long = parseFloat(item.play_long) || 0;
