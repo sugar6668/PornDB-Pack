@@ -95,8 +95,36 @@ window.PornParser = class PornParser {
      * 解析单个影片详情页面信息
      */
     static parseWestDetails(doc) {
-        let details = { matchPrefix: '', baseAlpha: '', dateStr: '', titlePart: '', titleKeyword: '', fullTitle: '', maker: '', series: '', actor: 'Unknown_Actor', actors: [], tags: [], plot: '', url: location.href, coverUrl: '', isValid: false };
+        let details = { matchPrefix: '', baseAlpha: '', dateStr: '', titlePart: '', titleKeyword: '', fullTitle: '', maker: '', series: '', actor: 'Unknown_Actor', actors: [], tags: [], plot: '', director: '', runtime: '', url: location.href, coverUrl: '', isValid: false };
         try {
+            // [MOD] 1. 精准抓取 Tags (基于提供的 class 容器)
+            const tagWrap = doc.querySelector('[class="flex flex-wrap gap-1"]');
+            if (tagWrap) {
+                // 遍历容器内的链接获取具体标签名
+                tagWrap.querySelectorAll('a').forEach(node => {
+                    const tag = node.textContent.trim();
+                    if (tag && !details.tags.includes(tag)) details.tags.push(tag);
+                });
+            }
+
+            // [MOD] 2. 精准抓取剧情简介 Plot (基于提供的 class 容器)
+            const plotNode = doc.querySelector('[class="w-5/6 whitespace-break-spaces"]');
+            if (plotNode) details.plot = plotNode.textContent.trim();
+
+            // [ADD] 3. 精准抓取导演 Director (基于提供的 class 容器)
+            const dirNode = doc.querySelector('[class="flex flex-wrap gap-x-1 empty:hidden"]');
+            if (dirNode) {
+                // 优先抓取 a 标签内的干净名字，如果没有则清理前缀文字
+                const dirLink = dirNode.querySelector('a');
+                details.director = dirLink ? dirLink.textContent.trim() : dirNode.textContent.replace(/Director/i, '').replace(/[:：]/g, '').trim();
+            }
+
+            // [MOD] 4. 精准抓取时长 Runtime (基于提供的厂牌/日期综合容器)
+            const infoWrap = doc.querySelector('[class="flex flex-col md:flex-row gap-1 mr-2 md:items-center"]');
+            if (infoWrap) {
+                const match = infoWrap.textContent.match(/\b(\d+)\s*min/i);
+                if (match) details.runtime = match[1];
+            }
             // 优先从页面 h1 获取最纯净的原始标题 (对齐瀑布流逻辑)
             const h1 = doc.querySelector('h1');
             if (h1) {

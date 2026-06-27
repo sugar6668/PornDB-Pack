@@ -108,31 +108,89 @@ window.PornNFOGenerator = class PornNFOGenerator {
     }
 
     static generateXML(details) {
+        // XML 转义函数
         const esc = (s) => (s || '').replace(/[<>&'"]/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '\'': '&apos;', '"': '&quot;' }[c]));
-        const year = details.dateStr ? details.dateStr.split('.')[0] : '';
-        const premiered = details.dateStr ? `20${details.dateStr.replace(/\./g, '-')}` : '';
-        
-        let xml = `<?xml version="1.0" encoding="utf-8" standalone="yes"?>\n<movie>\n`;
-        xml += `  <title>${esc(details.fullTitle || details.titlePart)}</title>\n`;
-        xml += `  <originaltitle>${esc(details.titlePart)}</originaltitle>\n`;
-        xml += `  <sorttitle>${esc(details.matchPrefix || details.fullTitle)}</sorttitle>\n`;
-        if (premiered) xml += `  <premiered>${premiered}</premiered>\n`;
-        if (year) xml += `  <year>20${year}</year>\n`;
-        if (details.maker) xml += `  <studio>${esc(details.maker)}</studio>\n`;
-        if (details.plot) xml += `  <plot>${esc(details.plot)}</plot>\n`;
+        // CDATA 包装函数 (避免内部 HTML 或特殊字符干扰)
+        const cdata = (s) => `<![CDATA[${s || ''}]]>`;
+
+        const yearMatch = details.dateStr ? details.dateStr.split('.')[0] : '';
+        const year = yearMatch ? `20${yearMatch}` : '';
+        const dateFormatted = details.dateStr ? `20${details.dateStr.replace(/\./g, '-')}` : '';
+        const num = details.matchPrefix || '';
+        const title = details.fullTitle || details.titlePart || '';
+        const originalTitle = details.titlePart || details.fullTitle || '';
+        const maker = details.maker || '';
+
+        // 构建并合并智能标签池 (自动去重)
+        let tagsSet = new Set(details.tags || []);
+        if (maker) {
+            tagsSet.add(maker);
+            tagsSet.add(`系列: ${maker}`);
+            tagsSet.add(`片商: ${maker}`);
+            tagsSet.add(`发行: ${maker}`);
+        }
+        (details.actors || []).forEach(a => tagsSet.add(a));
+        tagsSet.add('中文字幕');
+        tagsSet.add('无码');
+        const tags = Array.from(tagsSet);
+
+        // 严格对齐标准 NFO 模板拼接 XML
+        let xml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<movie>\n`;
+
+        if (details.plot) {
+            xml += `  <plot>${cdata(details.plot)}</plot>\n`;
+            xml += `  <outline>${cdata(details.plot)}</outline>\n`;
+            xml += `  <originalplot>${cdata(details.plot)}</originalplot>\n`;
+        }
+
+        if (dateFormatted) {
+            xml += `  <tagline>发行日期 ${dateFormatted}</tagline>\n`;
+            xml += `  <premiered>${dateFormatted}</premiered>\n`;
+            xml += `  <releasedate>${dateFormatted}</releasedate>\n`;
+            xml += `  <release>${dateFormatted}</release>\n`;
+        }
+
+        if (num) xml += `  <num>${esc(num)}</num>\n`;
+        xml += `  <title>${esc(title)}</title>\n`;
+        xml += `  <originaltitle>${esc(originalTitle)}</originaltitle>\n`;
+        xml += `  <sorttitle>${esc(title)}</sorttitle>\n`;
+        xml += `  <mpaa>NC-17</mpaa>\n`;
+        xml += `  <customrating>NC-17</customrating>\n`;
+        xml += `  <countrycode>US</countrycode>\n`;
+
+        let actors = (details.actors && details.actors.length > 0) ? details.actors : (details.actor && details.actor !== 'Unknown_Actor' ? [details.actor] : []);
+        actors.forEach(a => {
+            xml += `  <actor>\n    <name>${esc(a)}</name>\n    <type>Actor</type>\n  </actor>\n`;
+        });
+
+        // 增加导演节点
+        if (details.director) xml += `  <director>${esc(details.director)}</director>\n`;
+
+        if (year) xml += `  <year>${year}</year>\n`;
+        if (details.runtime) xml += `  <runtime>${esc(details.runtime)}</runtime>\n`;
+
+        if (maker) {
+            xml += `  <set>\n    <name>${esc(maker)}</name>\n  </set>\n`;
+            xml += `  <series>${esc(maker)}</series>\n`;
+            xml += `  <studio>${esc(maker)}</studio>\n`;
+            xml += `  <maker>${esc(maker)}</maker>\n`;
+            xml += `  <publisher>${esc(maker)}</publisher>\n`;
+            xml += `  <label>${esc(maker)}</label>\n`;
+        }
+
+        tags.forEach(t => xml += `  <tag>${esc(t)}</tag>\n`);
+        tags.forEach(t => xml += `  <genre>${esc(t)}</genre>\n`);
+
         if (details.coverUrl) {
             xml += `  <poster>${esc(details.coverUrl)}</poster>\n`;
+            xml += `  <cover>${esc(details.coverUrl)}</cover>\n`;
             xml += `  <thumb>${esc(details.coverUrl)}</thumb>\n`;
         }
-        
-        (details.tags || []).forEach(t => xml += `  <genre>${esc(t)}</genre>\n`);
-        if (details.maker && !(details.tags || []).includes(details.maker)) {
-            xml += `  <genre>${esc(details.maker)}</genre>\n`;
+
+        if (details.url) {
+            xml += `  <theporndbid>${esc(details.url)}</theporndbid>\n`;
         }
-        
-        let actors = (details.actors && details.actors.length > 0) ? details.actors : (details.actor && details.actor !== 'Unknown_Actor' ? [details.actor] : []);
-        actors.forEach(a => xml += `  <actor>\n    <name>${esc(a)}</name>\n    <type>Actor</type>\n  </actor>\n`);
-        
+
         xml += `</movie>`;
         return xml;
     }
@@ -164,7 +222,7 @@ window.PornNFOGenerator = class PornNFOGenerator {
             link.click();
             document.body.removeChild(link);
             URL.revokeObjectURL(link.href);
-            
+
             // 复用按钮临时状态提醒
             if (window.PornBookmark) window.PornBookmark.setTempBtnState(btnNode, '生成 NFO', '已下载本地', '#67c23a');
         } else if (mode === 'cloud') {
