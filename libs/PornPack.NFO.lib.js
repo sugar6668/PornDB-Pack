@@ -196,13 +196,24 @@ window.PornNFOGenerator = class PornNFOGenerator {
     }
 
     static createNFOFile(content, filename) {
-        // NFO 需要标准的 UTF-8 编码，无需像书签那样强制加 BOM 头
         const encoder = new TextEncoder();
         const uint8Array = encoder.encode(content);
         const blob = new Blob([uint8Array], { type: 'application/xml' });
         return new File([blob], filename, { type: 'application/xml' });
     }
 
+    static setTempBtnState(btn, fallbackText, newText, tempColor) {
+        btn.innerHTML = newText;
+        btn.style.backgroundColor = tempColor;
+        btn.style.borderColor = tempColor;
+        setTimeout(() => {
+            btn.style.backgroundColor = '';
+            btn.style.borderColor = '';
+            btn.innerHTML = this.hasNFOInCloud ? '已有 NFO' : fallbackText;
+        }, 3000);
+    }
+
+    // [MOD] 替换所有的临时状态调用，并统一成功/失败的文案
     static async handleExport(mode = 'local', btnNode) {
         const details = document.WESTDETAILS;
         if (!details || !details.isValid) return alert("页面元数据尚未加载完毕，请稍后再试！");
@@ -223,15 +234,15 @@ window.PornNFOGenerator = class PornNFOGenerator {
             document.body.removeChild(link);
             URL.revokeObjectURL(link.href);
 
-            // 复用按钮临时状态提醒
-            if (window.PornBookmark) window.PornBookmark.setTempBtnState(btnNode, '生成 NFO', '已下载本地', '#67c23a');
+            // [MOD] 调用专属提示并对齐文案
+            this.setTempBtnState(btnNode, '生成 NFO', '已导出本地', '#67c23a');
         } else if (mode === 'cloud') {
             const matchedBtn = document.querySelector('.x-match-btn-wide');
             const targetCid = matchedBtn ? matchedBtn.dataset.cid : null;
             const ReqClass = typeof window.Req115 !== 'undefined' ? window.Req115 : (typeof Req115 !== 'undefined' ? Req115 : null);
 
             if (targetCid && ReqClass) {
-                btnNode.innerHTML = '正在直传...';
+                btnNode.innerHTML = '正在上传...';
                 try {
                     const fileObj = this.createNFOFile(xmlContent, fileName);
                     const initRes = await ReqClass.sampleInitUpload({ filename: fileName, filesize: fileObj.size, cid: targetCid });
@@ -248,18 +259,21 @@ window.PornNFOGenerator = class PornNFOGenerator {
                         }
                         this.hasNFOInCloud = true;
                         this.updateButtonUI('cloud_exists');
-                        if (window.PornBookmark) window.PornBookmark.setTempBtnState(btnNode, '生成 NFO', '直传成功', '#67c23a');
+                        // [MOD] 调用专属提示并对齐文案
+                        this.setTempBtnState(btnNode, '生成 NFO', '上传成功', '#67c23a');
                     } else {
                         throw new Error(initRes?.error_msg || "获取115上传凭证失败");
                     }
                 } catch (e) {
                     console.error("[PornNFO] 上传失败:", e);
                     alert("NFO 直传网盘失败: " + e.message);
-                    if (window.PornBookmark) window.PornBookmark.setTempBtnState(btnNode, '生成 NFO', '直传失败', '#f56c6c');
+                    // [MOD] 调用专属提示
+                    this.setTempBtnState(btnNode, '生成 NFO', '上传失败', '#f56c6c');
                 }
             } else {
                 alert("无法直传：请先等待界面匹配出 115 影片归档目录！");
-                if (window.PornBookmark) window.PornBookmark.setTempBtnState(btnNode, '生成 NFO', '无目标目录', '#e6a23c');
+                // [MOD] 调用专属提示
+                this.setTempBtnState(btnNode, '生成 NFO', '无目标目录', '#e6a23c');
             }
         }
     }
