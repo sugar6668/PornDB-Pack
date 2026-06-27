@@ -95,7 +95,7 @@ window.PornParser = class PornParser {
      * 解析单个影片详情页面信息
      */
     static parseWestDetails(doc) {
-        let details = { matchPrefix: '', baseAlpha: '', dateStr: '', titlePart: '', titleKeyword: '', fullTitle: '', maker: '', series: '', actor: 'Unknown_Actor', actors: [], url: location.href, coverUrl: '', isValid: false };
+        let details = { matchPrefix: '', baseAlpha: '', dateStr: '', titlePart: '', titleKeyword: '', fullTitle: '', maker: '', series: '', actor: 'Unknown_Actor', actors: [], tags: [], plot: '', url: location.href, coverUrl: '', isValid: false };
         try {
             // 优先从页面 h1 获取最纯净的原始标题 (对齐瀑布流逻辑)
             const h1 = doc.querySelector('h1');
@@ -191,6 +191,15 @@ window.PornParser = class PornParser {
                 if (videoEl && videoEl.getAttribute('poster')) finalImg = videoEl.getAttribute('poster');
             }
             details.coverUrl = finalImg;
+
+            // [ADD] 抓取标签与简介，供 NFO 生成使用
+            const tagNodes = doc.querySelectorAll('a[href*="/tags/"]');
+            tagNodes.forEach(n => {
+                const txt = n.textContent.trim();
+                if (txt && !details.tags.includes(txt)) details.tags.push(txt);
+            });
+            const descMeta = doc.querySelector('meta[name="description"]');
+            if (descMeta) details.plot = descMeta.getAttribute('content').trim();
 
             if (details.dateStr && details.titlePart) details.isValid = true;
 

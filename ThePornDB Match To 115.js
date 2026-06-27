@@ -697,6 +697,7 @@
         }
         if (window.PornBookmark) window.PornBookmark.ensureButtonExists();
         if (window.PornSubtitle) window.PornSubtitle.ensureButtonExists();
+        if (window.PornNFOGenerator) window.PornNFOGenerator.ensureButtonExists();
         if (window.PornFavorites) { // [ADD] 初始与增量挂载喜爱图标
             window.PornFavorites.init();
             window.PornFavorites.ensureIcons(document);
@@ -746,6 +747,7 @@
             }
             if (window.PornBookmark) window.PornBookmark.ensureButtonExists();
             if (window.PornSubtitle) window.PornSubtitle.ensureButtonExists();
+            if (window.PornNFOGenerator) window.PornNFOGenerator.ensureButtonExists();
             if (window.PornFavorites) { // [ADD] 初始与增量挂载喜爱图标
                 window.PornFavorites.init();
                 window.PornFavorites.ensureIcons(document);
