@@ -24,6 +24,7 @@
 // @require      https://raw.githubusercontent.com/sugar6668/PornDB-Pack/refs/heads/dev/libs/PornPack.QuickView.lib.js
 // @require      https://raw.githubusercontent.com/sugar6668/PornDB-Pack/refs/heads/dev/libs/PornPack.Bookmark.lib.js
 // @require      https://raw.githubusercontent.com/sugar6668/PornDB-Pack/refs/heads/dev/libs/PornPack.Subtitle.lib.js
+// @require      https://raw.githubusercontent.com/sugar6668/PornDB-Pack/refs/heads/dev/libs/PornPack.NFO.lib.js
 // @require      https://raw.githubusercontent.com/sugar6668/PornDB-Pack/refs/heads/dev/libs/PornPack.Filter.lib.js
 // @require      https://raw.githubusercontent.com/sugar6668/PornDB-Pack/refs/heads/dev/libs/PornPack.Favorites.lib.js
 // @require      https://raw.githubusercontent.com/sugar6668/PornDB-Pack/refs/heads/dev/libs/PornPack.DataManager.lib.js
