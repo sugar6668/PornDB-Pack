@@ -564,7 +564,7 @@
         } else if (action === 'cover') {
             if (btn.classList.contains('has-cover')) { grant.notify({ status: 'warning', msg: '该目录已存在封面' }); return; }
             if (!details.coverUrl) { grant.notify({ status: 'error', msg: '未找到可用封面' }); return; }
-            const coverRes = await req.handleCover(details.coverUrl, cid, `${details.baseAlpha}.${details.dateStr}.jpg`);
+            const coverRes = await req.handleCover(details.coverUrl, cid, `${details.baseAlpha}.${details.dateStr}.cover.jpg`); // 封面命名格式
             const fileId = coverRes?.data?.fileid || coverRes?.data?.file_id || coverRes?.file_id || coverRes?.fileid;
             if (fileId) { await req.filesEdit(cid, fileId); btn.textContent = '已有封面'; btn.classList.add('has-cover'); grant.notify({ status: 'success', msg: '封面上传成功！' }); }
             else { grant.notify({ status: 'error', msg: '封面设为专属可能失败' }); }

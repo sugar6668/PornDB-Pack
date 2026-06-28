@@ -115,7 +115,7 @@ window.PornMagnetUI = class PornMagnetUI {
                             hash: realHash, newName: cleanNewName, rawTitle: item.title || '', cid: targetCid,
                             baseAlpha: details.baseAlpha || '', dateStr: details.dateStr || '',
                             actors: Array.isArray(details.actors) ? details.actors : (details.actor && details.actor !== 'UnknownActor' ? [details.actor] : []),
-                            finalDirArray: ['欧美演员', safeActor, cleanNewName], coverUrl: details.coverUrl, coverName: `${details.baseAlpha}.${details.dateStr}.jpg`,
+                            finalDirArray: ['欧美演员', safeActor, cleanNewName], coverUrl: details.coverUrl, coverName: `${details.baseAlpha}.${details.dateStr}.cover.jpg`, // 封面命名格式
                             time: Date.now(), stage: 'task', retryCount: 0, failCount: 0, lastError: ''
                         });
                     }
