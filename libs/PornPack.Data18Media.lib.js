@@ -1,7 +1,7 @@
 /**
  * @name         PornPack Data18 Media Library
  * @description  Fetches Data18 trailers and preview images for ThePornDB scene detail pages.
- * @version      1.0.2
+ * @version      1.0.3
  */
 
 (function () {
@@ -248,6 +248,8 @@
                     url,
                     headers,
                     timeout,
+                    withCredentials: true,
+                    anonymous: false,
                     onload: (res) => {
                         // 如果返回的是 age gate 页面，重新通过门禁再试
                         if (res.responseText && /ADULTS ONLY|age-restricted|captcha/i.test(res.responseText) && !this._retrying) {
@@ -270,23 +272,31 @@
             });
         },
 
-        // ★ NEW: 通过 age gate
+        // ★ NEW: 通过 age gate（带 cookie 捕获）
         async _passAgeGate() {
+            // 先访问首页获得初始 cookie
+            const homeUrl = DATA18_ORIGIN;
             const captchaUrl = `${DATA18_ORIGIN}/sys/captcha`;
+            await this._cookieFetch(homeUrl);
+            await this._cookieFetch(captchaUrl);
+            this._data18Agreed = true;
+        },
+
+        // 专用于 age gate 的请求（捕获 cookie 但不检查内容）
+        _cookieFetch(url) {
             return new Promise((resolve) => {
                 GM_xmlhttpRequest({
                     method: "GET",
-                    url: captchaUrl,
+                    url: url,
                     headers: {
                         "User-Agent": navigator.userAgent,
-                        "Referer": `${DATA18_ORIGIN}/`
+                        "Referer": DATA18_ORIGIN
                     },
                     timeout: 15000,
-                    onload: (res) => resolve(res),
-                    onerror: () => {
-                        console.warn("[PornData18Media] age gate bypass failed, continuing anyway...");
-                        resolve();
-                    },
+                    withCredentials: true,
+                    anonymous: false,
+                    onload: () => resolve(),
+                    onerror: () => resolve(),
                     ontimeout: () => resolve()
                 });
             });
@@ -327,10 +337,11 @@
                             this.debug("detail url", best.url);
                             this.debug("scene id", best.sceneId);
 
+                            // ★ 关键: 获取场景详情页 — 不要 ajax=true，否则DATA18返回局部片段
                             const detailHtml = await this.fetchFromData18(best.url, {
                                 referer: `${DATA18_ORIGIN}/`,
                                 accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-                                ajax: true
+                                ajax: false
                             });
                             const media = await this.collectMediaFromDetail(detailHtml, best.url, best.sceneId);
                             this.debug("final media", media);
@@ -378,10 +389,11 @@
 
                             // 取第一个结果试
                             const best = results[0];
+                            // ★ 关键: 详情页不要 ajax=true
                             const detailHtml = await this.fetchFromData18(best.url, {
                                 referer: `${DATA18_ORIGIN}/`,
                                 accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-                                ajax: true
+                                ajax: false
                             });
                             const media = await this.collectMediaFromDetail(detailHtml, best.url, best.sceneId);
                             if (media.videoUrl || media.images.length) {
@@ -518,27 +530,56 @@
             const source = this.normalizeHtml(html);
             const ids = { network_id: "", site_id: "" };
 
-            // 提取 network_id: studio=338
-            const networkMatch = source.match(/\bstudio\s*[=:]\s*["']?(\d{2,6})["']?/i);
-            if (networkMatch) ids.network_id = networkMatch[1];
+            // 尝试多重模式提取 network_id (studio)
 
-            // 提取 site_id: dosite=2984
-            const siteMatch = source.match(/\bdosite\s*[=:]\s*["']?(\d{2,6})["']?/i);
-            if (siteMatch) ids.site_id = siteMatch[1];
+            // 模式1: JS 中 class 名 "changepornstarnavX_studio_3_338"
+            let m = source.match(/changepornstarnav\d+_studio_\d+_(\d{2,6})/i);
+            if (m) ids.network_id = m[1];
 
-            // 备选: 从 bdn.dt18.com URL 反向提取
-            if (!ids.network_id || !ids.site_id) {
-                const bdnMatch = source.match(/https?:\/\/bdn\.dt18\.com\/(\d+)\/(\d+)\/\d+\/t\d+\.jpg/i);
-                if (bdnMatch) {
-                    ids.network_id = ids.network_id || bdnMatch[1];
-                    ids.site_id = ids.site_id || bdnMatch[2];
-                }
+            // 模式2: PHP URL 参数 "studio=338" 或 "&studio=338"
+            if (!ids.network_id) {
+                m = source.match(/[?&]studio=(\d{2,6})(?:&|$|")/i);
+                if (m) ids.network_id = m[1];
             }
 
-            // 备选: 从 network/studios 页面链接中提取
+            // 模式3: 随意上下文中的 " studio\s*=\s*338"
             if (!ids.network_id) {
-                const navMatch = source.match(/changenav.*?studio[_-](\d+)/i);
-                if (navMatch) ids.network_id = navMatch[1];
+                m = source.match(/\bstudio[=:]\s*(\d{2,6})\b/i);
+                if (m) ids.network_id = m[1];
+            }
+
+            // 模式4: 导航链接 "/studios/xxx" 的父级 URL
+            if (!ids.network_id) {
+                m = source.match(/\/sys\/nav_scenes\.php[^"']*?studio=(\d{2,6})/i);
+                if (m) ids.network_id = m[1];
+            }
+
+            // 模式5: 从 CDN URL 中提取 network_id
+            // bdn.dt18.com/338/2984/381694/t01.jpg
+            let bdnM = source.match(/https?:\/\/bdn\.dt18\.com\/(\d+)\/(\d+)\//i);
+            if (bdnM) {
+                ids.network_id = ids.network_id || bdnM[1];
+                ids.site_id = ids.site_id || bdnM[2];
+            }
+
+            // 尝试多重模式提取 site_id
+
+            // 模式A: "dosite=2984"
+            if (!ids.site_id) {
+                m = source.match(/[?&]dosite=(\d{2,6})(?:&|$|")/i);
+                if (m) ids.site_id = m[1];
+            }
+
+            // 模式B: "/g/scenes/1381694/2984"
+            if (!ids.site_id) {
+                m = source.match(/\/g\/scenes\/\d+\/(\d{2,6})(?:[?#"]|$)/i);
+                if (m) ids.site_id = m[1];
+            }
+
+            // 模式C: 站点名被 filter 或 nav 引用
+            if (!ids.site_id) {
+                m = source.match(/\bsite=(\d{2,6})\b/i);
+                if (m) ids.site_id = m[1];
             }
 
             return ids;
@@ -559,20 +600,55 @@
                 }
             };
 
+            // PHP 接口参数中的 scene ID（优先级高，可能是内部 ID）
             addMatches(/\/sys\/(?:media_photos|media_thumbs|media_galleries)\.php\?[^"'<>\s]*\bscene=(\d{5,})/gi);
             addMatches(/\/sys\/user\.php\?[^"'<>\s]*(?:\bid=|\bscene=|\bitem=)(\d{5,})/gi);
             addMatches(/\/sys\/media_big\.php\?[^"'<>\s]*\bsc=(\d{5,})/gi);
             addMatches(/\/sys\/media_tools\.php\?[^"'<>\s]*\bsc=(\d{5,})/gi);
-            addMatches(/\b(?:scene|id|item|sc)\s*[:=]\s*["']?(\d{5,})/gi);
+            // 脚本中的 scene/id/item/sc 参数
             addMatches(/\b(?:scene|id|item|sc)=(\d{5,})/gi);
+            // CDN 路径中的数字 ID（media/t/5/scenes/1/16/381694.jpg）
+            addMatches(/\/media\/(?:t\/\d+\/)?scenes\/\d+\/\d+\/(\d{5,})\.(?:jpg|png|webp)/gi);
+            // bdn 图片中的 ID
+            addMatches(/\/\d+\/\d+\/(\d{5,})\/t\d{2}\.jpg/gi);
 
             const pageId = String(pageSceneId || this.extractPageSceneId(detailUrl));
+
+            // 统计各 ID 出现次数
             const counts = new Map();
             candidates.forEach((id) => counts.set(id, (counts.get(id) || 0) + 1));
 
+            // 排序策略：
+            // 1. 优先选非 pageId 的 ID（页面公开ID ≠ 内部ID）
+            // 2. 如果只有 pageId，用 pageId
+            // 3. 选出现次数最多的
             const sorted = [...counts.entries()]
-                .sort((a, b) => (a[0] === pageId ? 1 : 0) - (b[0] === pageId ? 1 : 0) || b[1] - a[1]);
-            return sorted[0] ? sorted[0][0] : pageId;
+                .sort((a, b) => {
+                    const aIsPage = a[0] === pageId;
+                    const bIsPage = b[0] === pageId;
+                    // 如果有多个候选，优先选非网页ID的内部ID
+                    if (candidates.length > 1) {
+                        if (aIsPage && !bIsPage) return 1;  // a 是页面ID → 排后
+                        if (!aIsPage && bIsPage) return -1; // b 是页面ID → 排后
+                    }
+                    // 都不是或都是页面ID → 按出现次数降序
+                    return b[1] - a[1];
+                });
+
+            // 获取选中的 ID
+            let chosen = sorted[0] ? sorted[0][0] : pageId;
+
+            // 二次验证：如果选中了页面ID，但存在另一个不同长度的内部ID，用内部ID
+            if (chosen === pageId && candidates.length > 1) {
+                const nonPageCandidates = candidates.filter(id => id !== pageId);
+                if (nonPageCandidates.length) {
+                    // 选最短的那个（通常内部ID比页面ID短）
+                    nonPageCandidates.sort((a, b) => a.length - b.length || (counts.get(b) || 0) - (counts.get(a) || 0));
+                    chosen = nonPageCandidates[0];
+                }
+            }
+
+            return chosen;
         },
 
         extractCurrentPhotoId(html, detailUrl) {
