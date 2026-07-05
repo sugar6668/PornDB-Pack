@@ -1,7 +1,7 @@
 /**
  * @name         PornPack Data18 Media Library
  * @description  Fetches Data18 trailers and preview images for ThePornDB scene detail pages.
- * @version      1.0.1
+ * @version      1.0.2
  */
 
 (function () {
@@ -18,6 +18,10 @@
     const unique = (items) => [...new Set(items.filter(Boolean))];
 
     const Data18Media = {
+        // ★ 修复: 持久化 age gate 状态, 防止重复触发
+        _data18Agreed: false,
+        _retrying: false,
+
         async ensurePanel(doc = document) {
             try {
                 if (!doc || !doc.querySelector) return;
@@ -120,21 +124,95 @@
             return title.length >= 3 ? [title] : [];
         },
 
+        // ★ FIX: 修正 keyfull 参数格式, 不加 scene 也能搜
         buildSearchUrl(keyword) {
             const clean = safeString(keyword);
-            const keyfull = clean.toLowerCase().replace(/\s+/g, "--");
-            const params = new URLSearchParams({
-                index: "",
-                key: clean,
-                key2: clean,
-                keyfull,
-                t: "0",
-                b: "1",
-                page: "1",
-                back: "undefined",
-                scenesource: "1"
-            });
+            const keyfull = clean.toLowerCase(); // 保持原样，不要转 --
+            const params = new URLSearchParams();
+            params.set("index", "");
+            params.set("key", clean);
+            params.set("key2", clean);
+            params.set("keyfull", keyfull);
+            params.set("t", "0");
+            params.set("b", "1");
+            params.set("page", "1");
+            params.set("back", `${DATA18_ORIGIN}/scenes`);
+            params.set("scenesource", "1");
             return `${DATA18_ORIGIN}/sys/live.php?${params.toString()}`;
+        },
+
+        // ★ FIX: 完整重写 fetchFromData18, 增加 age gate 自动通过
+        async fetchFromData18(url, options = {}) {
+            const {
+                method = "GET",
+                referer = `${DATA18_ORIGIN}/`,
+                accept = "text/html, */*; q=0.01",
+                ajax = false,
+                returnResponse = false,
+                timeout = 20000
+            } = options;
+
+            // 首次调用时先通过 age gate
+            if (!this._data18Agreed) {
+                await this._passAgeGate();
+                this._data18Agreed = true;
+            }
+
+            return new Promise((resolve, reject) => {
+                const headers = {
+                    "User-Agent": navigator.userAgent,
+                    "Accept": accept,
+                    "Referer": referer
+                };
+                if (ajax) headers["X-Requested-With"] = "XMLHttpRequest";
+
+                GM_xmlhttpRequest({
+                    method,
+                    url,
+                    headers,
+                    timeout,
+                    onload: (res) => {
+                        // 如果返回的是 age gate 页面，重新通过门禁再试
+                        if (res.responseText && /ADULTS ONLY|age-restricted|captcha/i.test(res.responseText) && !this._retrying) {
+                            this._retrying = true;
+                            this._data18Agreed = false;
+                            this.fetchFromData18(url, options).then(resolve).catch(reject);
+                            return;
+                        }
+                        this._retrying = false;
+                        if (returnResponse) { resolve(res); return; }
+                        if (res.status >= 200 && res.status < 300) {
+                            resolve(res.responseText || "");
+                        } else {
+                            reject(new Error(`Data18 HTTP Error: ${res.status}`));
+                        }
+                    },
+                    onerror: () => reject(new Error("Data18 request error")),
+                    ontimeout: () => reject(new Error("Data18 request timeout"))
+                });
+            });
+        },
+
+        // ★ NEW: 通过 age gate
+        async _passAgeGate() {
+            const captchaUrl = `${DATA18_ORIGIN}/sys/captcha`;
+            return new Promise((resolve) => {
+                GM_xmlhttpRequest({
+                    method: "GET",
+                    url: captchaUrl,
+                    headers: {
+                        "User-Agent": navigator.userAgent,
+                        "Referer": `${DATA18_ORIGIN}/`
+                    },
+                    timeout: 15000,
+                    onload: (res) => resolve(res),
+                    onerror: () => {
+                        console.warn("[PornData18Media] age gate bypass failed, continuing anyway...");
+                        resolve();
+                    },
+                    ontimeout: () => resolve()
+                });
+            });
         },
 
         async findMedia(details) {
@@ -219,8 +297,8 @@
         normalizeTitle(value) {
             return safeString(value)
                 .toLowerCase()
-                .replace(/[\u2018\u2019]/g, "'")
-                .replace(/[\u201c\u201d]/g, '"')
+                .replace(/[‘’]/g, "'")
+                .replace(/[“”]/g, '"')
                 .replace(/&/g, "and")
                 .replace(/[^a-z0-9]+/g, " ")
                 .trim();
@@ -237,6 +315,7 @@
             return results.filter((item) => this.isExactTitleMatch(item, details));
         },
 
+        // ★ FIX: 完整替换 collectMediaFromDetail, 优先使用 bdn.dt18.com 构造图片 URL
         async collectMediaFromDetail(html, detailUrl, pageSceneId = "") {
             const direct = this.extractMedia(html, detailUrl);
             this.debug("direct media", direct);
@@ -250,10 +329,26 @@
             const photoIds = this.extractPhotoIds(html, detailUrl);
             this.debug("photo ids", photoIds);
 
+            // ★ 提取 network_id + site_id，优先通过 bdn.dt18.com 构造图片
+            const ids = this.extractNetworkSiteIds(html);
+            this.debug("network/site ids", ids);
+
+            // ★ 直接从 bdn.dt18.com URL 模式构造预览图
+            const bdnImages = [];
+            if (ids.network_id && ids.site_id && mediaId) {
+                const photoCount = this.extractPhotoCount(html) || 8;
+                for (let i = 1; i <= Math.min(photoCount, IMAGE_PROBE_MAX); i++) {
+                    bdnImages.push(
+                        `https://bdn.dt18.com/${ids.network_id}/${ids.site_id}/${mediaId}/t${String(i).padStart(2, "0")}.jpg`
+                    );
+                }
+            }
+            this.debug("bdn constructed images", bdnImages);
+
+            // 从 AJAX 接口获取图片 (可能被 age gate 阻挡，作为备选)
             const interfaceImages = mediaId
                 ? await this.fetchPhotoInterfaceImages({ mediaId, photoIds, currentPhotoId, detailUrl, html })
                 : [];
-            this.debug("photo interface images", interfaceImages);
 
             const interfaceVideo = mediaId
                 ? await this.fetchTrailerInterfaceVideo({ mediaId, currentPhotoId, detailUrl })
@@ -264,19 +359,53 @@
             this.debug("lazy urls", lazyUrls);
             const lazyMedia = await this.fetchLazyMedia(lazyUrls, detailUrl);
 
-            const fallbackImages = interfaceImages.length
+            // ★ 合并：bdb 构造优先 + AJAX 接口图片 + fallback
+            const allImages = unique([...bdnImages, ...interfaceImages]);
+
+            const fallbackImages = allImages.length
                 ? []
                 : await this.filterExistingImages(this.buildImageCandidates([...direct.images, ...lazyMedia.images]), detailUrl);
             this.debug("fallback tNN images", fallbackImages);
 
             const videos = unique([interfaceVideo, ...direct.videos, ...lazyMedia.videos]);
-            const images = this.sortImages(unique([...interfaceImages, ...fallbackImages]));
+            const images = this.sortImages(unique([...allImages, ...fallbackImages]));
 
             return {
                 mediaId,
                 videoUrl: videos[0] || "",
                 images
             };
+        },
+
+        // ★ NEW: 从 HTML 中提取 network_id (studio) 和 site_id
+        extractNetworkSiteIds(html) {
+            const source = this.normalizeHtml(html);
+            const ids = { network_id: "", site_id: "" };
+
+            // 提取 network_id: studio=338
+            const networkMatch = source.match(/\bstudio\s*[=:]\s*["']?(\d{2,6})["']?/i);
+            if (networkMatch) ids.network_id = networkMatch[1];
+
+            // 提取 site_id: dosite=2984
+            const siteMatch = source.match(/\bdosite\s*[=:]\s*["']?(\d{2,6})["']?/i);
+            if (siteMatch) ids.site_id = siteMatch[1];
+
+            // 备选: 从 bdn.dt18.com URL 反向提取
+            if (!ids.network_id || !ids.site_id) {
+                const bdnMatch = source.match(/https?:\/\/bdn\.dt18\.com\/(\d+)\/(\d+)\/\d+\/t\d+\.jpg/i);
+                if (bdnMatch) {
+                    ids.network_id = ids.network_id || bdnMatch[1];
+                    ids.site_id = ids.site_id || bdnMatch[2];
+                }
+            }
+
+            // 备选: 从 network/studios 页面链接中提取
+            if (!ids.network_id) {
+                const navMatch = source.match(/changenav.*?studio[_-](\d+)/i);
+                if (navMatch) ids.network_id = navMatch[1];
+            }
+
+            return ids;
         },
 
         extractPageSceneId(url) {
@@ -887,45 +1016,8 @@
             old.remove();
         },
 
-        fetchFromData18(url, options = {}) {
-            const {
-                method = "GET",
-                referer = `${DATA18_ORIGIN}/`,
-                accept = "text/html, */*; q=0.01",
-                ajax = false,
-                returnResponse = false,
-                timeout = 20000
-            } = options;
-
-            return new Promise((resolve, reject) => {
-                const headers = {
-                    "User-Agent": navigator.userAgent,
-                    "Accept": accept,
-                    "Referer": referer
-                };
-                if (ajax) headers["X-Requested-With"] = "XMLHttpRequest";
-
-                GM_xmlhttpRequest({
-                    method,
-                    url,
-                    headers,
-                    timeout,
-                    onload: (res) => {
-                        if (returnResponse) {
-                            resolve(res);
-                            return;
-                        }
-                        if (res.status >= 200 && res.status < 300) {
-                            resolve(res.responseText || "");
-                        } else {
-                            reject(new Error(`Data18 HTTP Error: ${res.status}`));
-                        }
-                    },
-                    onerror: () => reject(new Error("Data18 request error")),
-                    ontimeout: () => reject(new Error("Data18 request timeout"))
-                });
-            });
-        },
+        // fetchFromData18 — FIXED VERSION (已在上方定义)
+        // fetchFromData18, _passAgeGate, extractNetworkSiteIds are above
 
         getCache(key) {
             if (typeof GM_getValue !== "function") return null;
