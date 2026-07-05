@@ -68,7 +68,8 @@
 
         getPageKey(details, doc = document) {
             const href = doc.location && doc.location.href ? doc.location.href : location.href;
-            return safeString(details.matchPrefix || details.fullTitle || href);
+            const title = this.getSearchTitle(details);
+            return safeString(title ? `title_${title}` : href);
         },
 
         createPanel(doc, key) {
@@ -110,16 +111,13 @@
             if (node) node.textContent = text;
         },
 
-        buildSearchKeywords(details) {
-            const raw = [
-                details.fullTitle,
-                [details.actor, details.titleKeyword].filter(Boolean).join(" "),
-                details.titleKeyword,
-                details.matchPrefix,
-                [details.baseAlpha, details.dateStr].filter(Boolean).join(" ")
-            ];
+        getSearchTitle(details) {
+            return safeString(details && details.titlePart);
+        },
 
-            return unique(raw.map(safeString).filter((value) => value.length >= 3));
+        buildSearchKeywords(details) {
+            const title = this.getSearchTitle(details);
+            return title.length >= 3 ? [title] : [];
         },
 
         buildSearchUrl(keyword) {
@@ -155,30 +153,33 @@
                     const results = this.parseSearchResults(searchHtml);
                     this.debug("search results", results);
 
-                    const best = this.pickBestResult(results, details);
-                    this.debug("best result", best);
-                    if (!best || !best.url) continue;
+                    const matchedResults = this.pickExactTitleResults(results, details);
+                    this.debug("exact title results", matchedResults);
+                    if (!matchedResults.length) continue;
 
-                    this.debug("best detail url", best.url);
-                    this.debug("page scene id", best.sceneId);
+                    for (const best of matchedResults) {
+                        this.debug("best detail url", best.url);
+                        this.debug("page scene id", best.sceneId);
 
-                    const detailHtml = await this.fetchFromData18(best.url, {
-                        referer: `${DATA18_ORIGIN}/`,
-                        accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-                        ajax: true
-                    });
-                    const media = await this.collectMediaFromDetail(detailHtml, best.url, best.sceneId);
-                    this.debug("final media", media);
+                        const detailHtml = await this.fetchFromData18(best.url, {
+                            referer: `${DATA18_ORIGIN}/`,
+                            accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                            ajax: true
+                        });
+                        const media = await this.collectMediaFromDetail(detailHtml, best.url, best.sceneId);
+                        this.debug("final media", media);
 
-                    if (media.videoUrl || media.images.length) {
-                        return {
-                            keyword,
-                            sourceUrl: best.url,
-                            sceneId: best.sceneId,
-                            mediaId: media.mediaId,
-                            videoUrl: media.videoUrl,
-                            images: media.images
-                        };
+                        if (media.videoUrl || media.images.length) {
+                            return {
+                                keyword,
+                                searchTitle: this.getSearchTitle(details),
+                                sourceUrl: best.url,
+                                sceneId: best.sceneId,
+                                mediaId: media.mediaId,
+                                videoUrl: media.videoUrl,
+                                images: media.images
+                            };
+                        }
                     }
                 } catch (err) {
                     console.warn("[PornData18Media] search failed:", keyword, err);
@@ -215,30 +216,25 @@
                 .filter(Boolean);
         },
 
-        scoreResult(result, details) {
-            const text = `${result.text} ${result.url}`.toLowerCase();
-            let score = 0;
-
-            const fullTitle = safeString(details.fullTitle).toLowerCase();
-            const titleKeyword = safeString(details.titleKeyword).toLowerCase();
-            const actor = safeString(details.actor).toLowerCase();
-            const dateStr = safeString(details.dateStr).toLowerCase();
-            const baseAlpha = safeString(details.baseAlpha).toLowerCase();
-
-            if (fullTitle && text.includes(fullTitle)) score += 60;
-            if (titleKeyword && text.includes(titleKeyword)) score += 40;
-            if (actor && text.includes(actor)) score += 25;
-            if (dateStr && text.includes(dateStr)) score += 20;
-            if (baseAlpha && text.includes(baseAlpha)) score += 20;
-
-            return score;
+        normalizeTitle(value) {
+            return safeString(value)
+                .toLowerCase()
+                .replace(/[\u2018\u2019]/g, "'")
+                .replace(/[\u201c\u201d]/g, '"')
+                .replace(/&/g, "and")
+                .replace(/[^a-z0-9]+/g, " ")
+                .trim();
         },
 
-        pickBestResult(results, details) {
-            if (!results || !results.length) return null;
-            return results
-                .map((item) => ({ ...item, score: this.scoreResult(item, details) }))
-                .sort((a, b) => b.score - a.score)[0] || null;
+        isExactTitleMatch(result, details) {
+            const title = this.normalizeTitle(this.getSearchTitle(details));
+            const text = this.normalizeTitle(result && result.text);
+            return Boolean(title && text && title === text);
+        },
+
+        pickExactTitleResults(results, details) {
+            if (!results || !results.length) return [];
+            return results.filter((item) => this.isExactTitleMatch(item, details));
         },
 
         async collectMediaFromDetail(html, detailUrl, pageSceneId = "") {
