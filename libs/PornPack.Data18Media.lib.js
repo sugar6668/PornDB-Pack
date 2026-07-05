@@ -1,7 +1,7 @@
 /**
  * @name         PornPack Data18 Media Library
  * @description  Fetches Data18 trailers and preview images for ThePornDB scene detail pages.
- * @version      1.0.0
+ * @version      1.0.1
  */
 
 (function () {
@@ -10,6 +10,9 @@
     const CACHE_PREFIX = "data18_media_v1_";
     const CACHE_TTL = 7 * 24 * 60 * 60 * 1000;
     const DATA18_ORIGIN = "https://www.data18.com";
+    const IMAGE_PROBE_MAX = 40;
+    const IMAGE_PROBE_STOP_MISSES = 5;
+    const DEBUG = false;
 
     const safeString = (value) => String(value || "").replace(/\s+/g, " ").trim();
     const unique = (items) => [...new Set(items.filter(Boolean))];
@@ -119,23 +122,56 @@
             return unique(raw.map(safeString).filter((value) => value.length >= 3));
         },
 
+        buildSearchUrl(keyword) {
+            const clean = safeString(keyword);
+            const keyfull = clean.toLowerCase().replace(/\s+/g, "--");
+            const params = new URLSearchParams({
+                index: "",
+                key: clean,
+                key2: clean,
+                keyfull,
+                t: "0",
+                b: "1",
+                page: "1",
+                back: "undefined",
+                scenesource: "1"
+            });
+            return `${DATA18_ORIGIN}/sys/live.php?${params.toString()}`;
+        },
+
         async findMedia(details) {
             const keywords = this.buildSearchKeywords(details);
 
             for (const keyword of keywords) {
                 try {
-                    const searchUrl = `${DATA18_ORIGIN}/sys/live.php?index=&key=${encodeURIComponent(keyword)}&t=0&b=1&page=1`;
-                    const searchHtml = await this.fetchFromData18(searchUrl);
+                    const searchUrl = this.buildSearchUrl(keyword);
+                    this.debug("search url", searchUrl);
+
+                    const searchHtml = await this.fetchFromData18(searchUrl, {
+                        referer: `${DATA18_ORIGIN}/`,
+                        accept: "text/html, */*; q=0.01",
+                        ajax: true
+                    });
                     const results = this.parseSearchResults(searchHtml);
+                    this.debug("search results", results);
+
                     const best = this.pickBestResult(results, details);
+                    this.debug("best result", best);
                     if (!best || !best.url) continue;
 
-                    const detailHtml = await this.fetchFromData18(best.url);
-                    const media = this.parseMedia(detailHtml);
+                    const detailHtml = await this.fetchFromData18(best.url, {
+                        referer: `${DATA18_ORIGIN}/`,
+                        accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                        ajax: true
+                    });
+                    const media = await this.collectMediaFromDetail(detailHtml, best.url);
+                    this.debug("final media", media);
+
                     if (media.videoUrl || media.images.length) {
                         return {
                             keyword,
                             sourceUrl: best.url,
+                            sceneId: best.sceneId,
                             videoUrl: media.videoUrl,
                             images: media.images
                         };
@@ -150,15 +186,25 @@
 
         parseSearchResults(html) {
             const dom = new DOMParser().parseFromString(String(html || ""), "text/html");
-            const links = [...dom.querySelectorAll('a[href*="/scenes/"], a[href*="/movies/"], a[href*="/video/"]')];
+            const links = [...dom.querySelectorAll('a[href*="/scenes/"]')];
+            const seen = new Set();
 
             return links
                 .map((a) => {
                     const href = a.getAttribute("href");
                     if (!href) return null;
 
+                    const url = new URL(href, DATA18_ORIGIN).href;
+                    const match = url.match(/\/scenes\/(\d+)(?:[/?#]|$)/i);
+                    if (!match) return null;
+
+                    const sceneId = match[1];
+                    if (seen.has(sceneId)) return null;
+                    seen.add(sceneId);
+
                     return {
-                        url: new URL(href, DATA18_ORIGIN).href,
+                        url,
+                        sceneId,
                         text: safeString(a.textContent)
                     };
                 })
@@ -191,15 +237,281 @@
                 .sort((a, b) => b.score - a.score)[0] || null;
         },
 
-        parseMedia(html) {
-            const source = String(html || "").replace(/\\\//g, "/");
-            const videos = source.match(/https:\/\/vs\.dt18\.com[^\s"'<>]+?\.mp4(?:\?[^\s"'<>]*)?/gi) || [];
-            const images = source.match(/https:\/\/bdn\.dt18\.com[^\s"'<>]+?t0[1-9]\.jpg(?:\?[^\s"'<>]*)?/gi) || [];
+        async collectMediaFromDetail(html, detailUrl) {
+            const direct = this.extractMedia(html, detailUrl);
+            this.debug("direct media", direct);
+
+            const directCandidates = this.buildImageCandidates(direct.images);
+            this.debug("image candidates", directCandidates);
+            const existingDirectImages = await this.filterExistingImages(directCandidates, detailUrl);
+            this.debug("existing images", existingDirectImages);
+
+            const lazyUrls = this.extractLazyUrls(html, detailUrl);
+            this.debug("lazy urls", lazyUrls);
+            const lazyMedia = await this.fetchLazyMedia(lazyUrls, detailUrl);
+
+            const lazyCandidates = this.buildImageCandidates(lazyMedia.images);
+            const existingLazyImages = lazyCandidates.length ? await this.filterExistingImages(lazyCandidates, detailUrl) : [];
+
+            const videos = unique([...direct.videos, ...lazyMedia.videos]);
+            const images = this.sortImages(unique([...existingDirectImages, ...existingLazyImages]));
 
             return {
-                videoUrl: unique(videos)[0] || "",
-                images: unique(images)
+                videoUrl: videos[0] || "",
+                images
             };
+        },
+
+        parseMedia(html) {
+            const media = this.extractMedia(html, DATA18_ORIGIN);
+            return {
+                videoUrl: media.videos[0] || "",
+                images: this.sortImages(media.images)
+            };
+        },
+
+        extractMedia(html, baseUrl) {
+            const source = this.normalizeHtml(html);
+            const videos = [];
+            const images = [];
+
+            try {
+                const dom = new DOMParser().parseFromString(source, "text/html");
+                dom.querySelectorAll("source[src], video[src]").forEach((node) => {
+                    const url = this.absoluteUrl(node.getAttribute("src"), baseUrl);
+                    if (this.isMp4Url(url)) videos.push(url);
+                });
+                dom.querySelectorAll("img[src]").forEach((node) => {
+                    const url = this.absoluteUrl(node.getAttribute("src"), baseUrl);
+                    if (this.isPreviewImageUrl(url)) images.push(url);
+                });
+            } catch (err) {
+                console.warn("[PornData18Media] DOM media parse failed:", err);
+            }
+
+            const mp4Patterns = [
+                /https?:\/\/vs\.dt18\.com[^\s"'<>\\]+?\.mp4(?:\?[^\s"'<>\\]*)?/gi,
+                /https?:\/\/[^\s"'<>\\]+?\.mp4(?:\?[^\s"'<>\\]*)?/gi
+            ];
+            mp4Patterns.forEach((pattern) => {
+                const matches = source.match(pattern) || [];
+                matches.forEach((url) => {
+                    const normalized = this.cleanUrl(url);
+                    if (this.isMp4Url(normalized)) videos.push(normalized);
+                });
+            });
+
+            const imagePatterns = [
+                /https?:\/\/bdn\.dt18\.com[^\s"'<>\\]+?\/t\d{2}\.jpg(?:\?[^\s"'<>\\]*)?/gi,
+                /https?:\/\/[^\s"'<>\\]+?\/t\d{2}\.jpg(?:\?[^\s"'<>\\]*)?/gi
+            ];
+            imagePatterns.forEach((pattern) => {
+                const matches = source.match(pattern) || [];
+                matches.forEach((url) => {
+                    const normalized = this.cleanUrl(url);
+                    if (this.isPreviewImageUrl(normalized)) images.push(normalized);
+                });
+            });
+
+            return {
+                videos: unique(videos),
+                images: this.sortImages(unique(images))
+            };
+        },
+
+        buildImageCandidates(images) {
+            const candidates = new Set();
+            images.forEach((imageUrl) => {
+                const clean = this.stripQuery(imageUrl);
+                const match = clean.match(/^(.*\/t)(\d{2})(\.jpg)$/i);
+                if (!match) {
+                    candidates.add(imageUrl);
+                    return;
+                }
+
+                for (let i = 1; i <= IMAGE_PROBE_MAX; i++) {
+                    candidates.add(`${match[1]}${String(i).padStart(2, "0")}${match[3]}`);
+                }
+            });
+
+            return this.sortImages([...candidates]);
+        },
+
+        async filterExistingImages(candidates, referer) {
+            const existing = [];
+            let consecutiveMisses = 0;
+
+            for (const url of this.sortImages(unique(candidates))) {
+                const exists = await this.imageExists(url, referer);
+                if (exists) {
+                    existing.push(url);
+                    consecutiveMisses = 0;
+                } else {
+                    consecutiveMisses += 1;
+                    if (existing.length && consecutiveMisses >= IMAGE_PROBE_STOP_MISSES) break;
+                }
+            }
+
+            return this.sortImages(unique(existing));
+        },
+
+        async imageExists(url, referer) {
+            try {
+                const head = await this.fetchFromData18(url, {
+                    method: "HEAD",
+                    referer,
+                    accept: "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
+                    returnResponse: true,
+                    timeout: 10000
+                });
+                if (this.isOkStatus(head.status)) return true;
+                if (head.status && ![403, 405, 0].includes(Number(head.status))) return false;
+            } catch (err) {}
+
+            try {
+                const get = await this.fetchFromData18(url, {
+                    method: "GET",
+                    referer,
+                    accept: "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
+                    returnResponse: true,
+                    timeout: 12000
+                });
+                return this.isOkStatus(get.status);
+            } catch (err) {
+                return false;
+            }
+        },
+
+        extractLazyUrls(html, detailUrl) {
+            const source = this.normalizeHtml(html);
+            const urls = new Set();
+            const attrPattern = /\b(?:href|src|data-url|data-src|data-href)\s*=\s*["']([^"']+)["']/gi;
+            const jsPatterns = [
+                /\b(?:url|ajaxurl)\s*[:=]\s*["']([^"']+)["']/gi,
+                /fetch\(\s*["']([^"']+)["']/gi,
+                /\$\.get\(\s*["']([^"']+)["']/gi,
+                /\$\.ajax\(\s*\{[^}]*\burl\s*:\s*["']([^"']+)["']/gi
+            ];
+
+            const collect = (pattern) => {
+                let match;
+                while ((match = pattern.exec(source))) {
+                    const url = this.absoluteUrl(match[1], detailUrl);
+                    if (this.isLazyMediaUrl(url)) urls.add(url);
+                }
+            };
+
+            collect(attrPattern);
+            jsPatterns.forEach(collect);
+            return [...urls];
+        },
+
+        async fetchLazyMedia(urls, referer) {
+            const videos = [];
+            const images = [];
+
+            for (const url of urls.slice(0, 12)) {
+                try {
+                    const html = await this.fetchFromData18(url, {
+                        referer,
+                        accept: "text/html,application/json,*/*;q=0.8",
+                        ajax: true,
+                        timeout: 15000
+                    });
+                    const media = this.extractMedia(html, url);
+                    videos.push(...media.videos);
+                    images.push(...media.images);
+                } catch (err) {
+                    console.warn("[PornData18Media] lazy request failed:", url, err);
+                }
+            }
+
+            return {
+                videos: unique(videos),
+                images: this.sortImages(unique(images))
+            };
+        },
+
+        isLazyMediaUrl(url) {
+            if (!url || !/^https?:\/\//i.test(url)) return false;
+            let parsed;
+            try {
+                parsed = new URL(url);
+            } catch (err) {
+                return false;
+            }
+
+            const host = parsed.hostname.toLowerCase();
+            if (!/(^|\.)data18\.com$|(^|\.)dt18\.com$/.test(host)) return false;
+
+            const text = `${parsed.pathname} ${parsed.search}`.toLowerCase();
+            return /trailer|preview|photo|photos|image|images|gallery|video|media|scene/.test(text);
+        },
+
+        isPreviewImageUrl(url) {
+            return /^https?:\/\/bdn\.dt18\.com\/.*\/t\d{2}\.jpg(?:\?.*)?$/i.test(url || "");
+        },
+
+        isMp4Url(url) {
+            return /^https?:\/\/[^\s"'<>]+\.mp4(?:\?.*)?$/i.test(url || "");
+        },
+
+        isOkStatus(status) {
+            const code = Number(status);
+            return code >= 200 && code < 300;
+        },
+
+        sortImages(images) {
+            return [...images].sort((a, b) => this.imageSortKey(a) - this.imageSortKey(b) || String(a).localeCompare(String(b)));
+        },
+
+        imageSortKey(url) {
+            const match = String(url || "").match(/\/t(\d{2})\.jpg/i);
+            return match ? Number(match[1]) : Number.MAX_SAFE_INTEGER;
+        },
+
+        normalizeHtml(html) {
+            return this.decodeHtmlEntities(String(html || ""))
+                .replace(/\\\//g, "/")
+                .replace(/\\u002[fF]/g, "/")
+                .replace(/\\x2[fF]/g, "/");
+        },
+
+        decodeHtmlEntities(value) {
+            const raw = String(value || "");
+            const named = raw
+                .replace(/&amp;/g, "&")
+                .replace(/&quot;/g, '"')
+                .replace(/&#39;|&apos;/g, "'")
+                .replace(/&lt;/g, "<")
+                .replace(/&gt;/g, ">");
+
+            return named.replace(/&#(x?[0-9a-f]+);/gi, (all, code) => {
+                const value = code.charAt(0).toLowerCase() === "x"
+                    ? parseInt(code.slice(1), 16)
+                    : parseInt(code, 10);
+                return Number.isFinite(value) ? String.fromCodePoint(value) : all;
+            });
+        },
+
+        cleanUrl(url) {
+            return this.decodeHtmlEntities(String(url || ""))
+                .replace(/\\\//g, "/")
+                .replace(/\\u002[fF]/g, "/")
+                .trim();
+        },
+
+        stripQuery(url) {
+            return String(url || "").split("?")[0];
+        },
+
+        absoluteUrl(url, baseUrl) {
+            if (!url) return "";
+            try {
+                return new URL(this.cleanUrl(url), baseUrl || DATA18_ORIGIN).href;
+            } catch (err) {
+                return "";
+            }
         },
 
         renderMedia(panel, media) {
@@ -312,18 +624,34 @@
             old.remove();
         },
 
-        fetchFromData18(url) {
+        fetchFromData18(url, options = {}) {
+            const {
+                method = "GET",
+                referer = `${DATA18_ORIGIN}/`,
+                accept = "text/html, */*; q=0.01",
+                ajax = false,
+                returnResponse = false,
+                timeout = 20000
+            } = options;
+
             return new Promise((resolve, reject) => {
+                const headers = {
+                    "User-Agent": navigator.userAgent,
+                    "Accept": accept,
+                    "Referer": referer
+                };
+                if (ajax) headers["X-Requested-With"] = "XMLHttpRequest";
+
                 GM_xmlhttpRequest({
-                    method: "GET",
+                    method,
                     url,
-                    headers: {
-                        "User-Agent": navigator.userAgent,
-                        "Accept": "text/html, */*; q=0.01",
-                        "X-Requested-With": "XMLHttpRequest"
-                    },
-                    timeout: 20000,
+                    headers,
+                    timeout,
                     onload: (res) => {
+                        if (returnResponse) {
+                            resolve(res);
+                            return;
+                        }
                         if (res.status >= 200 && res.status < 300) {
                             resolve(res.responseText || "");
                         } else {
@@ -350,6 +678,22 @@
         setCache(key, data) {
             if (typeof GM_setValue !== "function") return;
             GM_setValue(key, { ...data, ts: Date.now() });
+        },
+
+        clearData18Cache() {
+            if (typeof GM_listValues !== "function" || typeof GM_deleteValue !== "function") {
+                console.warn("[PornData18Media] GM cache APIs are unavailable");
+                return 0;
+            }
+
+            const keys = GM_listValues().filter((key) => String(key).startsWith(CACHE_PREFIX));
+            keys.forEach((key) => GM_deleteValue(key));
+            console.info(`[PornData18Media] cleared ${keys.length} Data18 cache item(s)`);
+            return keys.length;
+        },
+
+        debug(label, payload) {
+            if (DEBUG) console.log(`[PornData18Media] ${label}:`, payload);
         },
 
         escapeAttr(str) {
