@@ -12,7 +12,7 @@
     const DATA18_ORIGIN = "https://www.data18.com";
     const IMAGE_PROBE_MAX = 40;
     const IMAGE_PROBE_STOP_MISSES = 5;
-    const DEBUG = false;
+    const DEBUG = true;
 
     const safeString = (value) => String(value || "").replace(/\s+/g, " ").trim();
     const unique = (items) => [...new Set(items.filter(Boolean))];
@@ -159,12 +159,15 @@
                     this.debug("best result", best);
                     if (!best || !best.url) continue;
 
+                    this.debug("best detail url", best.url);
+                    this.debug("page scene id", best.sceneId);
+
                     const detailHtml = await this.fetchFromData18(best.url, {
                         referer: `${DATA18_ORIGIN}/`,
                         accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
                         ajax: true
                     });
-                    const media = await this.collectMediaFromDetail(detailHtml, best.url);
+                    const media = await this.collectMediaFromDetail(detailHtml, best.url, best.sceneId);
                     this.debug("final media", media);
 
                     if (media.videoUrl || media.images.length) {
@@ -172,6 +175,7 @@
                             keyword,
                             sourceUrl: best.url,
                             sceneId: best.sceneId,
+                            mediaId: media.mediaId,
                             videoUrl: media.videoUrl,
                             images: media.images
                         };
@@ -237,29 +241,280 @@
                 .sort((a, b) => b.score - a.score)[0] || null;
         },
 
-        async collectMediaFromDetail(html, detailUrl) {
+        async collectMediaFromDetail(html, detailUrl, pageSceneId = "") {
             const direct = this.extractMedia(html, detailUrl);
             this.debug("direct media", direct);
 
-            const directCandidates = this.buildImageCandidates(direct.images);
-            this.debug("image candidates", directCandidates);
-            const existingDirectImages = await this.filterExistingImages(directCandidates, detailUrl);
-            this.debug("existing images", existingDirectImages);
+            const mediaId = this.extractMediaId(html, detailUrl, pageSceneId);
+            this.debug("internal media id", mediaId);
+
+            const currentPhotoId = this.extractCurrentPhotoId(html, detailUrl);
+            this.debug("current photo id", currentPhotoId);
+
+            const photoIds = this.extractPhotoIds(html, detailUrl);
+            this.debug("photo ids", photoIds);
+
+            const interfaceImages = mediaId
+                ? await this.fetchPhotoInterfaceImages({ mediaId, photoIds, currentPhotoId, detailUrl, html })
+                : [];
+            this.debug("photo interface images", interfaceImages);
+
+            const interfaceVideo = mediaId
+                ? await this.fetchTrailerInterfaceVideo({ mediaId, currentPhotoId, detailUrl })
+                : "";
+            this.debug("player interface video", interfaceVideo);
 
             const lazyUrls = this.extractLazyUrls(html, detailUrl);
             this.debug("lazy urls", lazyUrls);
             const lazyMedia = await this.fetchLazyMedia(lazyUrls, detailUrl);
 
-            const lazyCandidates = this.buildImageCandidates(lazyMedia.images);
-            const existingLazyImages = lazyCandidates.length ? await this.filterExistingImages(lazyCandidates, detailUrl) : [];
+            const fallbackImages = interfaceImages.length
+                ? []
+                : await this.filterExistingImages(this.buildImageCandidates([...direct.images, ...lazyMedia.images]), detailUrl);
+            this.debug("fallback tNN images", fallbackImages);
 
-            const videos = unique([...direct.videos, ...lazyMedia.videos]);
-            const images = this.sortImages(unique([...existingDirectImages, ...existingLazyImages]));
+            const videos = unique([interfaceVideo, ...direct.videos, ...lazyMedia.videos]);
+            const images = this.sortImages(unique([...interfaceImages, ...fallbackImages]));
 
             return {
+                mediaId,
                 videoUrl: videos[0] || "",
                 images
             };
+        },
+
+        extractPageSceneId(url) {
+            const match = String(url || "").match(/\/scenes\/(\d+)(?:[/?#]|$)/i);
+            return match ? match[1] : "";
+        },
+
+        extractMediaId(html, detailUrl, pageSceneId = "") {
+            const source = this.normalizeHtml(html);
+            const candidates = [];
+            const addMatches = (pattern) => {
+                let match;
+                while ((match = pattern.exec(source))) {
+                    if (match[1]) candidates.push(String(match[1]));
+                }
+            };
+
+            addMatches(/\/sys\/(?:media_photos|media_thumbs|media_galleries)\.php\?[^"'<>\s]*\bscene=(\d{5,})/gi);
+            addMatches(/\/sys\/user\.php\?[^"'<>\s]*(?:\bid=|\bscene=|\bitem=)(\d{5,})/gi);
+            addMatches(/\/sys\/media_big\.php\?[^"'<>\s]*\bsc=(\d{5,})/gi);
+            addMatches(/\/sys\/media_tools\.php\?[^"'<>\s]*\bsc=(\d{5,})/gi);
+            addMatches(/\b(?:scene|id|item|sc)\s*[:=]\s*["']?(\d{5,})/gi);
+            addMatches(/\b(?:scene|id|item|sc)=(\d{5,})/gi);
+
+            const pageId = String(pageSceneId || this.extractPageSceneId(detailUrl));
+            const counts = new Map();
+            candidates.forEach((id) => counts.set(id, (counts.get(id) || 0) + 1));
+
+            const sorted = [...counts.entries()]
+                .sort((a, b) => (a[0] === pageId ? 1 : 0) - (b[0] === pageId ? 1 : 0) || b[1] - a[1]);
+            return sorted[0] ? sorted[0][0] : pageId;
+        },
+
+        extractCurrentPhotoId(html, detailUrl) {
+            const fromHash = String(detailUrl || "").match(/#image(\d+)/i);
+            if (fromHash) return fromHash[1];
+
+            const source = this.normalizeHtml(html);
+            const patterns = [
+                /#image(\d{1,5})/i,
+                /\bchange_image\(\s*(\d{1,5})\s*\)/i,
+                /\bpic=(\d{1,5})/i,
+                /\bid=["']?(?:photoimg|image)(\d{1,5})["']?/i
+            ];
+            for (const pattern of patterns) {
+                const match = source.match(pattern);
+                if (match) return match[1];
+            }
+            return "";
+        },
+
+        extractPhotoIds(html, detailUrl) {
+            const source = this.normalizeHtml(html);
+            const ids = new Set();
+            const collect = (pattern) => {
+                let match;
+                while ((match = pattern.exec(source))) {
+                    if (match[1]) ids.add(String(match[1]));
+                }
+            };
+
+            collect(/#image(\d{1,5})/gi);
+            collect(/\bid=["'](?:next2_|next_|newest_|gallery)(\d{1,5})["']/gi);
+            collect(/\bid=["'](\d{1,5})["']/gi);
+            collect(/\bchange_image\(\s*(\d{1,5})\s*\)/gi);
+            collect(/\bpic=(\d{1,5})/gi);
+
+            const current = this.extractCurrentPhotoId(html, detailUrl);
+            if (current) ids.add(current);
+
+            return [...ids].sort((a, b) => Number(a) - Number(b));
+        },
+
+        extractPhotoCount(html) {
+            const source = this.normalizeHtml(html);
+            const photos = source.match(/Photos\s*\[\s*(\d+)\s*\]/i);
+            if (photos) return Number(photos[1]);
+            const imageOf = source.match(/Image\s+\d+\s+of\s+(\d+)/i);
+            return imageOf ? Number(imageOf[1]) : 0;
+        },
+
+        async fetchPhotoInterfaceImages({ mediaId, photoIds, currentPhotoId, detailUrl, html }) {
+            const ids = unique([...(photoIds || []), currentPhotoId].map((id) => String(id || "")).filter(Boolean));
+            const urls = ids.map((pic) => this.buildPhotoInterfaceUrl(mediaId, pic));
+            this.debug("photo interface urls", urls);
+
+            const images = [];
+            for (const pic of ids) {
+                const url = this.buildPhotoInterfaceUrl(mediaId, pic);
+                try {
+                    const responseHtml = await this.fetchFromData18(url, {
+                        referer: detailUrl,
+                        accept: "text/html, */*; q=0.01",
+                        ajax: true,
+                        timeout: 15000
+                    });
+                    const media = this.extractMedia(responseHtml, url);
+                    this.debug("photo interface result", { url, images: media.images });
+                    images.push(...media.images);
+                } catch (err) {
+                    console.warn("[PornData18Media] photo interface failed:", url, err);
+                }
+            }
+
+            const expectedCount = this.extractPhotoCount(html);
+            if (expectedCount && images.length < expectedCount) {
+                const galleryImages = await this.fetchGalleryInterfaceImages(mediaId, detailUrl, ids);
+                images.push(...galleryImages);
+            }
+
+            return this.sortImages(unique(images));
+        },
+
+        async fetchGalleryInterfaceImages(mediaId, detailUrl, knownPhotoIds = []) {
+            const urls = [
+                `${DATA18_ORIGIN}/sys/media_galleries.php?s=1&scene=${encodeURIComponent(mediaId)}`,
+                `${DATA18_ORIGIN}/sys/media_galleries.php?scene=${encodeURIComponent(mediaId)}&s=1&pic=${encodeURIComponent(knownPhotoIds[0] || "")}`
+            ];
+            this.debug("gallery interface urls", urls);
+
+            const images = [];
+            const extraIds = new Set();
+            for (const url of urls) {
+                try {
+                    const html = await this.fetchFromData18(url, {
+                        referer: detailUrl,
+                        accept: "text/html, */*; q=0.01",
+                        ajax: true,
+                        timeout: 15000
+                    });
+                    const media = this.extractMedia(html, url);
+                    images.push(...media.images);
+                    this.extractPhotoIds(html, detailUrl).forEach((id) => {
+                        if (!knownPhotoIds.includes(id)) extraIds.add(id);
+                    });
+                } catch (err) {
+                    console.warn("[PornData18Media] gallery interface failed:", url, err);
+                }
+            }
+
+            for (const id of [...extraIds].sort((a, b) => Number(a) - Number(b)).slice(0, 80)) {
+                const url = this.buildPhotoInterfaceUrl(mediaId, id);
+                try {
+                    const html = await this.fetchFromData18(url, {
+                        referer: detailUrl,
+                        accept: "text/html, */*; q=0.01",
+                        ajax: true,
+                        timeout: 15000
+                    });
+                    images.push(...this.extractMedia(html, url).images);
+                } catch (err) {
+                    console.warn("[PornData18Media] gallery photo failed:", url, err);
+                }
+            }
+
+            return this.sortImages(unique(images));
+        },
+
+        buildPhotoInterfaceUrl(mediaId, pic) {
+            return `${DATA18_ORIGIN}/sys/media_photos.php?s=1&scene=${encodeURIComponent(mediaId)}&pic=${encodeURIComponent(pic)}`;
+        },
+
+        async fetchTrailerInterfaceVideo({ mediaId, currentPhotoId, detailUrl }) {
+            const screen = this.getScreenWidth();
+            const pic = encodeURIComponent(currentPhotoId || "");
+            const encodedMediaId = encodeURIComponent(mediaId);
+            const urls = [
+                `${DATA18_ORIGIN}/sys/user.php?player=1&trailer=1&id=${encodedMediaId}&s=1&photochange=${pic}&screen=${screen}`,
+                `${DATA18_ORIGIN}/sys/user.php?player=1&trailer=1&id=${encodedMediaId}&s=1&photochange=${pic}&big=1&screen=${screen}`,
+                `${DATA18_ORIGIN}/sys/media_big.php?sc=${encodedMediaId}&s=1&movie=0&playtrailer=1`,
+                `${DATA18_ORIGIN}/sys/media_tools.php?sc=${encodedMediaId}&s=1&trailer=1&mscene=`
+            ];
+            this.debug("player interface urls", urls);
+
+            const visited = new Set();
+            for (const url of urls) {
+                const video = await this.fetchVideoFromInterface(url, detailUrl, visited);
+                this.debug("player interface result", { url, video });
+                if (video) return video;
+            }
+            return "";
+        },
+
+        async fetchVideoFromInterface(url, referer, visited) {
+            if (!url || visited.has(url)) return "";
+            visited.add(url);
+
+            try {
+                const html = await this.fetchFromData18(url, {
+                    referer,
+                    accept: "text/html,application/json,*/*;q=0.8",
+                    ajax: true,
+                    timeout: 16000
+                });
+                const media = this.extractMedia(html, url);
+                if (media.videos[0]) return media.videos[0];
+
+                const nextUrls = this.extractNestedVideoUrls(html, url);
+                for (const nextUrl of nextUrls.slice(0, 8)) {
+                    const nested = await this.fetchVideoFromInterface(nextUrl, referer, visited);
+                    if (nested) return nested;
+                }
+            } catch (err) {
+                console.warn("[PornData18Media] trailer interface failed:", url, err);
+            }
+            return "";
+        },
+
+        extractNestedVideoUrls(html, baseUrl) {
+            const source = this.normalizeHtml(html);
+            const urls = new Set();
+            const patterns = [
+                /<(?:iframe|source|video)\b[^>]*\bsrc=["']([^"']+)["']/gi,
+                /\b(?:url|src|file)\s*[:=]\s*["']([^"']+)["']/gi,
+                /fetch\(\s*["']([^"']+)["']/gi
+            ];
+            patterns.forEach((pattern) => {
+                let match;
+                while ((match = pattern.exec(source))) {
+                    const url = this.absoluteUrl(match[1], baseUrl);
+                    if (this.isData18Url(url) && /player|trailer|video|media|user\.php|media_big|\.mp4/i.test(url)) {
+                        urls.add(url);
+                    }
+                }
+            });
+            return [...urls];
+        },
+
+        getScreenWidth() {
+            try {
+                return Math.max(1024, Number(window.innerWidth || screen.width || 1280));
+            } catch (err) {
+                return 1280;
+            }
         },
 
         parseMedia(html) {
@@ -302,7 +557,7 @@
             });
 
             const imagePatterns = [
-                /https?:\/\/bdn\.dt18\.com[^\s"'<>\\]+?\/t\d{2}\.jpg(?:\?[^\s"'<>\\]*)?/gi,
+                /https?:\/\/bdn\.dt18\.com[^\s"'<>\\]+?\.jpg(?:\?[^\s"'<>\\]*)?/gi,
                 /https?:\/\/[^\s"'<>\\]+?\/t\d{2}\.jpg(?:\?[^\s"'<>\\]*)?/gi
             ];
             imagePatterns.forEach((pattern) => {
@@ -432,6 +687,16 @@
             };
         },
 
+        isData18Url(url) {
+            if (!url || !/^https?:\/\//i.test(url)) return false;
+            try {
+                const host = new URL(url).hostname.toLowerCase();
+                return /(^|\.)data18\.com$|(^|\.)dt18\.com$/.test(host);
+            } catch (err) {
+                return false;
+            }
+        },
+
         isLazyMediaUrl(url) {
             if (!url || !/^https?:\/\//i.test(url)) return false;
             let parsed;
@@ -444,12 +709,14 @@
             const host = parsed.hostname.toLowerCase();
             if (!/(^|\.)data18\.com$|(^|\.)dt18\.com$/.test(host)) return false;
 
+            if (/^\/scenes\//i.test(parsed.pathname)) return false;
+
             const text = `${parsed.pathname} ${parsed.search}`.toLowerCase();
             return /trailer|preview|photo|photos|image|images|gallery|video|media|scene/.test(text);
         },
 
         isPreviewImageUrl(url) {
-            return /^https?:\/\/bdn\.dt18\.com\/.*\/t\d{2}\.jpg(?:\?.*)?$/i.test(url || "");
+            return /^https?:\/\/bdn\.dt18\.com\/.*\.jpg(?:\?.*)?$/i.test(url || "");
         },
 
         isMp4Url(url) {
