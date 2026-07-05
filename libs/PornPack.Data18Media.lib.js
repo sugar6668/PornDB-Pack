@@ -1,7 +1,11 @@
 /**
  * @name         PornPack Data18 Media Library
  * @description  Fetches Data18 trailers and preview images for ThePornDB scene detail pages.
+<<<<<<< HEAD
  * @version      1.0.3
+=======
+ * @version      1.0.1
+>>>>>>> parent of 979d6aa (再次修复一版)
  */
 
 (function () {
@@ -18,10 +22,6 @@
     const unique = (items) => [...new Set(items.filter(Boolean))];
 
     const Data18Media = {
-        // ★ 修复: 持久化 age gate 状态, 防止重复触发
-        _data18Agreed: false,
-        _retrying: false,
-
         async ensurePanel(doc = document) {
             try {
                 if (!doc || !doc.querySelector) return;
@@ -178,6 +178,7 @@
             return [...keywords].filter(k => k.length >= 3);
         },
 
+<<<<<<< HEAD
         // ★ FIX: 多级搜索策略 — 先试 live.php 自动补全，再试 slug URL 直连
         buildSearchUrl(keyword, level = 1) {
             const clean = safeString(keyword);
@@ -319,6 +320,25 @@
             });
         },
 
+=======
+        buildSearchUrl(keyword) {
+            const clean = safeString(keyword);
+            const keyfull = clean.toLowerCase().replace(/\s+/g, "--");
+            const params = new URLSearchParams({
+                index: "",
+                key: clean,
+                key2: clean,
+                keyfull,
+                t: "0",
+                b: "1",
+                page: "1",
+                back: "undefined",
+                scenesource: "1"
+            });
+            return `${DATA18_ORIGIN}/sys/live.php?${params.toString()}`;
+        },
+
+>>>>>>> parent of 979d6aa (再次修复一版)
         async findMedia(details) {
             const keywords = this.buildSearchKeywords(details);
             this.debug("search keywords", keywords);
@@ -462,8 +482,8 @@
         normalizeTitle(value) {
             return safeString(value)
                 .toLowerCase()
-                .replace(/[‘’]/g, "'")
-                .replace(/[“”]/g, '"')
+                .replace(/[\u2018\u2019]/g, "'")
+                .replace(/[\u201c\u201d]/g, '"')
                 .replace(/&/g, "and")
                 .replace(/[^a-z0-9]+/g, " ")
                 .trim();
@@ -499,7 +519,6 @@
             return scored.map(s => s.item);
         },
 
-        // ★ FIX: 完整替换 collectMediaFromDetail, 优先使用 bdn.dt18.com 构造图片 URL
         async collectMediaFromDetail(html, detailUrl, pageSceneId = "") {
             const direct = this.extractMedia(html, detailUrl);
             this.debug("direct media", direct);
@@ -513,26 +532,10 @@
             const photoIds = this.extractPhotoIds(html, detailUrl);
             this.debug("photo ids", photoIds);
 
-            // ★ 提取 network_id + site_id，优先通过 bdn.dt18.com 构造图片
-            const ids = this.extractNetworkSiteIds(html);
-            this.debug("network/site ids", ids);
-
-            // ★ 直接从 bdn.dt18.com URL 模式构造预览图
-            const bdnImages = [];
-            if (ids.network_id && ids.site_id && mediaId) {
-                const photoCount = this.extractPhotoCount(html) || 8;
-                for (let i = 1; i <= Math.min(photoCount, IMAGE_PROBE_MAX); i++) {
-                    bdnImages.push(
-                        `https://bdn.dt18.com/${ids.network_id}/${ids.site_id}/${mediaId}/t${String(i).padStart(2, "0")}.jpg`
-                    );
-                }
-            }
-            this.debug("bdn constructed images", bdnImages);
-
-            // 从 AJAX 接口获取图片 (可能被 age gate 阻挡，作为备选)
             const interfaceImages = mediaId
                 ? await this.fetchPhotoInterfaceImages({ mediaId, photoIds, currentPhotoId, detailUrl, html })
                 : [];
+            this.debug("photo interface images", interfaceImages);
 
             const interfaceVideo = mediaId
                 ? await this.fetchTrailerInterfaceVideo({ mediaId, currentPhotoId, detailUrl })
@@ -543,16 +546,13 @@
             this.debug("lazy urls", lazyUrls);
             const lazyMedia = await this.fetchLazyMedia(lazyUrls, detailUrl);
 
-            // ★ 合并：bdb 构造优先 + AJAX 接口图片 + fallback
-            const allImages = unique([...bdnImages, ...interfaceImages]);
-
-            const fallbackImages = allImages.length
+            const fallbackImages = interfaceImages.length
                 ? []
                 : await this.filterExistingImages(this.buildImageCandidates([...direct.images, ...lazyMedia.images]), detailUrl);
             this.debug("fallback tNN images", fallbackImages);
 
             const videos = unique([interfaceVideo, ...direct.videos, ...lazyMedia.videos]);
-            const images = this.sortImages(unique([...allImages, ...fallbackImages]));
+            const images = this.sortImages(unique([...interfaceImages, ...fallbackImages]));
 
             return {
                 mediaId,
@@ -561,6 +561,7 @@
             };
         },
 
+<<<<<<< HEAD
         // ★ NEW: 从 HTML 中提取 network_id (studio) 和 site_id
         extractNetworkSiteIds(html) {
             const source = this.normalizeHtml(html);
@@ -621,6 +622,8 @@
             return ids;
         },
 
+=======
+>>>>>>> parent of 979d6aa (再次修复一版)
         extractPageSceneId(url) {
             const match = String(url || "").match(/\/scenes\/(\d+)(?:[/?#]|$)/i);
             return match ? match[1] : "";
@@ -1345,8 +1348,45 @@
             old.remove();
         },
 
-        // fetchFromData18 — FIXED VERSION (已在上方定义)
-        // fetchFromData18, _passAgeGate, extractNetworkSiteIds are above
+        fetchFromData18(url, options = {}) {
+            const {
+                method = "GET",
+                referer = `${DATA18_ORIGIN}/`,
+                accept = "text/html, */*; q=0.01",
+                ajax = false,
+                returnResponse = false,
+                timeout = 20000
+            } = options;
+
+            return new Promise((resolve, reject) => {
+                const headers = {
+                    "User-Agent": navigator.userAgent,
+                    "Accept": accept,
+                    "Referer": referer
+                };
+                if (ajax) headers["X-Requested-With"] = "XMLHttpRequest";
+
+                GM_xmlhttpRequest({
+                    method,
+                    url,
+                    headers,
+                    timeout,
+                    onload: (res) => {
+                        if (returnResponse) {
+                            resolve(res);
+                            return;
+                        }
+                        if (res.status >= 200 && res.status < 300) {
+                            resolve(res.responseText || "");
+                        } else {
+                            reject(new Error(`Data18 HTTP Error: ${res.status}`));
+                        }
+                    },
+                    onerror: () => reject(new Error("Data18 request error")),
+                    ontimeout: () => reject(new Error("Data18 request timeout"))
+                });
+            });
+        },
 
         getCache(key) {
             if (typeof GM_getValue !== "function") return null;

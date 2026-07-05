@@ -28,13 +28,8 @@
 // @require      https://raw.githubusercontent.com/sugar6668/PornDB-Pack/refs/heads/dev/libs/PornPack.Filter.lib.js
 // @require      https://raw.githubusercontent.com/sugar6668/PornDB-Pack/refs/heads/dev/libs/PornPack.Favorites.lib.js
 // @require      https://raw.githubusercontent.com/sugar6668/PornDB-Pack/refs/heads/dev/libs/PornPack.DataManager.lib.js
-// @require      https://raw.githubusercontent.com/sugar6668/PornDB-Pack/refs/heads/dev/libs/PornPack.Data18Media.lib.js
 // @require      https://github.com/Tampermonkey/utils/raw/d8a4543a5f828dfa8eefb0a3360859b6fe9c3c34/requires/gh_2215_make_GM_xhr_more_parallel_again.js
 // @connect      *
-// @connect      bdn.dt18.com
-// @connect      vs.dt18.com
-// @connect      data18.com
-// @connect      www.data18.com
 // @grant        GM_getResourceText
 // @grant        GM_xmlhttpRequest
 // @grant        GM_deleteValue
@@ -663,7 +658,6 @@
         if (typeof westFingerprintMap !== 'undefined') westFingerprintMap.clear();
 
         ensureWestPanel(document);
-        if (window.PornData18Media) window.PornData18Media.ensurePanel(document);
         bindWaterfallObserver(document);
     };
     window.addEventListener('popstate', handleSPAChange); window.addEventListener('SPA_URL_CHANGE', handleSPAChange);
@@ -695,7 +689,6 @@
 
     const bootDoc = (doc) => {
         ensureWestPanel(doc);
-        if (window.PornData18Media) window.PornData18Media.ensurePanel(doc);
         bindWestActions(doc);
         bindWaterfallObserver(doc);
         if (window.PornDOMTweaks) {
@@ -732,7 +725,7 @@
                 const target = m.target;
                 if (target && target.nodeType === 1) {
                     const className = target.className || '';
-                    if (typeof className === 'string' && (className.includes('qv-static-btn') || className.includes('x-west-match') || className.includes('jav-filter-group') || className.includes('x-data18-'))) {
+                    if (typeof className === 'string' && (className.includes('qv-static-btn') || className.includes('x-west-match') || className.includes('jav-filter-group'))) {
                         continue;
                     }
                 }
@@ -746,7 +739,6 @@
         if (domUpdateTimer) clearTimeout(domUpdateTimer);
         domUpdateTimer = setTimeout(() => {
             ensureWestPanel(document);
-            if (window.PornData18Media) window.PornData18Media.ensurePanel(document);
             // [MOD] 全量极速扫描代替增量扫描：内部通过 href 加锁，扫描 100 张卡片耗时不到 1ms，彻底杜绝漏卡死锁！
             bindWaterfallObserver(document);
             if (window.PornDOMTweaks) {
