@@ -204,3 +204,153 @@ body.west-similar-collapsed .west-similar-grid-node { display: none !important; 
 .pdb-c-blue { color: #0dcaf0; font-weight: bold; }
 .pdb-c-red { color: #dc3545; font-weight: bold; }
 .pdb-c-muted { color: #888; font-weight: bold; }
+
+/* 10. Data18 模块 - 横向媒体条 */
+.x-data18-wrap {
+  margin: 12px 0 20px;
+  padding: 12px;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.04);
+  border: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+.x-data18-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.x-data18-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: #303133;
+}
+
+.x-data18-status {
+  font-size: 12px;
+  color: #606266;
+  opacity: 0.75;
+}
+
+.x-data18-body {
+  width: 100%;
+}
+
+.x-data18-media-strip {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 2px 2px 8px;
+  scroll-snap-type: x proximity;
+  -webkit-overflow-scrolling: touch;
+}
+
+.x-data18-media-strip::-webkit-scrollbar {
+  height: 6px;
+}
+
+.x-data18-media-strip::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.24);
+}
+
+.x-data18-media-card {
+  position: relative;
+  flex: 0 0 auto;
+  width: 180px;
+  height: 108px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #000;
+  cursor: zoom-in;
+  scroll-snap-align: start;
+}
+
+.x-data18-thumb-video,
+.x-data18-thumb-img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.x-data18-play-badge {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 38px;
+  height: 38px;
+  transform: translate(-50%, -50%);
+  border-radius: 999px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  line-height: 1;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.58);
+  pointer-events: none;
+}
+
+.x-data18-video-card:hover .x-data18-play-badge {
+  background: rgba(0, 0, 0, 0.75);
+}
+
+/* 10.1 Data18 模块 - 灯箱 */
+.x-data18-lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 9999999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 28px;
+  background: rgba(0, 0, 0, 0.86);
+}
+
+.x-data18-lightbox-inner {
+  max-width: min(96vw, 1280px);
+  max-height: 92vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.x-data18-lightbox-img {
+  max-width: 96vw;
+  max-height: 92vh;
+  object-fit: contain;
+  border-radius: 8px;
+}
+
+.x-data18-lightbox-video {
+  max-width: 96vw;
+  max-height: 92vh;
+  background: #000;
+  border-radius: 8px;
+}
+
+.x-data18-lightbox-close {
+  position: fixed;
+  top: 16px;
+  right: 20px;
+  z-index: 10000000;
+  width: 38px;
+  height: 38px;
+  border: 0;
+  border-radius: 999px;
+  font-size: 28px;
+  line-height: 38px;
+  color: #fff;
+  background: rgba(255, 255, 255, 0.14);
+  cursor: pointer;
+}
+
+.x-data18-lightbox-close:hover {
+  background: rgba(255, 255, 255, 0.24);
+}
