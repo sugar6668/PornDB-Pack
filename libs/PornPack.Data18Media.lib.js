@@ -115,30 +115,107 @@
             if (node) node.textContent = text;
         },
 
+        // ★ FIX: 剥离工作室前缀，提取纯净标题
+        cleanSearchTitle(raw) {
+            let title = safeString(raw || "");
+            // 常见的分隔模式："Studio / Title"、"Studio - Title"、"Studio: Title"、"Studio | Title"
+            title = title.replace(/^(?:[\w\s]+)\s*[\/\-–—:|]\s*/, "");
+            // 去掉结尾年份如 (2024) (2025) (2026)
+            title = title.replace(/\s*\(\d{4}\)\s*$/, "").trim();
+            return title;
+        },
+
         getSearchTitle(details) {
-            return safeString(details && details.titlePart);
+            // titlePart 可能包含 "Blacked / College Hotties..."，剥离前缀
+            const raw = safeString(details && details.titlePart);
+            return this.cleanSearchTitle(raw);
         },
 
+        // ★ FIX: 多级关键词策略 — 逐个降级尝试
         buildSearchKeywords(details) {
-            const title = this.getSearchTitle(details);
-            return title.length >= 3 ? [title] : [];
+            const raw = safeString(details && details.titlePart);
+            const clean = this.cleanSearchTitle(raw);
+            const keywords = new Set();
+
+            // 1. 纯标题（最精确）
+            if (clean.length >= 5) keywords.add(clean);
+
+            // 2. 完整原始标题（含工作室）
+            if (raw.length >= 5 && raw !== clean) keywords.add(raw);
+
+            // 3. 去掉副标题后的短标题（取前 3~4 个词）
+            const words = clean.split(/\s+/).filter(Boolean);
+            if (words.length > 4) {
+                keywords.add(words.slice(0, 4).join(" "));
+                keywords.add(words.slice(0, 3).join(" "));
+            }
+
+            // 4. 纯标题 + 工作室（去掉 " / " 分隔符后的拼接）
+            if (raw !== clean) {
+                const studio = raw.replace(clean, "").replace(/[\/\-–—:|]/g, "").trim();
+                if (studio && clean) {
+                    keywords.add(`${studio} ${clean}`);
+                }
+            }
+
+            return [...keywords].filter(k => k.length >= 3);
         },
 
-        // ★ FIX: 修正 keyfull 参数格式, 不加 scene 也能搜
-        buildSearchUrl(keyword) {
+        // ★ FIX: 多级搜索策略 — 先试 live.php 自动补全，再试 slug URL 直连
+        buildSearchUrl(keyword, level = 1) {
             const clean = safeString(keyword);
-            const keyfull = clean.toLowerCase(); // 保持原样，不要转 --
-            const params = new URLSearchParams();
-            params.set("index", "");
-            params.set("key", clean);
-            params.set("key2", clean);
-            params.set("keyfull", keyfull);
-            params.set("t", "0");
-            params.set("b", "1");
-            params.set("page", "1");
-            params.set("back", `${DATA18_ORIGIN}/scenes`);
-            params.set("scenesource", "1");
-            return `${DATA18_ORIGIN}/sys/live.php?${params.toString()}`;
+            const keyfull = clean.toLowerCase();
+
+            if (level === 1) {
+                // 策略1: live.php 自动补全（标准用法，带 scenesource=1）
+                const params = new URLSearchParams();
+                params.set("index", "");
+                params.set("key", clean);
+                params.set("key2", clean);
+                params.set("keyfull", keyfull);
+                params.set("t", "6");    // 搜索类型: 6=Scenes
+                params.set("b", "1");    // 匹配方式: 1=Contains
+                params.set("page", "1");
+                params.set("back", `${DATA18_ORIGIN}/scenes`);
+                params.set("scenesource", "1");
+                return `${DATA18_ORIGIN}/sys/live.php?${params.toString()}`;
+            }
+
+            if (level === 2) {
+                // 策略2: 用 "Search All" 模式搜（更宽松）
+                const params = new URLSearchParams();
+                params.set("index", "");
+                params.set("key", clean);
+                params.set("key2", clean);
+                params.set("keyfull", keyfull);
+                params.set("t", "0");    // 0=Search All
+                params.set("b", "1");    // Contains
+                params.set("page", "1");
+                params.set("back", `${DATA18_ORIGIN}/scenes`);
+                params.set("scenesource", "1");
+                return `${DATA18_ORIGIN}/sys/live.php?${params.toString()}`;
+            }
+
+            // 策略3: 直接构造 slug URL 直链
+            // DATA18 的 URL 格式: /scenes/{数字ID}-{slugified-title}
+            // 但我们没有数字ID, 所以只能用前几个关键词搜
+            // 缩小到4个核心词再用 live.php
+            const shortKw = clean.split(/\s+/).slice(0, 4).join(" ");
+            if (shortKw !== clean && shortKw.length >= 5) {
+                const params = new URLSearchParams();
+                params.set("index", "");
+                params.set("key", shortKw);
+                params.set("key2", shortKw);
+                params.set("keyfull", shortKw.toLowerCase());
+                params.set("t", "6");
+                params.set("b", "1");
+                params.set("page", "1");
+                params.set("back", `${DATA18_ORIGIN}/scenes`);
+                params.set("scenesource", "1");
+                return `${DATA18_ORIGIN}/sys/live.php?${params.toString()}`;
+            }
+
+            return null;
         },
 
         // ★ FIX: 完整重写 fetchFromData18, 增加 age gate 自动通过
@@ -217,50 +294,109 @@
 
         async findMedia(details) {
             const keywords = this.buildSearchKeywords(details);
+            this.debug("search keywords", keywords);
+            const visitedSceneIds = new Set();
 
             for (const keyword of keywords) {
-                try {
-                    const searchUrl = this.buildSearchUrl(keyword);
-                    this.debug("search url", searchUrl);
+                // 对每个关键词尝试多级搜索策略
+                for (let level = 1; level <= 3; level++) {
+                    try {
+                        const searchUrl = this.buildSearchUrl(keyword, level);
+                        if (!searchUrl) continue;
+                        this.debug(`search url (level ${level})`, searchUrl);
 
-                    const searchHtml = await this.fetchFromData18(searchUrl, {
-                        referer: `${DATA18_ORIGIN}/`,
-                        accept: "text/html, */*; q=0.01",
-                        ajax: true
-                    });
-                    const results = this.parseSearchResults(searchHtml);
-                    this.debug("search results", results);
-
-                    const matchedResults = this.pickExactTitleResults(results, details);
-                    this.debug("exact title results", matchedResults);
-                    if (!matchedResults.length) continue;
-
-                    for (const best of matchedResults) {
-                        this.debug("best detail url", best.url);
-                        this.debug("page scene id", best.sceneId);
-
-                        const detailHtml = await this.fetchFromData18(best.url, {
+                        const searchHtml = await this.fetchFromData18(searchUrl, {
                             referer: `${DATA18_ORIGIN}/`,
-                            accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                            accept: "text/html, */*; q=0.01",
                             ajax: true
                         });
-                        const media = await this.collectMediaFromDetail(detailHtml, best.url, best.sceneId);
-                        this.debug("final media", media);
+                        const results = this.parseSearchResults(searchHtml);
+                        this.debug(`search results (level ${level})`, results);
 
-                        if (media.videoUrl || media.images.length) {
-                            return {
-                                keyword,
-                                searchTitle: this.getSearchTitle(details),
-                                sourceUrl: best.url,
-                                sceneId: best.sceneId,
-                                mediaId: media.mediaId,
-                                videoUrl: media.videoUrl,
-                                images: media.images
-                            };
+                        // 过滤掉已访问过的场景
+                        const freshResults = results.filter(r => !visitedSceneIds.has(r.sceneId));
+                        freshResults.forEach(r => visitedSceneIds.add(r.sceneId));
+
+                        // 先用精确匹配
+                        const exactMatched = this.pickExactTitleResults(freshResults, details);
+                        this.debug(`exact matched (level ${level})`, exactMatched);
+
+                        const candidates = exactMatched.length ? exactMatched : freshResults;
+
+                        for (const best of candidates) {
+                            this.debug("detail url", best.url);
+                            this.debug("scene id", best.sceneId);
+
+                            const detailHtml = await this.fetchFromData18(best.url, {
+                                referer: `${DATA18_ORIGIN}/`,
+                                accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                                ajax: true
+                            });
+                            const media = await this.collectMediaFromDetail(detailHtml, best.url, best.sceneId);
+                            this.debug("final media", media);
+
+                            if (media.videoUrl || media.images.length) {
+                                return {
+                                    keyword,
+                                    searchTitle: this.getSearchTitle(details),
+                                    sourceUrl: best.url,
+                                    sceneId: best.sceneId,
+                                    mediaId: media.mediaId,
+                                    videoUrl: media.videoUrl,
+                                    images: media.images
+                                };
+                            }
                         }
+                    } catch (err) {
+                        console.warn(`[PornData18Media] search failed: keyword="${keyword}" level=${level}:`, err?.message || err);
                     }
-                } catch (err) {
-                    console.warn("[PornData18Media] search failed:", keyword, err);
+                }
+            }
+
+            // ★ 最终防线: 直接用纯标题构造 slug 直链猜 URL
+            // DATA18 场景页格式: /scenes/{数字ID}-{slugified-title} 或 /scenes/{数字ID}
+            // 只靠标题我们不知道数字ID, 但可以尝试用纯标题搜一次
+            // 这里尝试用标题的前N个词生成更短的关键词再搜一次
+            const pureTitle = this.cleanSearchTitle(safeString(details && details.titlePart));
+            if (pureTitle) {
+                const shortWords = pureTitle.split(/\s+/).filter(Boolean);
+                for (let wc = Math.min(4, shortWords.length); wc >= 2; wc--) {
+                    const shortKw = shortWords.slice(0, wc).join(" ");
+                    if (keywords.some(k => k === shortKw)) continue; // 已经试过
+
+                    for (let level = 1; level <= 2; level++) {
+                        const searchUrl = this.buildSearchUrl(shortKw, level);
+                        if (!searchUrl) continue;
+                        try {
+                            const html = await this.fetchFromData18(searchUrl, {
+                                referer: `${DATA18_ORIGIN}/`,
+                                accept: "text/html, */*; q=0.01",
+                                ajax: true
+                            });
+                            const results = this.parseSearchResults(html).filter(r => !visitedSceneIds.has(r.sceneId));
+                            if (!results.length) continue;
+
+                            // 取第一个结果试
+                            const best = results[0];
+                            const detailHtml = await this.fetchFromData18(best.url, {
+                                referer: `${DATA18_ORIGIN}/`,
+                                accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                                ajax: true
+                            });
+                            const media = await this.collectMediaFromDetail(detailHtml, best.url, best.sceneId);
+                            if (media.videoUrl || media.images.length) {
+                                return {
+                                    keyword: shortKw,
+                                    searchTitle: this.getSearchTitle(details),
+                                    sourceUrl: best.url,
+                                    sceneId: best.sceneId,
+                                    mediaId: media.mediaId,
+                                    videoUrl: media.videoUrl,
+                                    images: media.images
+                                };
+                            }
+                        } catch (err) {}
+                    }
                 }
             }
 
