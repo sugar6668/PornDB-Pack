@@ -86,6 +86,23 @@
                     <div class="x-data18-status">准备搜索...</div>
                 </div>
                 <div class="x-data18-body"></div>
+                <style>
+                .x-data18-thumb-placeholder {
+                    width: 100%; height: 100%;
+                    background: #e8e8e8;
+                    display: flex; align-items: center; justify-content: center;
+                    color: #aaa; font-size: 20px;
+                }
+                .x-data18-thumb-video, .x-data18-thumb-img {
+                    display: block; width: 100%; height: 100%;
+                    object-fit: cover;
+                }
+                .x-data18-thumb-video::-webkit-media-controls { display: none !important; }
+                .x-data18-lightbox-loading {
+                    color: white; text-align: center; padding: 40px;
+                    font-size: 14px;
+                }
+                </style>
             `;
             return panel;
         },
@@ -460,7 +477,26 @@
 
         pickExactTitleResults(results, details) {
             if (!results || !results.length) return [];
-            return results.filter((item) => this.isExactTitleMatch(item, details));
+
+            // 先试精确匹配
+            const exact = results.filter((item) => this.isExactTitleMatch(item, details));
+            if (exact.length) return exact;
+
+            // 精确不中则用模糊匹配: DATA18 标题是否包含 PornDB 标题的关键词
+            const titleNorm = this.normalizeTitle(this.getSearchTitle(details));
+            const titleWords = titleNorm.split(/\s+/).filter(w => w.length > 2);
+
+            // 对每个结果打分: 匹配的单词数 / 总单词数
+            const scored = results
+                .map((item) => {
+                    const textNorm = this.normalizeTitle(item.text);
+                    const matches = titleWords.filter(w => textNorm.includes(w)).length;
+                    return { item, score: titleWords.length ? matches / titleWords.length : 0 };
+                })
+                .filter(({ score }) => score >= 0.7) // 70% 以上关键词匹配
+                .sort((a, b) => b.score - a.score);
+
+            return scored.map(s => s.item);
         },
 
         // ★ FIX: 完整替换 collectMediaFromDetail, 优先使用 bdn.dt18.com 构造图片 URL
@@ -1143,25 +1179,96 @@
                     ${items.map((item) => this.renderMediaCard(item)).join("")}
                 </div>
             `;
+            // ★ 异步通过 GM_xmlhttpRequest 代理加载图片（绕过 referer 防盗链）
+            // 先绑定事件（卡片已经渲染），再异步加载媒体内容
             this.bindPreviewEvents(panel);
+            this.proxyLoadMediaCards(panel);
         },
 
         renderMediaCard(item) {
             const src = this.escapeAttr(item.src);
             if (item.type === "video") {
                 return `
-                    <button class="x-data18-media-card x-data18-video-card" type="button" data-type="video" data-src="${src}">
-                        <video class="x-data18-thumb-video" src="${src}" preload="metadata" muted playsinline referrerpolicy="no-referrer"></video>
+                    <button class="x-data18-media-card" type="button" data-type="video" data-src="${src}">
+                        <div class="x-data18-thumb-placeholder x-data18-proxy-load" data-url="${src}" data-kind="video"></div>
                         <span class="x-data18-play-badge">▶</span>
                     </button>
                 `;
             }
 
             return `
-                <button class="x-data18-media-card x-data18-image-card" type="button" data-type="image" data-src="${src}">
-                    <img class="x-data18-thumb-img" src="${src}" loading="lazy" referrerpolicy="no-referrer">
+                <button class="x-data18-media-card" type="button" data-type="image" data-src="${src}">
+                    <div class="x-data18-thumb-placeholder x-data18-proxy-load" data-url="${src}" data-kind="image"></div>
                 </button>
             `;
+        },
+
+        // ★ 通过 GM_xmlhttpRequest 代理加载 bdn.dt18.com / vs.dt18.com 的媒体（绕过防盗链）
+        async proxyLoadMediaCards(panel) {
+            const holders = panel.querySelectorAll('.x-data18-proxy-load');
+            for (const holder of holders) {
+                const url = holder.dataset.url;
+                const kind = holder.dataset.kind;
+                try {
+                    const blob = await this._fetchBlobWithReferer(url);
+                    if (!blob) continue;
+                    const objUrl = URL.createObjectURL(blob);
+                    if (kind === 'video') {
+                        const video = document.createElement('video');
+                        video.src = objUrl;
+                        video.className = 'x-data18-thumb-video';
+                        video.muted = true;
+                        video.playsInline = true;
+                        video.preload = 'metadata';
+                        holder.parentElement.insertBefore(video, holder);
+                        holder.remove();
+                        // 移除 card 上的 data-src，打开灯箱时用 proxiedLoad
+                        const card = video.closest('.x-data18-media-card');
+                        if (card) card.dataset.blobUrl = objUrl;
+                    } else {
+                        const img = document.createElement('img');
+                        img.className = 'x-data18-thumb-img';
+                        img.src = objUrl;
+                        img.loading = 'lazy';
+                        holder.parentElement.insertBefore(img, holder);
+                        holder.remove();
+                        const card = img.closest('.x-data18-media-card');
+                        if (card) card.dataset.blobUrl = objUrl;
+                    }
+                } catch (err) {
+                    console.warn('[PornData18Media] proxy load failed:', url, err);
+                    holder.textContent = kind === 'video' ? '▶' : '×';
+                    holder.style.cssText = 'display:flex;align-items:center;justify-content:center;color:#999;font-size:24px;';
+                }
+            }
+        },
+
+        // ★ 通过 GM_xmlhttpRequest 获取 blob，设置正确 Referer
+        _fetchBlobWithReferer(url) {
+            return new Promise((resolve) => {
+                GM_xmlhttpRequest({
+                    method: 'GET',
+                    url,
+                    headers: {
+                        'Referer': `${DATA18_ORIGIN}/`,
+                        'User-Agent': navigator.userAgent,
+                        'Accept': '*/*'
+                    },
+                    timeout: 30000,
+                    responseType: 'blob',
+                    anonymous: false,
+                    withCredentials: true,
+                    onload: (res) => {
+                        if (res.status >= 200 && res.status < 300 && res.response) {
+                            resolve(res.response);
+                        } else {
+                            resolve(null);
+                        }
+                    },
+                    onerror: () => resolve(null),
+                    ontimeout: () => resolve(null)
+                });
+            });
         },
 
         bindPreviewEvents(panel) {
@@ -1171,7 +1278,10 @@
                     event.stopPropagation();
                     const type = card.dataset.type;
                     const src = card.dataset.src;
-                    if (type && src) this.openLightbox(type, src, panel.ownerDocument || document);
+                    const blobUrl = card.dataset.blobUrl;
+                    if (type && (blobUrl || src)) {
+                        this.openLightbox(type, blobUrl || src, panel.ownerDocument || document);
+                    }
                 });
             });
         },
@@ -1185,20 +1295,27 @@
             box.setAttribute("aria-modal", "true");
             box.innerHTML = `
                 <button class="x-data18-lightbox-close" type="button" aria-label="关闭">×</button>
-                <div class="x-data18-lightbox-inner"></div>
+                <div class="x-data18-lightbox-inner"><div class="x-data18-lightbox-loading">加载中...</div></div>
             `;
 
             const inner = box.querySelector(".x-data18-lightbox-inner");
-            const safeSrc = this.escapeAttr(src);
-            if (type === "video") {
-                inner.innerHTML = `
-                    <video class="x-data18-lightbox-video" src="${safeSrc}" controls preload="metadata" playsinline referrerpolicy="no-referrer"></video>
-                `;
-            } else {
-                inner.innerHTML = `
-                    <img class="x-data18-lightbox-img" src="${safeSrc}" referrerpolicy="no-referrer">
-                `;
-            }
+
+            // ★ 通过 GM_xmlhttpRequest 代理加载，传递正确 Referer
+            this._fetchBlobWithReferer(src).then((blob) => {
+                if (!blob) {
+                    inner.innerHTML = '<div style="color:white;text-align:center;padding:40px;">加载失败</div>';
+                    return;
+                }
+                const objUrl = URL.createObjectURL(blob);
+                const safeSrc = this.escapeAttr(objUrl);
+                if (type === "video") {
+                    inner.innerHTML = `<video class="x-data18-lightbox-video" src="${safeSrc}" controls preload="metadata" playsinline></video>`;
+                } else {
+                    inner.innerHTML = `<img class="x-data18-lightbox-img" src="${safeSrc}">`;
+                }
+            }).catch(() => {
+                inner.innerHTML = '<div style="color:white;text-align:center;padding:40px;">加载失败</div>';
+            });
 
             const onKeyDown = (event) => {
                 if (event.key === "Escape") this.closeLightbox(doc);
