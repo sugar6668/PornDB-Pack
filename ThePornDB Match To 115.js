@@ -331,7 +331,7 @@
             });
             // [ADD] 结束
 
-            const playerWrap = doc.querySelector('video')?.parentElement;
+            const playerWrap = doc.querySelector('video:not(.x-data18-thumb-video)')?.parentElement;
             if (playerWrap) { playerWrap.classList.add('west-detail-player'); applyMatchTagState(playerWrap, videos); }
 
             const targetDir = `欧美演员/${details.actor}/${details.fullTitle}`;
@@ -374,7 +374,7 @@
                         const idx = videos.findIndex(v => String(v.fid) === targetFid);
                         if (idx !== -1) videos.splice(idx, 1);
                         // 更新播放器卡片边框状态
-                        const playerWrap = doc.querySelector('video')?.parentElement;
+                        const playerWrap = doc.querySelector('video:not(.x-data18-thumb-video)')?.parentElement;
                         if (playerWrap) applyMatchTagState(playerWrap, cachedVideos);
                         // 移除该条 DOM
                         const itemNode = btn.closest('.zymatch-item-west');
@@ -460,7 +460,7 @@
 
     const ensureWestPanel = (doc) => {
         if (!location.href.includes('/scenes/')) return;
-        const targetContainer = doc.querySelector('div.bg-black.text-white') || doc.querySelector('.flex.flex-wrap.gap-y-5.gap-x-2') || doc.querySelector('video')?.parentElement?.parentElement || doc.querySelector('div.w-full.bg-white');
+        const targetContainer = doc.querySelector('div.bg-black.text-white') || doc.querySelector('.flex.flex-wrap.gap-y-5.gap-x-2') || doc.querySelector('video:not(.x-data18-thumb-video)')?.parentElement?.parentElement || doc.querySelector('div.w-full.bg-white');
         if (!targetContainer) return;
 
         const oldWrap = doc.querySelector(`.${WRAPCLASS}`);
@@ -725,7 +725,7 @@
                 const target = m.target;
                 if (target && target.nodeType === 1) {
                     const className = target.className || '';
-                    if (typeof className === 'string' && (className.includes('qv-static-btn') || className.includes('x-west-match') || className.includes('jav-filter-group'))) {
+                    if (typeof className === 'string' && (className.includes('qv-static-btn') || className.includes('x-west-match') || className.includes('jav-filter-group') || className.includes('x-data18-'))) {
                         continue;
                     }
                 }
