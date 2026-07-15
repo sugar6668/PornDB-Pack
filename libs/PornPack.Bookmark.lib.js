@@ -63,15 +63,15 @@ window.PornBookmark = class PornBookmark {
                 this.handleExport('local', mainBtn);
             };
         } else {
-            mainBtn.innerHTML = '导出书签';
+            mainBtn.innerHTML = '上传书签';
             mainBtn.className = 'west-engine-btn pdb-bm-btn pdb-bm-main-btn pdb-bm-state-local';
-            mainBtn.onclick = () => this.handleExport('local', mainBtn);
+            mainBtn.onclick = () => this.handleExport('cloud', mainBtn);
 
             dropBtn.className = 'west-engine-btn pdb-bm-btn pdb-bm-drop-btn pdb-bm-state-local';
-            dropOption.innerHTML = '上传书签';
+            dropOption.innerHTML = '导出书签';
             dropOption.onclick = () => {
                 document.getElementById('pbf-dropdown-menu').style.display = 'none';
-                this.handleExport('cloud', mainBtn);
+                this.handleExport('local', mainBtn);
             };
         }
     }

@@ -60,14 +60,14 @@ window.PornNFOGenerator = class PornNFOGenerator {
                 this.handleExport('local', mainBtn);
             };
         } else {
-            mainBtn.innerHTML = '生成 NFO';
+            mainBtn.innerHTML = '上传 NFO';
             mainBtn.className = 'west-engine-btn pdb-bm-btn pdb-bm-main-btn pdb-bm-state-local';
-            mainBtn.onclick = () => this.handleExport('local', mainBtn);
+            mainBtn.onclick = () => this.handleExport('cloud', mainBtn);
             dropBtn.className = 'west-engine-btn pdb-bm-btn pdb-bm-drop-btn pdb-bm-state-local';
-            dropOption.innerHTML = '直传 NFO';
+            dropOption.innerHTML = '生成 NFO';
             dropOption.onclick = () => {
                 document.getElementById('nfo-dropdown-menu').style.display = 'none';
-                this.handleExport('cloud', mainBtn);
+                this.handleExport('local', mainBtn);
             };
         }
     }
