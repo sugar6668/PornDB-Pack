@@ -18,6 +18,7 @@ window.PornDispatcher = class PornDispatcher {
         this.searchQueue = [];   // 队列：存放需要查询的番号
         this.isSearching = false;
         this.lastReqTime = 0;    // [ADD] 记录上一次请求时间
+        this.invalidatedPrefixes = new Set(); // 已在小窗删除的结果不得被旧请求重新写回
     }
 
     /**
@@ -26,6 +27,7 @@ window.PornDispatcher = class PornDispatcher {
     dispatch(item, details, skipCacheCheck) {
         const prefix = details.matchPrefix || details.dateStr;
         if (!prefix) return;
+        this.invalidatedPrefixes.delete(prefix);
 
         // 【P1 优化】调用方已检查过缓存时跳过二次检查
         if (!skipCacheCheck) {
@@ -45,6 +47,11 @@ window.PornDispatcher = class PornDispatcher {
             this.searchQueue.push(prefix);
             this.processQueue();
         }
+    }
+
+    // 删除资源后取消仍在途的旧搜索结果，避免 115 索引延迟将幽灵匹配重新写回缓存。
+    invalidate(prefix) {
+        if (prefix) this.invalidatedPrefixes.add(prefix);
     }
 
     /**
@@ -96,10 +103,11 @@ window.PornDispatcher = class PornDispatcher {
                     }
 
                     // 只在有结果时才写入缓存；空结果不缓存，保留下次重搜的机会
-                    if (videos.length > 0) {
+                    const invalidated = this.invalidatedPrefixes.has(prefix);
+                    if (videos.length > 0 && !invalidated) {
                         this.setWestCache(prefix, videos);
                     }
-                    pendingItems.forEach(({ item }) => this.applyMatchTagState(item, videos));
+                    pendingItems.forEach(({ item }) => this.applyMatchTagState(item, invalidated ? [] : videos));
                 }
             } catch (e) {
                 pendingItems.forEach(({ item }) => this.applyMatchTagState(item, []));

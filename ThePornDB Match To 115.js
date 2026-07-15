@@ -677,11 +677,9 @@
                     if (typeof pornDispatcher !== 'undefined') pornDispatcher.applyMatchTagState(card, latestCache);
                     else applyMatchTagState(card, latestCache);
                 } else {
-                    // 如果还没匹配到，说明小窗中删除了数据，或者发起了新搜索，重新扔进派发器去搜
-                    const currentDetails = westFingerprintMap.get(card.dataset.westCardId);
-                    if (currentDetails && typeof pornDispatcher !== 'undefined') {
-                        pornDispatcher.dispatch(card, currentDetails, true);
-                    }
+                    // 小窗删除了最后一个资源时缓存会被销毁；不能立刻重搜，否则 115 的搜索索引延迟会把已删除的幽灵文件重新匹配出来。
+                    if (typeof pornDispatcher !== 'undefined') pornDispatcher.invalidate(prefixKey);
+                    applyMatchTagState(card, []);
                 }
             }, 400);
         }
