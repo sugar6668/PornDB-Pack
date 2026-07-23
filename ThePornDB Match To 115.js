@@ -164,6 +164,9 @@
         if (parentCard && parentCard.dataset.matchStatus !== status) {
             parentCard.dataset.matchStatus = status;
         }
+        if (window.PornSubtitle) {
+            void window.PornSubtitle.refreshCardIndicator(item, videos);
+        }
     };
 
     // 实例化：高并发智能调度引擎
@@ -676,6 +679,7 @@
                 if (latestCache !== null) {
                     if (typeof pornDispatcher !== 'undefined') pornDispatcher.applyMatchTagState(card, latestCache);
                     else applyMatchTagState(card, latestCache);
+                    if (window.PornSubtitle) void window.PornSubtitle.refreshCardIndicator(card, latestCache, { force: true });
                 } else {
                     // 小窗删除了最后一个资源时缓存会被销毁；不能立刻重搜，否则 115 的搜索索引延迟会把已删除的幽灵文件重新匹配出来。
                     if (typeof pornDispatcher !== 'undefined') pornDispatcher.invalidate(prefixKey);
@@ -684,6 +688,23 @@
             }, 400);
         }
     })
+
+    // 小窗内完成字幕直传后，立即把同一张主页面卡片的字幕标识刷新出来。
+    const refreshSubtitleIndicatorsForCid = (cid) => {
+        const targetCid = String(cid || '');
+        if (!targetCid || !window.PornSubtitle) return;
+        document.querySelectorAll(`${SCENE_CARD_SELECTOR}[data-west-matched-id]`).forEach(card => {
+            const videos = window.PornDriveAPI.getMatchCache(card.dataset.westMatchedId);
+            if (videos?.some(video => String(video?.cid || '') === targetCid)) {
+                void window.PornSubtitle.refreshCardIndicator(card, videos, { force: true });
+            }
+        });
+    };
+    window.addEventListener('West_Subtitle_Uploaded', (e) => refreshSubtitleIndicatorsForCid(e.detail?.cid));
+    window.addEventListener('message', (e) => {
+        if (e.origin !== location.origin || e.data?.type !== 'West_Subtitle_Uploaded') return;
+        refreshSubtitleIndicatorsForCid(e.data.detail?.cid);
+    });
 
     const bootDoc = (doc) => {
         ensureWestPanel(doc);
