@@ -199,59 +199,28 @@ window.PornSubtitle = class PornSubtitle {
                 return;
             }
 
+            if (sourceSelect.value === 'all') {
+                contentWrap.innerHTML = '<div class="pdb-sub-msg">正在并行检索 迅雷字幕 与 SubtitleCat，请稍候...</div>';
+                Promise.allSettled([
+                    this.searchXunlei(kw),
+                    this.searchSubtitleCatWithFallback(kw, firstActor, allowActorFallback, details.titlePart || details.titleKeyword)
+                ]).then(([xunlei, subtitleCat]) => {
+                    const dataList = [
+                        ...(xunlei.status === 'fulfilled' ? xunlei.value : []),
+                        ...(subtitleCat.status === 'fulfilled' ? subtitleCat.value.items : [])
+                    ];
+                    if (dataList.length) this.renderTable(contentWrap, dataList, previewBox, overlay, kw);
+                    else contentWrap.innerHTML = '<div class="pdb-sub-msg">两个字幕源都未找到相关字幕</div>';
+                }).catch((e) => { contentWrap.innerHTML = `<div class="pdb-sub-msg pdb-sub-error">字幕搜索失败：${this.escapeHtml(e.message)}</div>`; });
+                return;
+            }
+
             contentWrap.innerHTML = '<div class="pdb-sub-msg">正在连接迅雷字幕接口，请稍候...</div>';
-
-            try {
-                GM_xmlhttpRequest({
-                    method: 'GET',
-                    url: `https://api-shoulei-ssl.xunlei.com/oracle/subtitle?name=${encodeURIComponent(kw)}`,
-                    onload: (res) => {
-                        try {
-                            const root = JSON.parse(res.responseText);
-                            if (root.code === 0 && root.data && root.data.length > 0) {
-                                let dataList = root.data;
-
-                                // 【核心优化】：分词打分器，杜绝完全匹配失效的问题
-                                const kwClean = kw.toLowerCase().replace(/[-_\.\s]/g, '');
-                                const kwTokens = kw.toLowerCase().split(/[-_\.\s]+/).filter(w => w.length > 1);
-
-                                dataList.sort((a, b) => {
-                                    let scoreA = 0, scoreB = 0;
-                                    const nameA = (a.name || a.extra_name || '').toLowerCase();
-                                    const nameB = (b.name || b.extra_name || '').toLowerCase();
-                                    const langA = ((a.languages && a.languages[0]) || '').toLowerCase();
-                                    const langB = ((b.languages && b.languages[0]) || '').toLowerCase();
-
-                                    // 1. 分词累加得分：命中越多的搜索词，得分越高 (+50/词)
-                                    kwTokens.forEach(t => {
-                                        if (nameA.includes(t)) scoreA += 50;
-                                        if (nameB.includes(t)) scoreB += 50;
-                                    });
-
-                                    // 2. 绝对匹配特权：忽略符号后，整体全部包含 (+500)
-                                    if (nameA.replace(/[-_\.\s]/g, '').includes(kwClean)) scoreA += 500;
-                                    if (nameB.replace(/[-_\.\s]/g, '').includes(kwClean)) scoreB += 500;
-
-                                    // 3. 语言与格式兜底
-                                    if (/zh|cn|chs|cht|中字|简|繁/.test(langA) || /中字|简|繁|chs|cht/.test(nameA)) scoreA += 100;
-                                    if (/zh|cn|chs|cht|中字|简|繁/.test(langB) || /中字|简|繁|chs|cht/.test(nameB)) scoreB += 100;
-                                    if (a.ext === 'srt' || a.ext === 'ass') scoreA += 20;
-                                    if (b.ext === 'srt' || b.ext === 'ass') scoreB += 20;
-
-                                    return scoreB - scoreA;
-                                });
-
-                                this.renderTable(contentWrap, dataList, previewBox, overlay, kw);
-                            } else {
-                                contentWrap.innerHTML = '<div class="pdb-sub-msg">未找到相关字幕，请尝试删减搜索词</div>';
-                            }
-                        } catch (e) {
-                            contentWrap.innerHTML = '<div class="pdb-sub-msg pdb-sub-error">API 数据解析失败</div';
-                        }
-                    },
-                    onerror: () => { contentWrap.innerHTML = '<div class="pdb-sub-msg pdb-sub-error">请求失败，请检查网络设置</div>'; }
-                });
-            } catch (e) { contentWrap.innerHTML = `<div class="pdb-sub-msg pdb-sub-error">${e.message}</div>`; }
+            this.searchXunlei(kw)
+                .then(dataList => dataList.length
+                    ? this.renderTable(contentWrap, dataList, previewBox, overlay, kw)
+                    : contentWrap.innerHTML = '<div class="pdb-sub-msg">未找到相关字幕，请尝试删减搜索词</div>')
+                .catch((e) => { contentWrap.innerHTML = `<div class="pdb-sub-msg pdb-sub-error">迅雷字幕请求失败：${this.escapeHtml(e.message)}</div>`; });
         };
 
         header.querySelector('#sub-search-btn').onclick = () => performSearch(header.querySelector('#sub-search-input').value.trim());
@@ -259,6 +228,35 @@ window.PornSubtitle = class PornSubtitle {
         sourceSelect.onchange = () => performSearch(header.querySelector('#sub-search-input').value.trim(), { allowActorFallback: true });
 
         performSearch(defaultKw, { allowActorFallback: true });
+    }
+
+    static searchXunlei(keyword) {
+        const url = `https://api-shoulei-ssl.xunlei.com/oracle/subtitle?name=${encodeURIComponent(keyword)}`;
+        return new Promise((resolve, reject) => {
+            GM_xmlhttpRequest({
+                method: 'GET', url, timeout: 15000,
+                onload: (res) => {
+                    try {
+                        const root = JSON.parse(res.responseText || '{}');
+                        if (root.code !== 0 || !Array.isArray(root.data)) return resolve([]);
+                        const kwClean = keyword.toLowerCase().replace(/[-_\.\s]/g, '');
+                        const kwTokens = keyword.toLowerCase().split(/[-_\.\s]+/).filter(word => word.length > 1);
+                        const score = item => {
+                            const name = (item.name || item.extra_name || '').toLowerCase();
+                            const lang = ((item.languages && item.languages[0]) || '').toLowerCase();
+                            let total = kwTokens.reduce((sum, token) => sum + (name.includes(token) ? 50 : 0), 0);
+                            if (name.replace(/[-_\.\s]/g, '').includes(kwClean)) total += 500;
+                            if (/zh|cn|chs|cht|中字|简|繁/.test(lang) || /中字|简|繁|chs|cht/.test(name)) total += 100;
+                            if (item.ext === 'srt' || item.ext === 'ass') total += 20;
+                            return total;
+                        };
+                        resolve(root.data.map(item => ({ ...item, source: '迅雷字幕' })).sort((a, b) => score(b) - score(a)));
+                    } catch (e) { reject(new Error('API 数据解析失败')); }
+                },
+                onerror: () => reject(new Error('网络请求失败')),
+                ontimeout: () => reject(new Error('请求超时'))
+            });
+        });
     }
 
     static getFirstActor(details = {}) {
@@ -366,7 +364,13 @@ window.PornSubtitle = class PornSubtitle {
                 <tbody>
         `;
 
+        let lastSource = '';
         dataList.forEach((item, index) => {
+            const source = item.source || '迅雷字幕';
+            if (source !== lastSource) {
+                tableHtml += `<tr class="pdb-sub-source-row"><td colspan="4">${this.escapeHtml(source)}</td></tr>`;
+                lastSource = source;
+            }
             const lang = (item.languages && item.languages.length > 0) ? item.languages[0] : '未知';
             let subName = item.name || item.extra_name || '未知字幕';
             const subNameClean = subName.toLowerCase().replace(/[-_\.\s]/g, '');

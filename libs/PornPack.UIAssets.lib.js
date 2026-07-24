@@ -81,8 +81,9 @@
                     <div class="pdb-sub-search-wrap">
                         <span class="pdb-sub-title">字幕源:</span>
                         <select id="sub-source-select" class="pdb-sub-source" title="选择字幕检索源">
-                            <option value="subtitlecat">SubtitleCat</option>
                             <option value="xunlei">迅雷字幕</option>
+                            <option value="subtitlecat">SubtitleCat</option>
+                            <option value="all">全部字幕源</option>
                         </select>
                         <input type="text" id="sub-search-input" value="${defaultKw}" class="pdb-sub-input" placeholder="输入检索词..." />
                         <button id="sub-search-btn" class="pdb-sub-btn">重新搜索</button>

@@ -148,6 +148,7 @@ body.west-similar-collapsed .west-similar-grid-node { display: none !important; 
 /* 6.1 Subtitle 模块 - 字幕表格与按钮 */
 .pdb-sub-table { width: 100%; border-collapse: collapse; font-size: 13px; text-align: left; }
 .pdb-sub-th { padding: 10px; color: #333; background: #f9f9f9; border-bottom: 2px solid #e8e8e8; }
+.pdb-sub-source-row td { padding: 8px 10px; background: #f3eef9; color: #68479c; font-weight: 700; border-bottom: 1px solid #e5dff0; }
 .pdb-sub-tr { border-bottom: 1px dashed #f0f0f0; }
 .pdb-sub-td { padding: 10px; word-break: break-all; }
 .pdb-sub-td-lang { padding: 10px; color: #666; }
