@@ -130,6 +130,8 @@ body.west-similar-collapsed .west-similar-grid-node { display: none !important; 
 .pdb-sub-header { padding: 15px; background: #f5f5f5; border-bottom: 1px solid #e8e8e8; display: flex; justify-content: space-between; align-items: center; }
 .pdb-sub-search-wrap { display: flex; align-items: center; gap: 10px; flex: 1; }
 .pdb-sub-title { font-weight: bold; font-size: 15px; color: #333; }
+.pdb-sub-source { height: 31px; padding: 0 7px; border: 1px solid #dcdfe6; border-radius: 4px; color: #303133; background: #fff; font-size: 13px; outline: none; }
+.pdb-sub-source:focus { border-color: #7b5ea7; }
 .pdb-sub-input { padding: 6px 10px; border: 1px solid #dcdfe6; border-radius: 4px; font-size: 13px; width: 50%; outline: none; color: #303133; background: #fff; transition: border-color 0.2s; }
 .pdb-sub-input:focus { border-color: #7b5ea7; }
 .pdb-sub-btn { padding: 6px 15px; background: #7b5ea7; color: #fff; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; font-weight: bold; transition: opacity 0.2s; }

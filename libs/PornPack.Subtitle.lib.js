@@ -1,6 +1,6 @@
 ﻿/**
  * @name         PornPack Subtitle Library
- * @description  基于迅雷接口的字幕检索与 115 云端直传模块
+ * @description  基于迅雷接口和subtitlecat的字幕检索与 115 云端直传模块
  * @version      1.0.0
  */
 
@@ -144,22 +144,13 @@ window.PornSubtitle = class PornSubtitle {
         const details = document.WESTDETAILS || {};
         const kwInput = document.getElementById('jav-nong-kw');
         const magKw = kwInput ? kwInput.value.trim() : '';
-
-        // 【核心优化】：提取第一位演员，并将所有内部空格转化为点号
-        let firstActor = '';
-        if (details.actors && details.actors.length > 0) {
-            firstActor = details.actors[0].trim();
-        } else if (details.actor && details.actor !== 'Unknown_Actor') {
-            firstActor = details.actor.split('&')[0].trim();
-        }
-        if (firstActor) {
-            firstActor = firstActor.replace(/\s+/g, '.'); // 空格转点号
-        }
+        const firstActor = this.getFirstActor(details);
 
         let defaultKw = '';
         if (details.matchPrefix) {
             defaultKw = details.matchPrefix.trim();
-            if (firstActor) defaultKw += '.' + firstActor; // 厂牌.日期.演员.名
+            // SubtitleCat 实测中演员组合的召回率显著高于纯日期或标题组合。
+            if (firstActor) defaultKw += `.${firstActor.replace(/\s+/g, '.')}`;
         } else if (magKw) {
             defaultKw = magKw;
         } else {
@@ -186,12 +177,29 @@ window.PornSubtitle = class PornSubtitle {
         header.querySelector('#sub-close-btn').onclick = closeModal;
         overlay.onclick = (e) => { if (e.target === overlay) closeModal(); };
 
-        const performSearch = (kw) => {
+        const sourceSelect = header.querySelector('#sub-source-select');
+        const performSearch = (kw, { allowActorFallback = false } = {}) => {
             if (!kw) return;
-            contentWrap.innerHTML = '<div class="pdb-sub-msg">正在连接迅雷字幕接口，请稍候...</div>';
             previewBox.value = '';
             const statusNode = overlay.querySelector('#preview-status');
             if (statusNode) statusNode.innerText = '暂无预览';
+
+            if (sourceSelect.value === 'subtitlecat') {
+                contentWrap.innerHTML = '<div class="pdb-sub-msg">正在检索 SubtitleCat，请稍候...</div>';
+                this.searchSubtitleCatWithFallback(kw, firstActor, allowActorFallback, details.titlePart || details.titleKeyword)
+                    .then(({ items, usedActorFallback }) => {
+                        if (items.length) {
+                            this.renderTable(contentWrap, items, previewBox, overlay, kw);
+                        } else {
+                            contentWrap.innerHTML = `<div class="pdb-sub-msg">SubtitleCat 未找到与「${this.escapeHtml(kw)}」匹配的字幕${usedActorFallback ? '（已按演员名再次测试）' : ''}</div>`;
+                        }
+                        if (usedActorFallback) header.querySelector('#sub-search-input').value = `${kw}.${firstActor.replace(/\s+/g, '.')}`;
+                    })
+                    .catch((e) => { contentWrap.innerHTML = `<div class="pdb-sub-msg pdb-sub-error">SubtitleCat 请求失败：${this.escapeHtml(e.message)}</div>`; });
+                return;
+            }
+
+            contentWrap.innerHTML = '<div class="pdb-sub-msg">正在连接迅雷字幕接口，请稍候...</div>';
 
             try {
                 GM_xmlhttpRequest({
@@ -248,8 +256,91 @@ window.PornSubtitle = class PornSubtitle {
 
         header.querySelector('#sub-search-btn').onclick = () => performSearch(header.querySelector('#sub-search-input').value.trim());
         header.querySelector('#sub-search-input').onkeypress = (e) => { if (e.key === 'Enter') performSearch(e.target.value.trim()); };
+        sourceSelect.onchange = () => performSearch(header.querySelector('#sub-search-input').value.trim(), { allowActorFallback: true });
 
-        performSearch(defaultKw);
+        performSearch(defaultKw, { allowActorFallback: true });
+    }
+
+    static getFirstActor(details = {}) {
+        const actor = Array.isArray(details.actors) && details.actors.length
+            ? details.actors[0]
+            : (details.actor && details.actor !== 'Unknown_Actor' ? details.actor.split('&')[0] : '');
+        return String(actor || '').trim();
+    }
+
+    static escapeHtml(value) {
+        return String(value || '').replace(/[&<>'"]/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[char]);
+    }
+
+    static normalizeSubtitleText(value) {
+        return String(value || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+    }
+
+    // SubtitleCat 对点号日期按散词检索，会返回同厂牌的泛结果；仅把同时命中日期或演员的行作为可用结果。
+    static isSubtitleCatMatch(item, baseKw, actor = '') {
+        const name = this.normalizeSubtitleText(item.name);
+        const [, maker = '', date = ''] = String(baseKw || '').match(/^(.*?)\.(\d{2}\.\d{2}\.\d{2})(?:\.|$)/) || [];
+        const makerClean = this.normalizeSubtitleText(maker);
+        const dateClean = this.normalizeSubtitleText(date);
+        if (!makerClean || !name.includes(makerClean)) return false;
+        if (actor) return name.includes(this.normalizeSubtitleText(actor));
+        return !!dateClean && name.includes(dateClean);
+    }
+
+    static rankSubtitleCatMatches(items, title = '') {
+        const tokens = String(title).toLowerCase().match(/[a-z0-9]{3,}/g) || [];
+        if (!tokens.length) return items;
+        const score = item => {
+            const name = String(item.name || '').toLowerCase();
+            return tokens.reduce((total, token) => total + (name.includes(token) ? 1 : 0), 0);
+        };
+        return [...items].sort((a, b) => score(b) - score(a));
+    }
+
+    static async searchSubtitleCatWithFallback(baseKw, firstActor = '', allowActorFallback = false, title = '') {
+        const primary = await this.searchSubtitleCat(baseKw);
+        const actorClean = this.normalizeSubtitleText(firstActor);
+        const hasActorInQuery = actorClean && this.normalizeSubtitleText(baseKw).includes(actorClean);
+        const primaryMatches = primary.filter(item => this.isSubtitleCatMatch(item, baseKw, hasActorInQuery ? firstActor : ''));
+        if (primaryMatches.length || hasActorInQuery || !allowActorFallback || !firstActor) return { items: this.rankSubtitleCatMatches(primaryMatches, title), usedActorFallback: false };
+
+        const actorKw = `${baseKw}.${firstActor.replace(/\s+/g, '.')}`;
+        const actorResults = await this.searchSubtitleCat(actorKw);
+        return {
+            items: this.rankSubtitleCatMatches(actorResults.filter(item => this.isSubtitleCatMatch(item, baseKw, firstActor)), title),
+            usedActorFallback: true
+        };
+    }
+
+    static searchSubtitleCat(keyword) {
+        const url = `https://www.subtitlecat.com/index.php?search=${encodeURIComponent(keyword)}`;
+        return new Promise((resolve, reject) => {
+            GM_xmlhttpRequest({
+                method: 'GET', url, timeout: 15000,
+                headers: { Accept: 'text/html', 'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8' },
+                onload: (res) => {
+                    if (res.status !== 200) return reject(new Error(`HTTP ${res.status}`));
+                    const doc = new DOMParser().parseFromString(res.responseText || '', 'text/html');
+                    const seen = new Set();
+                    const items = [...doc.querySelectorAll('tr')].map(row => {
+                        const cells = row.querySelectorAll('td');
+                        const link = cells[0]?.querySelector('a[href]');
+                        if (!link || cells.length < 4) return null;
+                        const source = (cells[0].textContent.match(/\(translated from ([^)]+)\)/i) || [])[1] || 'Unknown';
+                        return {
+                            name: link.textContent.trim(),
+                            languages: [source],
+                            source: 'SubtitleCat',
+                            ext: 'srt',
+                            detailUrl: new URL(link.getAttribute('href'), 'https://www.subtitlecat.com/').href
+                        };
+                    }).filter(item => item && !seen.has(item.detailUrl) && (seen.add(item.detailUrl), true));
+                    resolve(items);
+                },
+                onerror: () => reject(new Error('网络请求失败')),
+                ontimeout: () => reject(new Error('请求超时'))
+            });
+        });
     }
 
     static renderTable(container, dataList, previewBox, overlay, kw = '') {
@@ -283,7 +374,7 @@ window.PornSubtitle = class PornSubtitle {
             // 是否包含所有的搜索分词 (决定是否显示🔥图标)
             const isExactMatch = kwClean && subNameClean.includes(kwClean);
 
-            let displayName = subName;
+            let displayName = this.escapeHtml(subName);
             if (highlightRegex) {
                 displayName = displayName.replace(highlightRegex, '<span style="color:#e74c3c; font-weight:bold;">$1</span>');
             }
@@ -312,9 +403,6 @@ window.PornSubtitle = class PornSubtitle {
             btn.onclick = async function () {
                 const action = this.dataset.action;
                 const item = dataList[this.dataset.idx];
-                const url = item.url;
-                if (!url) return alert('无效的字幕下载直链');
-
                 const format = item.ext || 'srt';
                 const standardName = window.PornBookmark ? window.PornBookmark.getStandardizedFilename() : document.title.replace(/[\\/:*?"<>|]/g, "_").replace(/\s+/g, ' ').trim();
                 const finalFilename = `${standardName}.${format}`;
@@ -324,6 +412,8 @@ window.PornSubtitle = class PornSubtitle {
                 this.style.opacity = '0.6';
 
                 try {
+                    const url = await self.resolveSubtitleUrl(item);
+                    if (!url) throw new Error('无效的字幕下载直链');
                     const buffer = await self.fetchBinary(url);
                     // [ADD] 核心防御：提前解码拦截阿里云 OSS 的失效报错，防止垃圾代码污染预览、下载或 115 直传
                     let defaultDecoder = new TextDecoder('utf-8');
@@ -406,5 +496,26 @@ window.PornSubtitle = class PornSubtitle {
                 onerror: () => reject(new Error('跨域网络请求被阻断'))
             });
         });
+    }
+
+    static fetchText(url) {
+        return new Promise((resolve, reject) => {
+            GM_xmlhttpRequest({
+                method: 'GET', url, timeout: 15000,
+                headers: { Accept: 'text/html' },
+                onload: (res) => res.status === 200 ? resolve(res.responseText || '') : reject(new Error(`HTTP ${res.status}`)),
+                onerror: () => reject(new Error('详情页请求失败')),
+                ontimeout: () => reject(new Error('详情页请求超时'))
+            });
+        });
+    }
+
+    static async resolveSubtitleUrl(item) {
+        if (item.url) return item.url;
+        if (!item.detailUrl) return '';
+        const html = await this.fetchText(item.detailUrl);
+        const links = [...html.matchAll(/href=["']([^"']+\.srt(?:\?[^"']*)?)["']/gi)].map(match => match[1]);
+        const preferred = links.find(link => /chinese|zh-cn|zh-tw|中文|简体|繁体/i.test(html.slice(Math.max(0, html.indexOf(link) - 300), html.indexOf(link) + 80))) || links[0];
+        return preferred ? new URL(preferred, 'https://www.subtitlecat.com/').href : '';
     }
 };
