@@ -5,6 +5,13 @@
  */
 
 window.PornMagnetUI = class PornMagnetUI {
+    static hasChineseSubtitleTag(name = '') {
+        const base = String(name).replace(/\.[^.]+$/, '');
+        return /\u4e2d\u5b57|\u5b57\u5e55|\b(?:chs|cht|sub)\b/i.test(base)
+            || /\b\d{2,4}[._-]\d{1,2}[._-]\d{1,2}(?:[._ -]*[-_]c)(?=$|[._ -])/i.test(base)
+            || /(?:-c|_c)$/i.test(base);
+    }
+
     constructor(options) {
         // 注入依赖
         this.pornArchiver = options.pornArchiver;
@@ -89,7 +96,7 @@ window.PornMagnetUI = class PornMagnetUI {
                     const realHash = (addRes.info_hash || (magnetHref.match(/btih:([0-9a-zA-Z]{32,40})/i) || [])[1] || '').toLowerCase();
                     btn.dataset.taskhash = realHash;
 
-                    let tags = /chs|cht|sub|中字|-c|_c/i.test(item.title) ? " 中文" : "";
+                    let tags = PornMagnetUI.hasChineseSubtitleTag(item.title) ? " \u4e2d\u6587" : "";
                     let cleanRawTitle = details.titlePart || details.title || '';
                     let maker = details.maker ? details.maker.trim() : '';
                     if (maker && cleanRawTitle.toLowerCase().startsWith(maker.toLowerCase())) { cleanRawTitle = cleanRawTitle.substring(maker.length).replace(/^[^a-zA-Z0-9\u4e00-\u9fa5]+/, '').trim(); }

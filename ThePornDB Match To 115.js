@@ -123,6 +123,14 @@
     }) : null;
 
     // 4. UI 渲染：匹配标签与瀑布流加载
+    // Detect -C/_C only next to a date or at the end of a filename title.
+    const hasChineseSubtitleTag = (name = '') => {
+        const base = String(name).replace(/\.[^.]+$/, '');
+        return /\u4e2d\u5b57|\u5b57\u5e55|\b(?:chs|cht|sub)\b/i.test(base)
+            || /\b\d{2,4}[._-]\d{1,2}[._-]\d{1,2}(?:[._ -]*[-_]c)(?=$|[._ -])/i.test(base)
+            || /(?:-c|_c)$/i.test(base);
+    };
+
     const applyMatchTagState = (item, videos) => {
         delete item.dataset.westObserved; // 匹配完毕，释放排队锁
         let node = item.querySelector(`.${MATCHTAGCLASS}`);
@@ -141,7 +149,7 @@
         let status = 'none';
 
         if (len) {
-            const hasZh = videos.some(v => /chs|cht|sub|中字|-c|_c/i.test(v.n));
+            const hasZh = videos.some(v => hasChineseSubtitleTag(v.n));
             const has4k = videos.some(v => /4k|2160p/i.test(v.n));
             let className = 'is-success'; status = 'success';
 
@@ -548,7 +556,7 @@
         const realKey = details.matchPrefix || details.dateStr;
 
         if (action === 'rename') {
-            let tags = /chs|cht|sub|中字|字幕|-c|_c/i.test(oldName) ? " 中文" : "";
+            let tags = hasChineseSubtitleTag(oldName) ? " \u4e2d\u6587" : "";
             await req.handleRename([{ fid, n: oldName, cid }], cid, { rename: details.fullTitle + tags, renameTxt: { zh: false, crack: false, no: '', sep: '' }, zh: false, crack: false });
             grant.notify({ status: 'success', msg: '重命名成功！' });
 

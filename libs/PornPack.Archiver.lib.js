@@ -5,6 +5,12 @@
  */
 
 window.PornArchiver = class PornArchiver {
+    static hasChineseSubtitleTag(name = '') {
+        const base = String(name).replace(/\.[^.]+$/, '');
+        return /\u4e2d\u5b57|\u5b57\u5e55|\b(?:chs|cht|sub)\b/i.test(base)
+            || /\b\d{2,4}[._-]\d{1,2}[._-]\d{1,2}(?:[._ -]*[-_]c)(?=$|[._ -])/i.test(base)
+            || /(?:-c|_c)$/i.test(base);
+    }
     constructor(options) {
         this.req115 = options.req115;
         this.updateBtnUI = options.updateBtnUI;
@@ -131,11 +137,7 @@ window.PornArchiver = class PornArchiver {
         if (this.updateBtnUI) this.updateBtnUI(item.hash, `智能重命名...`, '#f39c12');
 
         // 严谨的中文标识判断机制
-        const checkZh = (name) => {
-            if (/中字|字幕|\b(chs|cht|sub)\b/i.test(name)) return true;
-            if (/[-_]c(?=\.[a-zA-Z0-9]+$|$)/i.test(name)) return true;
-            return false;
-        };
+        const checkZh = (name) => PornArchiver.hasChineseSubtitleTag(name);
 
         const hasZh = videos.some(v => checkZh(v.n)) || srts.length > 0;
 
@@ -287,11 +289,7 @@ window.PornArchiver = class PornArchiver {
         }
 
         // 严谨的中文标识判断机制
-        const checkZh = (name) => {
-            if (/中字|字幕|\b(chs|cht|sub)\b/i.test(name)) return true;
-            if (/[-_]c(?=\.[a-zA-Z0-9]+$|$)/i.test(name)) return true;
-            return false;
-        };
+        const checkZh = (name) => PornArchiver.hasChineseSubtitleTag(name);
         const hasZh = checkZh(video.n) || srts.length > 0;
 
         let cleanRawTitle = details.titlePart || details.title || '';
