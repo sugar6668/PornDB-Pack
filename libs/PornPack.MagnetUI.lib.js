@@ -206,9 +206,10 @@ window.PornMagnetUI = class PornMagnetUI {
             const screenshots = (Array.isArray(data?.screenshots) ? data.screenshots : [])
                 .map((item) => typeof item === 'string' ? item : item?.screenshot ?? item?.url ?? item?.src ?? item?.image)
                 .filter((url) => typeof url === 'string' && url.trim());
-            this.renderMagnetPreview(screenshots);
+            const title = trigger.closest('tr')?.querySelector('.pdb-mag-name-box')?.getAttribute('title') || '';
+            this.renderMagnetPreview(screenshots, null, title);
         } catch (error) {
-            this.renderMagnetPreview([], error);
+            this.renderMagnetPreview([], error, '');
         } finally {
             delete trigger.dataset.busy;
             trigger.textContent = originalText;
@@ -216,7 +217,7 @@ window.PornMagnetUI = class PornMagnetUI {
         }
     }
 
-    renderMagnetPreview(screenshots, error) {
+    renderMagnetPreview(screenshots, error, title = '') {
         document.querySelector('.magnet-preview-overlay')?.remove();
         const overlay = document.createElement('div');
         overlay.className = 'magnet-preview-overlay';
@@ -252,14 +253,20 @@ window.PornMagnetUI = class PornMagnetUI {
         }
         const stage = document.createElement('div');
         stage.className = 'magnet-preview-stage';
+        const frame = document.createElement('div');
+        frame.className = 'magnet-preview-frame';
         const image = document.createElement('img');
         image.className = 'magnet-preview-image';
         image.alt = '磁力预览图';
-        stage.appendChild(image);
+        frame.append(image, close);
+        stage.appendChild(frame);
         const prev = this.createPreviewNavButton('magnet-preview-prev', '上一张');
         const next = this.createPreviewNavButton('magnet-preview-next', '下一张');
         stage.append(prev, next);
         stage.addEventListener('click', (event) => { if (event.target === stage) cleanup(); });
+        const caption = document.createElement('div');
+        caption.className = 'magnet-preview-caption';
+        caption.textContent = title || '磁力预览';
         const thumbs = document.createElement('div');
         thumbs.className = 'magnet-preview-thumbs';
         show = (nextIndex) => {
@@ -293,7 +300,7 @@ window.PornMagnetUI = class PornMagnetUI {
             lastWheelAt = now;
             show(index + (event.deltaY > 0 ? 1 : -1));
         }, { passive: false });
-        dialog.append(stage, thumbs);
+        dialog.append(stage, caption, thumbs);
         overlay.appendChild(dialog);
         document.body.appendChild(overlay);
         show(0);

@@ -415,8 +415,9 @@
         cleanSearchTitle(raw, pageMeta) {
             let title = safeString(raw || "");
             const studioName = safeString(pageMeta && pageMeta.studio || "");
-            // Studio.xx.xx.xx. or Studio.xx.xx.xx (optional trailing dot, then whitespace)
-            title = title.replace(/^[\w\s]+\s*\.\s*\d{2}\.\d{2}\.\d{2}\.*\s+/, "");
+            // Studio.xx.xx.xx. Title or Studio.xx.xx.xx.Title.  PornDB uses both
+            // forms, so a trailing dot may be followed directly by the title.
+            title = title.replace(/^[\w\s]+\s*\.\s*\d{2}\.\d{2}\.\d{2}(?:\.\s*|\s+)/, "");
             // Studio xx xx xx
             title = title.replace(/^[\w\s]+\s+\d{2}\s+\d{2}\s+\d{2}\s+/, "");
             // Studio - xx.xx.xx - or Studio - xx.xx.xx.xx -
@@ -1060,11 +1061,16 @@
                 const d18Meta = this._extractDetailPageMeta(dd);
                 this.debug("detail meta check", { d18Meta, pageMeta });
                 const strictMeta = !!best._requiresExactMeta;
-                if (pageMeta.date && (strictMeta ? d18Meta.date !== pageMeta.date : (d18Meta.date && d18Meta.date !== pageMeta.date))) {
+                // An exact title is sufficient for a unique record.  PornDB and
+                // Data18 can differ by one day when they use release versus
+                // catalogue/publication dates, so only use metadata to separate
+                // non-exact titles or multiple same-title candidates.
+                const exactTitle = !!cleanNorm && cleanNorm === d18Norm;
+                if (!exactTitle && pageMeta.date && (strictMeta ? d18Meta.date !== pageMeta.date : (d18Meta.date && d18Meta.date !== pageMeta.date))) {
                     this.debug("rejected detail: date mismatch");
                     return null;
                 }
-                if (pageMeta.studio && (strictMeta ? d18Meta.studio !== pageMeta.studio : (d18Meta.studio && d18Meta.studio !== pageMeta.studio))) {
+                if (!exactTitle && pageMeta.studio && (strictMeta ? d18Meta.studio !== pageMeta.studio : (d18Meta.studio && d18Meta.studio !== pageMeta.studio))) {
                     this.debug("rejected detail: studio mismatch");
                     return null;
                 }
