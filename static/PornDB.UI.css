@@ -216,8 +216,8 @@ body.west-similar-collapsed .west-similar-grid-node { display: none !important; 
 .magnet-preview-overlay { position: fixed; inset: 0; z-index: 10000000; display: grid; place-items: center; padding: 1vh 1vw; }
 .magnet-preview-dialog { position: relative; display: grid; grid-template-rows: minmax(0, 1fr) auto auto; width: min(94vw, 1680px); height: 92vh; }
 .magnet-preview-stage { position: relative; display: grid; min-width: 0; min-height: 0; margin: 0; place-items: end center; }
-.magnet-preview-frame { position: relative; display: flex; max-width: 100%; max-height: 100%; }
-.magnet-preview-image { display: block; max-width: 100%; max-height: 100%; width: auto; height: auto; object-fit: contain; background: transparent; }
+.magnet-preview-frame { position: relative; display: flex; width: 100%; height: 100%; }
+.magnet-preview-image { display: block; width: 100%; height: 100%; object-fit: contain; background: transparent; }
 .magnet-preview-thumbs { display: flex; justify-self: center; width: fit-content; max-width: calc(100vw - 8rem); min-height: 5.75rem; gap: .45rem; padding: .45rem .75rem; overflow-x: auto; overflow-y: hidden; background: rgb(20 20 24 / 88%); border: 1px solid rgb(255 255 255 / 14%); border-radius: .65rem; }
 .magnet-preview-thumb { flex: 0 0 auto; width: 7rem; height: 5rem; padding: 0; overflow: hidden; cursor: pointer; background: #111; border: 2px solid transparent; opacity: .62; }
 .magnet-preview-thumb img { display: block; width: 100%; height: 100%; object-fit: cover; }
@@ -227,7 +227,7 @@ body.west-similar-collapsed .west-similar-grid-node { display: none !important; 
 .magnet-preview-nav:hover { background: rgb(123 94 167 / 90%); }
 .magnet-preview-prev { left: .65rem; transform: translateY(-50%) scaleX(-1); }
 .magnet-preview-next { right: .65rem; }
-.magnet-preview-close { position: absolute; top: .6rem; right: .6rem; z-index: 1; width: 2.35rem; height: 2.35rem; padding: 0; cursor: pointer; background: rgb(20 20 24 / 76%); border: 1px solid rgb(255 255 255 / 22%); border-radius: 50%; }
+.magnet-preview-close { position: absolute; top: .6rem; right: auto; z-index: 1; width: 2.35rem; height: 2.35rem; padding: 0; cursor: pointer; background: rgb(20 20 24 / 76%); border: 1px solid rgb(255 255 255 / 22%); border-radius: 50%; }
 .magnet-preview-close::before, .magnet-preview-close::after { position: absolute; top: 50%; left: 50%; width: 1rem; height: 2px; content: ''; background: #fff; transform: translate(-50%, -50%) rotate(45deg); }
 .magnet-preview-close::after { transform: translate(-50%, -50%) rotate(-45deg); }
 .magnet-preview-close:hover { background: #ef5a86; }

@@ -232,7 +232,12 @@ window.PornMagnetUI = class PornMagnetUI {
         dialog.appendChild(close);
         let index = 0;
         let show = () => {};
-        const cleanup = () => { document.removeEventListener('keydown', onKeyDown); overlay.remove(); };
+        let closeObserver;
+        const cleanup = () => {
+            closeObserver?.disconnect();
+            document.removeEventListener('keydown', onKeyDown);
+            overlay.remove();
+        };
         const onKeyDown = (event) => {
             if (event.key === 'Escape') cleanup();
             if (event.key === 'ArrowLeft') show(index - 1);
@@ -260,6 +265,22 @@ window.PornMagnetUI = class PornMagnetUI {
         image.alt = '磁力预览图';
         frame.append(image, close);
         stage.appendChild(frame);
+        const positionClose = () => {
+            const frameWidth = frame.clientWidth;
+            const frameHeight = frame.clientHeight;
+            if (!image.naturalWidth || !image.naturalHeight || !frameWidth || !frameHeight) return;
+            const imageRatio = image.naturalWidth / image.naturalHeight;
+            const frameRatio = frameWidth / frameHeight;
+            const renderedWidth = frameRatio > imageRatio ? frameHeight * imageRatio : frameWidth;
+            const renderedHeight = frameRatio > imageRatio ? frameHeight : frameWidth / imageRatio;
+            const left = (frameWidth - renderedWidth) / 2 + renderedWidth - close.offsetWidth - 10;
+            const top = (frameHeight - renderedHeight) / 2 + 10;
+            close.style.left = `${Math.max(10, left)}px`;
+            close.style.top = `${Math.max(10, top)}px`;
+        };
+        image.addEventListener('load', positionClose);
+        closeObserver = new ResizeObserver(positionClose);
+        closeObserver.observe(frame);
         const prev = this.createPreviewNavButton('magnet-preview-prev', '上一张');
         const next = this.createPreviewNavButton('magnet-preview-next', '下一张');
         stage.append(prev, next);
