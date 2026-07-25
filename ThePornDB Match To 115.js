@@ -29,6 +29,7 @@
 // @require      https://raw.githubusercontent.com/sugar6668/PornDB-Pack/refs/heads/dev/libs/PornPack.Favorites.lib.js
 // @require      https://raw.githubusercontent.com/sugar6668/PornDB-Pack/refs/heads/dev/libs/PornPack.DataManager.lib.js
 // @require      https://github.com/Tampermonkey/utils/raw/d8a4543a5f828dfa8eefb0a3360859b6fe9c3c34/requires/gh_2215_make_GM_xhr_more_parallel_again.js
+// @connect      whatslink.info
 // @connect      *
 // @grant        GM_getResourceText
 // @grant        GM_xmlhttpRequest
@@ -430,10 +431,13 @@
                             } catch (e) { }
                         }
 
-                        if (item.hasCover === undefined) {
+                        // 按 NFO / PBF / 字幕模块的文件列表逻辑调用 filesAll(cid) 检查封面。
+                        // 严格匹配 *.cover.<image> 或 cover.<image>，避免普通图片被误判为封面。
+                        if (item.coverDetectionVersion !== 2) {
                             try {
                                 const filesRes = await req.filesAll(item.cid);
-                                item.hasCover = filesRes && filesRes.data && filesRes.data.some(f => /\.(jpg|jpeg|png|webp|gif)$/i.test(f.n));
+                                item.hasCover = !!filesRes?.data?.some(f => /(?:^|[._\s-])cover\.(?:jpe?g|png|webp|gif)$/i.test(String(f.n || '')));
+                                item.coverDetectionVersion = 2;
 
                                 if (item.hasCover) {
                                     const coverBtn = doc.getElementById(`west-cover-${item.cid}`);

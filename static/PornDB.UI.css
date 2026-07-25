@@ -41,7 +41,8 @@
 #jav-nong-table { width: 100%; color: #363636; font-size: 13px; text-align: left; border-collapse: collapse; }
 #jav-nong-table th, #jav-nong-table td { padding: 8px 10px; border-bottom: 1px solid #f0f0f0; vertical-align: middle; }
 #jav-nong-table .nong-head-row th { background: #f9f9f9; font-weight: bold; position: sticky; top: 0; z-index: 10; border-bottom: 2px solid #e8e8e8;}
-.nong-copy { color: #5470d8 !important; cursor: pointer; text-decoration: none; font-weight: bold; }
+.nong-copy, .nong-preview { color: #5470d8 !important; cursor: pointer; text-decoration: none; font-weight: bold; }
+.nong-preview:hover, .nong-copy:hover { color: #455ec0 !important; }
 .nong-offline-115 { color: #19c5b7 !important; cursor: pointer; text-decoration: none; font-weight: bold; }
 .jav-filter-group { display: inline-flex; margin-left: auto; align-items: center; gap: 8px; padding-right: 15px; }
 .jav-filter-btn { background: #e7e7e7; border: 1px solid #e4e7ed; border-radius: 6px; padding: 4px 12px; font-size: 13px; font-weight: 600; color: #606266; cursor: pointer; transition: all 0.25s; }
@@ -210,3 +211,24 @@ body.west-similar-collapsed .west-similar-grid-node { display: none !important; 
 .pdb-c-blue { color: #0dcaf0; font-weight: bold; }
 .pdb-c-red { color: #dc3545; font-weight: bold; }
 .pdb-c-muted { color: #888; font-weight: bold; }
+
+/* 10. Magnet screenshot preview */
+.magnet-preview-overlay { position: fixed; inset: 0; z-index: 10000000; display: grid; place-items: center; padding: 1vh 1vw; }
+.magnet-preview-dialog { position: relative; display: grid; grid-template-rows: minmax(0, 1fr) auto; width: min(94vw, 1680px); height: 92vh; }
+.magnet-preview-stage { position: relative; display: grid; min-width: 0; min-height: 0; margin: 0; place-items: center; }
+.magnet-preview-image { width: 100%; height: 100%; object-fit: contain; background: transparent; }
+.magnet-preview-thumbs { display: flex; justify-self: center; width: fit-content; max-width: calc(100vw - 8rem); min-height: 5.75rem; gap: .45rem; padding: .45rem .75rem; overflow-x: auto; overflow-y: hidden; background: rgb(20 20 24 / 88%); border: 1px solid rgb(255 255 255 / 14%); border-radius: .65rem; }
+.magnet-preview-thumb { flex: 0 0 auto; width: 7rem; height: 5rem; padding: 0; overflow: hidden; cursor: pointer; background: #111; border: 2px solid transparent; opacity: .62; }
+.magnet-preview-thumb img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.magnet-preview-thumb:hover, .magnet-preview-thumb.is-active { border-color: #a78bfa; opacity: 1; }
+.magnet-preview-nav { position: absolute; top: 50%; display: grid; width: 2.7rem; height: 2.7rem; padding: .45rem; color: #fff; cursor: pointer; background: rgb(20 20 24 / 68%); border: 1px solid rgb(255 255 255 / 22%); border-radius: 50%; transform: translateY(-50%); }
+.magnet-preview-nav svg { width: 100%; height: 100%; }
+.magnet-preview-nav:hover { background: rgb(123 94 167 / 90%); }
+.magnet-preview-prev { left: .65rem; transform: translateY(-50%) scaleX(-1); }
+.magnet-preview-next { right: .65rem; }
+.magnet-preview-close { position: absolute; top: .6rem; right: .6rem; z-index: 1; width: 2.35rem; height: 2.35rem; padding: 0; cursor: pointer; background: rgb(20 20 24 / 76%); border: 1px solid rgb(255 255 255 / 22%); border-radius: 50%; }
+.magnet-preview-close::before, .magnet-preview-close::after { position: absolute; top: 50%; left: 50%; width: 1rem; height: 2px; content: ''; background: #fff; transform: translate(-50%, -50%) rotate(45deg); }
+.magnet-preview-close::after { transform: translate(-50%, -50%) rotate(-45deg); }
+.magnet-preview-close:hover { background: #ef5a86; }
+.magnet-preview-empty { align-self: center; justify-self: center; padding: .65rem 1rem; color: #fff; background: rgb(20 20 24 / 88%); border: 1px solid rgb(255 255 255 / 14%); border-radius: .65rem; }
+@media (max-width: 640px) { .magnet-preview-overlay { padding: 0; } .magnet-preview-dialog { width: 100vw; height: 100vh; } .magnet-preview-thumbs { max-width: calc(100vw - 2rem); min-height: 4.75rem; } .magnet-preview-thumb { width: 5.5rem; height: 4rem; } .magnet-preview-nav { width: 2.35rem; height: 2.35rem; } }

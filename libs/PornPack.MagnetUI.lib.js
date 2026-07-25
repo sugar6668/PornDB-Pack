@@ -34,7 +34,7 @@ window.PornMagnetUI = class PornMagnetUI {
         table.querySelectorAll('tr:not(.nong-head-row)').forEach(r => r.remove());
 
         if (!data || !data.length) {
-            table.insertAdjacentHTML('beforeend', `<tr><td colspan="4" class="pdb-mag-empty">未找到结果，试试删减上方的关键词，或点击跳转搜索</td></tr>`);
+            table.insertAdjacentHTML('beforeend', `<tr><td colspan="5" class="pdb-mag-empty">未找到结果，试试删减上方的关键词，或点击跳转搜索</td></tr>`);
             return;
         }
 
@@ -58,7 +58,7 @@ window.PornMagnetUI = class PornMagnetUI {
 
         const sortedData = processedData.filter(item => item.score >= 40).sort((a, b) => b.score !== a.score ? b.score - a.score : b.sizeMB - a.sizeMB).slice(0, 10);
 
-        if (!sortedData.length) { table.insertAdjacentHTML('beforeend', `<tr><td colspan="4" class="pdb-mag-empty">资源均被过滤（可能是超大合集），请尝试修改关键词</td></tr>`); return; }
+        if (!sortedData.length) { table.insertAdjacentHTML('beforeend', `<tr><td colspan="5" class="pdb-mag-empty">资源均被过滤（可能是超大合集），请尝试修改关键词</td></tr>`); return; }
 
         sortedData.forEach(item => {
             if (!item.maglink) return;
@@ -144,13 +144,13 @@ window.PornMagnetUI = class PornMagnetUI {
 
     async runSearch(table, kw, engineName, details) {
         table.querySelectorAll('tr:not(.nong-head-row)').forEach(r => r.remove());
-        table.insertAdjacentHTML('beforeend', `<tr><td colspan="4" class="pdb-mag-loading"><svg width="18" height="18" viewBox="0 0 24 24" style="vertical-align:middle; animation: spin 1s linear infinite;" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-6.219-8.56"></path></svg> 正在检索 [ ${kw} ] ... <style>@keyframes spin { 100% { transform: rotate(360deg); } }</style></td></tr>`);
+        table.insertAdjacentHTML('beforeend', `<tr><td colspan="5" class="pdb-mag-loading"><svg width="18" height="18" viewBox="0 0 24 24" style="vertical-align:middle; animation: spin 1s linear infinite;" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-6.219-8.56"></path></svg> 正在检索 [ ${kw} ] ... <style>@keyframes spin { 100% { transform: rotate(360deg); } }</style></td></tr>`);
         try {
             const data = await new window.PornMagnetSearch(this.gmFetch).search(engineName, kw);
             this.fillTable(table, data, details);
         } catch (e) {
             table.querySelectorAll('tr:not(.nong-head-row)').forEach(r => r.remove());
-            table.insertAdjacentHTML('beforeend', `<tr><td colspan="4" class="pdb-mag-error">搜索引擎连接失败：${(e && e.message) ? e.message : '请检查网络'}</td></tr>`);
+            table.insertAdjacentHTML('beforeend', `<tr><td colspan="5" class="pdb-mag-error">搜索引擎连接失败：${(e && e.message) ? e.message : '请检查网络'}</td></tr>`);
         }
     }
 
@@ -166,6 +166,12 @@ window.PornMagnetUI = class PornMagnetUI {
 
         // [MOD] 全局事件委托：一键监听所有“复制”按钮，省去循环绑定的内存消耗
         table.addEventListener('click', (e) => {
+            const previewBtn = e.target.closest('.nong-preview');
+            if (previewBtn) {
+                e.preventDefault();
+                this.openMagnetPreview(previewBtn);
+                return;
+            }
             const copyBtn = e.target.closest('.nong-copy');
             if (copyBtn) {
                 e.preventDefault();
@@ -186,5 +192,120 @@ window.PornMagnetUI = class PornMagnetUI {
 
         this.runSearch(table, initKw, 'BitSearch', details);
         return wrapper;
+    }
+
+    async openMagnetPreview(trigger) {
+        const magnetUrl = trigger.dataset.mag;
+        if (!magnetUrl || trigger.dataset.busy === '1') return;
+        const originalText = trigger.textContent;
+        trigger.dataset.busy = '1';
+        trigger.textContent = '加载中…';
+        trigger.setAttribute('aria-busy', 'true');
+        try {
+            const data = await Req.request({ url: 'https://whatslink.info/api/v1/link', params: { url: magnetUrl }, responseType: 'json' });
+            const screenshots = (Array.isArray(data?.screenshots) ? data.screenshots : [])
+                .map((item) => typeof item === 'string' ? item : item?.screenshot ?? item?.url ?? item?.src ?? item?.image)
+                .filter((url) => typeof url === 'string' && url.trim());
+            this.renderMagnetPreview(screenshots);
+        } catch (error) {
+            this.renderMagnetPreview([], error);
+        } finally {
+            delete trigger.dataset.busy;
+            trigger.textContent = originalText;
+            trigger.removeAttribute('aria-busy');
+        }
+    }
+
+    renderMagnetPreview(screenshots, error) {
+        document.querySelector('.magnet-preview-overlay')?.remove();
+        const overlay = document.createElement('div');
+        overlay.className = 'magnet-preview-overlay';
+        overlay.setAttribute('role', 'dialog');
+        overlay.setAttribute('aria-modal', 'true');
+        const dialog = document.createElement('div');
+        dialog.className = 'magnet-preview-dialog';
+        const close = document.createElement('button');
+        close.className = 'magnet-preview-close';
+        close.type = 'button';
+        close.setAttribute('aria-label', '关闭预览');
+        dialog.appendChild(close);
+        let index = 0;
+        let show = () => {};
+        const cleanup = () => { document.removeEventListener('keydown', onKeyDown); overlay.remove(); };
+        const onKeyDown = (event) => {
+            if (event.key === 'Escape') cleanup();
+            if (event.key === 'ArrowLeft') show(index - 1);
+            if (event.key === 'ArrowRight') show(index + 1);
+        };
+        close.addEventListener('click', cleanup);
+        overlay.addEventListener('click', (event) => { if (event.target === overlay) cleanup(); });
+        document.addEventListener('keydown', onKeyDown);
+        if (!screenshots.length) {
+            const empty = document.createElement('p');
+            empty.className = 'magnet-preview-empty';
+            empty.textContent = error ? '预览加载失败，请稍后重试。' : '没有可用的预览图。';
+            dialog.appendChild(empty);
+            overlay.appendChild(dialog);
+            document.body.appendChild(overlay);
+            close.focus();
+            return;
+        }
+        const stage = document.createElement('div');
+        stage.className = 'magnet-preview-stage';
+        const image = document.createElement('img');
+        image.className = 'magnet-preview-image';
+        image.alt = '磁力预览图';
+        stage.appendChild(image);
+        const prev = this.createPreviewNavButton('magnet-preview-prev', '上一张');
+        const next = this.createPreviewNavButton('magnet-preview-next', '下一张');
+        stage.append(prev, next);
+        stage.addEventListener('click', (event) => { if (event.target === stage) cleanup(); });
+        const thumbs = document.createElement('div');
+        thumbs.className = 'magnet-preview-thumbs';
+        show = (nextIndex) => {
+            index = (nextIndex + screenshots.length) % screenshots.length;
+            image.src = screenshots[index];
+            image.alt = `磁力预览图 ${index + 1}/${screenshots.length}`;
+            [...thumbs.children].forEach((thumb, thumbIndex) => {
+                thumb.classList.toggle('is-active', thumbIndex === index);
+                if (thumbIndex === index) thumb.scrollIntoView({ block: 'nearest', inline: 'center' });
+            });
+        };
+        screenshots.forEach((url, thumbIndex) => {
+            const thumb = document.createElement('button');
+            thumb.type = 'button';
+            thumb.className = 'magnet-preview-thumb';
+            thumb.setAttribute('aria-label', `查看第 ${thumbIndex + 1} 张预览图`);
+            const thumbImage = document.createElement('img');
+            thumbImage.src = url;
+            thumbImage.alt = '';
+            thumb.appendChild(thumbImage);
+            thumb.addEventListener('click', () => show(thumbIndex));
+            thumbs.appendChild(thumb);
+        });
+        prev.addEventListener('click', () => show(index - 1));
+        next.addEventListener('click', () => show(index + 1));
+        let lastWheelAt = 0;
+        stage.addEventListener('wheel', (event) => {
+            event.preventDefault();
+            const now = Date.now();
+            if (now - lastWheelAt < 180) return;
+            lastWheelAt = now;
+            show(index + (event.deltaY > 0 ? 1 : -1));
+        }, { passive: false });
+        dialog.append(stage, thumbs);
+        overlay.appendChild(dialog);
+        document.body.appendChild(overlay);
+        show(0);
+        close.focus();
+    }
+
+    createPreviewNavButton(className, label) {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = `magnet-preview-nav ${className}`;
+        button.setAttribute('aria-label', label);
+        button.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 4 8 8-8 8M13 4l8 8-8 8" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.25"></path></svg>';
+        return button;
     }
 };

@@ -120,6 +120,7 @@
                     <tr class="nong-head-row">
                         <th>资源名称</th>
                         <th style="width:80px; text-align:center;">大小</th>
+                        <th style="width:60px; text-align:center;">预览</th>
                         <th style="width:60px; text-align:center;">操作</th>
                         <th style="width:150px; text-align:center;">离线</th>
                     </tr>
@@ -135,6 +136,7 @@
                 ${item.extraHtml || ''} 
             </td>
             <td class="pdb-mag-size-td">${item.size}</td>
+            <td class="pdb-mag-action-td"><a class="nong-preview" data-mag="${item.maglink}">预览</a></td>
             <td class="pdb-mag-action-td"><a class="nong-copy" data-mag="${item.maglink}">复制</a></td>
             <td class="pdb-mag-action-td"><a class="nong-offline-115" data-mag="${item.maglink}">离线刮削</a></td>
         `,
