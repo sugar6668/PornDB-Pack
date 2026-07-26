@@ -15,6 +15,17 @@ class MagnetSearcher {
         this.fetch = fetcher;
     }
 
+    static ensureFetchOk(response, engineLabel) {
+        const status = Number(response?.status || 0);
+        if (!response || !response.loadstuts || status >= 400) {
+            const httpText = status >= 400 ? `HTTP ${status}` : '网络连接失败';
+            throw new Error(`${engineLabel} 网络错误：${httpText}，请检查代理或网络连接后重试。`);
+        }
+        if (!String(response.responseText || '').trim()) {
+            throw new Error(`${engineLabel} 网络错误：站点没有返回有效内容，请检查代理或网络连接后重试。`);
+        }
+    }
+
     /**
      * 统一搜索入口
      * @param {string} engineName - 引擎名称 ('BTDigg' | 'PirateBay' | 'BitSearch')
@@ -39,7 +50,7 @@ class MagnetSearcher {
     // ==========================================
     async searchBTDigg(kw) {
         const r = await this.fetch(`https://btdig.com/search?q=${encodeURIComponent(kw)}`);
-        if (!r.loadstuts) return [];
+        MagnetSearcher.ensureFetchOk(r, 'BTDigg');
         
         const doc = new DOMParser().parseFromString(r.responseText, 'text/html');
         return [...doc.querySelectorAll('div.one_result')].map(el => {
@@ -75,7 +86,7 @@ class MagnetSearcher {
     // ==========================================
     async searchPirateBay(kw) {
         const r = await this.fetch(`https://apibay.org/q.php?q=${encodeURIComponent(kw)}&cat=500`);
-        if (!r.loadstuts) return [];
+        MagnetSearcher.ensureFetchOk(r, 'PirateBay');
         
         try {
             const json = JSON.parse(r.responseText);
@@ -104,8 +115,8 @@ class MagnetSearcher {
                     src: `https://thepiratebay.org/description.php?id=${item.id}`
                 };
             });
-        } catch (e) { 
-            return []; 
+        } catch (e) {
+            throw new Error('PirateBay 网络错误：返回内容不是有效数据，请检查代理或网络连接后重试。');
         }
     }
 
@@ -114,7 +125,7 @@ class MagnetSearcher {
     // ==========================================
     async searchBitSearch(kw) {
         const r = await this.fetch(`https://bitsearch.eu/search?q=${encodeURIComponent(kw)}`);
-        if (!r.loadstuts) return [];
+        MagnetSearcher.ensureFetchOk(r, 'BitSearch');
         
         const doc = new DOMParser().parseFromString(r.responseText, 'text/html');
         return [...doc.querySelectorAll('div.bg-white.rounded-lg.shadow-sm')].map(el => {
