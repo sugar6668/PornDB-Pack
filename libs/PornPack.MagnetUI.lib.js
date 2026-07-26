@@ -278,7 +278,10 @@ window.PornMagnetUI = class PornMagnetUI {
             close.style.left = `${Math.max(10, left)}px`;
             close.style.top = `${Math.max(10, top)}px`;
         };
-        image.addEventListener('load', positionClose);
+        image.addEventListener('load', () => {
+            frame.style.setProperty('--magnet-preview-ratio', image.naturalWidth / image.naturalHeight);
+            requestAnimationFrame(positionClose);
+        });
         closeObserver = new ResizeObserver(positionClose);
         closeObserver.observe(frame);
         const prev = this.createPreviewNavButton('magnet-preview-prev', '上一张');
