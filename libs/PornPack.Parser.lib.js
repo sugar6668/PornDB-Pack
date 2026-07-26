@@ -51,7 +51,7 @@ window.PornParser = class PornParser {
                 if (txtMatch) details.maker = txtMatch[0];
             }
             details.maker = details.maker.replace(/\n/g, '').replace(/\s+/g, ' ').trim();
-            details.baseAlpha = details.maker.replace(/\s+/g, '');
+            details.baseAlpha = details.maker.replace(/[\s.]+/g, '');
 
             if (details.dateStr && details.titlePart) details.isValid = true;
 
@@ -183,7 +183,7 @@ window.PornParser = class PornParser {
                 }
             }
             details.maker = details.maker.replace(/\n/g, '').replace(/\s+/g, ' ').trim();
-            details.baseAlpha = details.maker.replace(/\s+/g, '');
+            details.baseAlpha = details.maker.replace(/[\s.]+/g, '');
 
             details.actors = [];
             const maleBlacklist = ['mick blue', 'keiran lee', 'manuel ferrara', 'jordi el nino polla', 'rocco siffredi', 'steve holmes', 'markus dupree', 'charles dera', 'damon dice', 'isiah maxwell', 'christian clay', 'oliver flynn', 'luke hardy', 'vince karter', 'tommy pistol', 'xander corvus', 'ryan driller', 'logan pierce', 'james deen', 'danny d', 'ramon nomar', 'johnny sins', 'seth gamble', 'alex adams', 'ricky johnson', 'quinton james', 'michael vegas'];

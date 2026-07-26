@@ -310,7 +310,7 @@ window.PornArchiver = class PornArchiver {
 
         // 原生封面挂载
         if (details.coverUrl) {
-            const coverRes = await this.req115.handleCover(details.coverUrl, targetCid, `${details.baseAlpha}.${details.dateStr}.cover.jpg`); // 封面命名格式
+            const coverRes = await this.req115.handleCover(details.coverUrl, targetCid, `${details.baseAlpha}.${details.dateStr}.cover.jpg`);
             if (coverRes?.data?.fileid || coverRes?.data?.file_id) {
                 await this.req115.filesEdit(targetCid, coverRes.data.fileid || coverRes.data.file_id);
             }

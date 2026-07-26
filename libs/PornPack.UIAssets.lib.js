@@ -162,7 +162,7 @@
                 </button>
                 <div class="buttons">
                     <button class="is-offline x-west-offline-btn" data-dir="${targetDir}" title="移动此文件到：${targetDir}">刮削归档</button>
-                    <button class="is-rename" data-action="rename" data-cid="${item.cid}" data-fid="${item.fid}" data-n="${item.n}">重命名</button>
+                    <button class="is-rename" data-action="rename" data-cid="${item.cid}" data-fid="${item.fid}" data-n="${item.n}">同步重命名</button>
                     <button class="${coverBtnClass}" id="west-cover-${item.cid}" data-action="cover" data-cid="${item.cid}">${coverBtnText}</button>
                     <button class="is-delviedo" data-action="delv" data-cid="${item.cid}" data-fid="${item.fid}">删视频</button>
                     <button class="is-delfolder" data-action="delf" data-cid="${item.cid}">删文件夹</button>

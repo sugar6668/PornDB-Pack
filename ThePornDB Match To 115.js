@@ -551,6 +551,54 @@
         catch (e) { grant.notify({ status: 'error', msg: `归档失败: ${e.message}` }); }
     };
 
+    const buildStandardizedArchiveName = (details) => {
+        let cleanRawTitle = details.titlePart || details.title || '';
+        const maker = (details.maker || '').trim();
+        if (maker && cleanRawTitle.toLowerCase().startsWith(maker.toLowerCase())) {
+            cleanRawTitle = cleanRawTitle.substring(maker.length).replace(/^[^a-zA-Z0-9\u4e00-\u9fa5]+/, '').trim();
+        }
+        return (details.matchPrefix ? `${details.matchPrefix} ${cleanRawTitle}` : details.fullTitle)
+            .replace(/[\\/:*?"<>|]/g, '').replace(/\s+/g, ' ').trim();
+    };
+
+    const renameArchivedBundle = async (details, cid, primaryFid) => {
+        const req = getReq();
+        const { data = [] } = await req.filesAll(cid);
+        const baseName = buildStandardizedArchiveName(details);
+        const coverBaseName = [details.baseAlpha, details.dateStr].filter(Boolean).join('.') || baseName;
+        if (!baseName) throw new Error('未能生成标准文件名');
+
+        const groups = { video: [], subtitle: [], nfo: [], pbf: [], cover: [] };
+        const videoExts = new Set(['mp4', 'mkv', 'avi', 'wmv', 'mov', 'm4v', 'ts', 'webm']);
+        const subtitleExts = new Set(['srt', 'ass', 'ssa', 'vtt', 'sub']);
+        for (const file of data) {
+            if (!file.fid) continue;
+            const ext = (String(file.n || '').match(/\.([^.]+)$/) || [])[1]?.toLowerCase();
+            if (!ext) continue;
+            if (videoExts.has(ext)) groups.video.push({ ...file, ext });
+            else if (subtitleExts.has(ext)) groups.subtitle.push({ ...file, ext });
+            else if (ext === 'nfo') groups.nfo.push({ ...file, ext });
+            else if (ext === 'pbf') groups.pbf.push({ ...file, ext });
+            else if (['jpg', 'jpeg', 'png', 'webp'].includes(ext) && /(?:cover|poster|fanart|thumb)/i.test(file.n || '')) groups.cover.push({ ...file, ext });
+        }
+
+        const renameObj = { [cid]: baseName };
+        const renameGroup = (files, makeName) => {
+            files.sort((a, b) => String(a.n).localeCompare(String(b.n))).forEach((file, index) => {
+                renameObj[file.fid] = makeName(file, index, files.length);
+            });
+        };
+        renameGroup(groups.video, (file, index, count) => `${baseName}${count > 1 ? `-${String(index + 1).padStart(2, '0')}` : ''}.${file.ext}`);
+        renameGroup(groups.subtitle, (file, index, count) => `${baseName}${hasChineseSubtitleTag(file.n) ? ' [中文]' : ''}${count > 1 ? `-${String(index + 1).padStart(2, '0')}` : ''}.${file.ext}`);
+        renameGroup(groups.nfo, (file, index, count) => `${baseName}${count > 1 ? `-${String(index + 1).padStart(2, '0')}` : ''}.nfo`);
+        renameGroup(groups.pbf, (file, index, count) => `${baseName}${count > 1 ? `-${String(index + 1).padStart(2, '0')}` : ''}.pbf`);
+        renameGroup(groups.cover, (file, index, count) => `${coverBaseName}.cover${count > 1 ? `-${String(index + 1).padStart(2, '0')}` : ''}.${file.ext}`);
+
+        await req.filesBatchRename(renameObj);
+        const primary = groups.video.find(file => String(file.fid) === String(primaryFid)) || groups.video[0];
+        return { baseName, primaryName: primary ? renameObj[primary.fid] : baseName, count: Object.keys(renameObj).length - 1 };
+    };
+
     const executeMatch = async (details, btn, doc) => {
         const req = getReq(), grant = getGrant();
         if (!req || !grant || !details) return;
@@ -560,9 +608,10 @@
         const realKey = details.matchPrefix || details.dateStr;
 
         if (action === 'rename') {
-            let tags = hasChineseSubtitleTag(oldName) ? " \u4e2d\u6587" : "";
-            await req.handleRename([{ fid, n: oldName, cid }], cid, { rename: details.fullTitle + tags, renameTxt: { zh: false, crack: false, no: '', sep: '' }, zh: false, crack: false });
-            grant.notify({ status: 'success', msg: '重命名成功！' });
+            if (!window.confirm('将同步重命名当前文件夹、视频、字幕、NFO、PBF 和已有封面，是否继续？')) return;
+            const result = await renameArchivedBundle(details, cid, fid);
+            btn.dataset.n = result.primaryName;
+            grant.notify({ status: 'success', msg: `已同步重命名文件夹及 ${result.count} 个文件！` });
 
             // [MOD] 杀缓存并直接更新前端名字 (修正为正确的纯净 key)
             window.PornDriveAPI.deleteMatchCache(realKey);
@@ -570,7 +619,7 @@
             const itemDom = btn.closest('.zymatch-item-west');
             if (itemDom) {
                 const wideBtn = itemDom.querySelector('.x-match-btn-wide');
-                if (wideBtn) wideBtn.innerHTML = wideBtn.innerHTML.replace(oldName, `${details.fullTitle}${tags} <span style="color:#28a745; font-size:12px; font-weight:bold;">[已改名]</span>`);
+                if (wideBtn) wideBtn.innerHTML = wideBtn.innerHTML.replace(oldName, `${result.primaryName} <span style="color:#28a745; font-size:12px; font-weight:bold;">[已改名]</span>`);
                 btn.textContent = '已改名';
                 btn.style.pointerEvents = 'none';
                 btn.style.background = '#28a745';
@@ -579,7 +628,7 @@
         } else if (action === 'cover') {
             if (btn.classList.contains('has-cover')) { grant.notify({ status: 'warning', msg: '该目录已存在封面' }); return; }
             if (!details.coverUrl) { grant.notify({ status: 'error', msg: '未找到可用封面' }); return; }
-            const coverRes = await req.handleCover(details.coverUrl, cid, `${details.baseAlpha}.${details.dateStr}.cover.jpg`); // 封面命名格式
+            const coverRes = await req.handleCover(details.coverUrl, cid, `${details.baseAlpha}.${details.dateStr}.cover.jpg`);
             const fileId = coverRes?.data?.fileid || coverRes?.data?.file_id || coverRes?.file_id || coverRes?.fileid;
             if (fileId) { await req.filesEdit(cid, fileId); btn.textContent = '已有封面'; btn.classList.add('has-cover'); grant.notify({ status: 'success', msg: '封面上传成功！' }); }
             else { grant.notify({ status: 'error', msg: '封面设为专属可能失败' }); }
