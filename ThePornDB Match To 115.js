@@ -497,6 +497,15 @@
         doAutoMatch(doc, details);
     };
 
+    const syncMatchCacheFromDirectory = async (details, cid) => {
+        const cacheKey = details.matchPrefix || details.dateStr;
+        const req = getReq();
+        const { data: files = [] } = await req.filesAllVideos(cid);
+        const videos = window.PornMatcher.getMatchedVideos(files, details);
+        if (videos.length) window.PornDriveAPI.setMatchCache(cacheKey, videos);
+        return videos;
+    };
+
     // 7. 事件委托机制与系统引导
     const executeOffline = async (details, btn, doc) => {
         const req = getReq(), grant = getGrant();
@@ -514,6 +523,8 @@
         try {
             // [MOD] 接收归档后返回的最新目录 ID (newCid)
             const newCid = await pornArchiver.flattenAfterOffline(details, dir, directVideo);
+            // 小窗归档完成后立即把新目录中的视频写回匹配缓存；关闭小窗时主页面会读取该缓存并刷新原卡片。
+            if (newCid) await syncMatchCacheFromDirectory(details, newCid);
             grant.notify({ status: 'success', msg: `目录刮削梳理完成！` });
 
             const itemDom = btn.closest('.zymatch-item-west');
@@ -613,8 +624,8 @@
             btn.dataset.n = result.primaryName;
             grant.notify({ status: 'success', msg: `已同步重命名文件夹及 ${result.count} 个文件！` });
 
-            // [MOD] 杀缓存并直接更新前端名字 (修正为正确的纯净 key)
-            window.PornDriveAPI.deleteMatchCache(realKey);
+            // 同步刷新缓存，确保关闭小窗后主卡片读取到已改名的新文件。
+            await syncMatchCacheFromDirectory(details, cid);
 
             const itemDom = btn.closest('.zymatch-item-west');
             if (itemDom) {
@@ -630,7 +641,12 @@
             if (!details.coverUrl) { grant.notify({ status: 'error', msg: '未找到可用封面' }); return; }
             const coverRes = await req.handleCover(details.coverUrl, cid, `${details.baseAlpha}.${details.dateStr}.cover.jpg`);
             const fileId = coverRes?.data?.fileid || coverRes?.data?.file_id || coverRes?.file_id || coverRes?.fileid;
-            if (fileId) { await req.filesEdit(cid, fileId); btn.textContent = '已有封面'; btn.classList.add('has-cover'); grant.notify({ status: 'success', msg: '封面上传成功！' }); }
+            if (fileId) {
+                await req.filesEdit(cid, fileId);
+                const cachedVideos = window.PornDriveAPI.getMatchCache(realKey) || [];
+                window.PornDriveAPI.setMatchCache(realKey, cachedVideos.map(video => String(video.cid) === String(cid) ? { ...video, hasCover: true, coverDetectionVersion: 2 } : video));
+                btn.textContent = '已有封面'; btn.classList.add('has-cover'); grant.notify({ status: 'success', msg: '封面上传成功！' });
+            }
             else { grant.notify({ status: 'error', msg: '封面设为专属可能失败' }); }
         } else if (action === 'delv' || action === 'delf') {
             await req.rbDelete(action === 'delv' ? [fid] : [cid], cid);
