@@ -66,7 +66,7 @@ window.PornQuickView = class PornQuickView {
             document.body.style.overflow = originalOverflow;
             // [MOD] 触发自定义事件，通知主页面小窗已关闭，并传回对应的卡片节点以便刷新
             if (sourceCard) {
-                window.dispatchEvent(new CustomEvent('West_QuickView_Closed', { detail: { card: sourceCard } }));
+                window.dispatchEvent(new CustomEvent('West_QuickView_Closed', { detail: { card: sourceCard, prefixKey: sourceCard.dataset.westMatchedId || '' } }));
             }
         };
         closeBtn.onclick = closeModal;

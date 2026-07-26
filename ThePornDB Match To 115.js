@@ -270,10 +270,71 @@
 
             // 分发通行证，排队锁，直接扔进懒加载队列
             item.dataset.westCardId = cardId;
+            item.dataset.westMatchedId = details.matchPrefix || details.dateStr;
             item.dataset.westObserved = '1';
             observer.observe(item);
         });
     }
+
+    const getCardMatchPrefix = (card) => {
+        if (!card) return '';
+        if (card.dataset.westMatchedId) return card.dataset.westMatchedId;
+
+        const cardId = card.dataset.westCardId || card.querySelector('a[href*="/scenes/"]')?.getAttribute('href') || '';
+        const cachedDetails = cardId ? westFingerprintMap.get(cardId) : null;
+        const parsedDetails = cachedDetails || window.PornParser.parseWaterfallDetails(card);
+        const prefixKey = parsedDetails?.matchPrefix || parsedDetails?.dateStr || '';
+
+        if (prefixKey) {
+            card.dataset.westMatchedId = prefixKey;
+            if (cardId) {
+                card.dataset.westCardId = cardId;
+                if (!cachedDetails && parsedDetails?.isValid) westFingerprintMap.set(cardId, parsedDetails);
+            }
+        }
+        return prefixKey;
+    };
+
+    const quickViewChangedPrefixes = new Set();
+
+    const notifyMatchCacheChanged = (prefixKey) => {
+        if (!prefixKey) return;
+        if (window.self !== window.top && window.parent) {
+            window.parent.postMessage({ type: 'West_MatchCache_Updated', detail: { prefixKey } }, location.origin);
+        }
+    };
+
+    const refreshCardsFromMatchCache = (prefixKey, sourceCard = null, { allowEmpty = false } = {}) => {
+        if (!prefixKey || typeof window.PornDriveAPI === 'undefined') return;
+
+        const cards = [];
+        const pushCard = (card) => {
+            if (!card || cards.includes(card)) return;
+            card.dataset.westMatchedId = prefixKey;
+            cards.push(card);
+        };
+
+        pushCard(sourceCard);
+        document.querySelectorAll(SCENE_CARD_SELECTOR).forEach(card => {
+            if (getCardMatchPrefix(card) === prefixKey) pushCard(card);
+        });
+        if (!cards.length) return;
+
+        window.PornDriveAPI.matchCache.delete(prefixKey);
+        const latestCache = window.PornDriveAPI.getMatchCache(prefixKey);
+        if (latestCache === null && !allowEmpty && !quickViewChangedPrefixes.has(prefixKey)) return;
+
+        cards.forEach(card => {
+            if (latestCache !== null) {
+                if (typeof pornDispatcher !== 'undefined') pornDispatcher.applyMatchTagState(card, latestCache);
+                else applyMatchTagState(card, latestCache);
+                if (window.PornSubtitle) void window.PornSubtitle.refreshCardIndicator(card, latestCache, { force: true });
+            } else {
+                if (typeof pornDispatcher !== 'undefined') pornDispatcher.invalidate(prefixKey);
+                applyMatchTagState(card, []);
+            }
+        });
+    };
 
     // 6. 详情页智能控制台注入与深度匹配 (终极防污染 + 智能洗白缓存版)
     async function doAutoMatch(doc, details) {
@@ -381,6 +442,7 @@
                         cachedVideos = cachedVideos.filter(v => String(v.fid) !== targetFid);
                         // [MOD] 直接调用新 API 进行保存，API 内部已经包揽了内存和异步落盘的处理
                         window.PornDriveAPI.setMatchCache(cacheKey, cachedVideos);
+                        notifyMatchCacheChanged(cacheKey);
                         // 同步局部变量 videos，确保后续渲染/循环使用最新数据
                         // [MOD] 同步修改寻找索引的依据
                         const idx = videos.findIndex(v => String(v.fid) === targetFid);
@@ -394,11 +456,11 @@
                         // 更新状态提示
                         if (!cachedVideos.length) {
                             listNode.innerHTML = '';
-                            // [MOD] 清除最后一条匹配时：直接销毁缓存并自动触发新一轮的深度搜索
+                            // [MOD] 清除最后一条匹配时：只销毁缓存并同步主卡片，避免旧索引把刚清理的结果刷回卡片。
                             window.PornDriveAPI.deleteMatchCache(cacheKey);
-                            // [ADD] 补回动态转圈 SVG 图标与 Flex 对齐样式
-                            statusNode.innerHTML = `<span style="display: inline-flex; align-items: center; color: #e07b2a;">${window.PornUIAssets.icons.spinner14}正在重新深度搜索...</span>`;
-                            doAutoMatch(doc, details);
+                            if (typeof pornDispatcher !== 'undefined') pornDispatcher.invalidate(cacheKey);
+                            notifyMatchCacheChanged(cacheKey);
+                            statusNode.innerHTML = `<span style="display: inline-flex; align-items: center; color: #dc3545;">${window.PornUIAssets.icons.fail14} 未找到相关影片</span>`;
                         } else {
                             statusNode.innerHTML = `<span style="display: inline-flex; align-items: center; color: #28a745;">${window.PornUIAssets.icons.success14}找到 ${cachedVideos.length} 个影片</span>`;
                         }
@@ -463,6 +525,7 @@
                             videos = videos.filter(v => freshFids.has(String(v.fid)));
                         }
                         window.PornDriveAPI.setMatchCache(cacheKey, videos);
+                        notifyMatchCacheChanged(cacheKey);
                     }
                 })();
 
@@ -497,13 +560,51 @@
         doAutoMatch(doc, details);
     };
 
-    const syncMatchCacheFromDirectory = async (details, cid) => {
+    const syncMatchCacheFromDirectory = async (details, cid, fallbackVideos = []) => {
         const cacheKey = details.matchPrefix || details.dateStr;
         const req = getReq();
-        const { data: files = [] } = await req.filesAllVideos(cid);
-        const videos = window.PornMatcher.getMatchedVideos(files, details);
-        if (videos.length) window.PornDriveAPI.setMatchCache(cacheKey, videos);
+        let videos = [];
+        for (let i = 0; i < 6; i++) {
+            try {
+                const { data: files = [] } = await req.filesAllVideos(cid);
+                videos = window.PornMatcher.getMatchedVideos(files, details);
+            } catch (e) {
+                videos = [];
+            }
+            if (videos.length) break;
+            if (i < 5) await (window.PornDriveAPI.sleep ? window.PornDriveAPI.sleep(700) : new Promise(r => setTimeout(r, 700)));
+        }
+        if (!videos.length && fallbackVideos.length) videos = fallbackVideos;
+        if (videos.length && fallbackVideos.length) {
+            const fallbackMeta = fallbackVideos[0];
+            videos = videos.map(video => ({
+                ...video,
+                realPath: video.realPath || fallbackMeta.realPath,
+                hasCover: video.hasCover || fallbackMeta.hasCover,
+                coverDetectionVersion: video.coverDetectionVersion || fallbackMeta.coverDetectionVersion
+            }));
+        }
+        if (videos.length) {
+            window.PornDriveAPI.setMatchCache(cacheKey, videos);
+            notifyMatchCacheChanged(cacheKey);
+        }
         return videos;
+    };
+
+    const buildOfflineFallbackVideos = (details, cid, directVideo, dir) => {
+        if (!directVideo?.fid) return [];
+        const baseName = buildStandardizedArchiveName(details);
+        const ext = (String(directVideo.ico || '').replace(/^\./, '') || (String(directVideo.n || '').match(/\.([^.]+)$/) || [])[1] || 'mp4').toLowerCase();
+        return [{
+            ...directVideo,
+            cid: String(cid),
+            n: `${baseName}${hasChineseSubtitleTag(directVideo.n) ? ' [中文]' : ''}.${ext}`,
+            ico: ext,
+            realPath: dir.join('/'),
+            hasCover: !!details.coverUrl,
+            coverDetectionVersion: details.coverUrl ? 2 : directVideo.coverDetectionVersion,
+            matchScore: 1000
+        }];
     };
 
     // 7. 事件委托机制与系统引导
@@ -524,7 +625,7 @@
             // [MOD] 接收归档后返回的最新目录 ID (newCid)
             const newCid = await pornArchiver.flattenAfterOffline(details, dir, directVideo);
             // 小窗归档完成后立即把新目录中的视频写回匹配缓存；关闭小窗时主页面会读取该缓存并刷新原卡片。
-            if (newCid) await syncMatchCacheFromDirectory(details, newCid);
+            if (newCid) await syncMatchCacheFromDirectory(details, newCid, buildOfflineFallbackVideos(details, newCid, directVideo, dir));
             grant.notify({ status: 'success', msg: `目录刮削梳理完成！` });
 
             const itemDom = btn.closest('.zymatch-item-west');
@@ -562,7 +663,7 @@
         catch (e) { grant.notify({ status: 'error', msg: `归档失败: ${e.message}` }); }
     };
 
-    const buildStandardizedArchiveName = (details) => {
+    function buildStandardizedArchiveName(details) {
         let cleanRawTitle = details.titlePart || details.title || '';
         const maker = (details.maker || '').trim();
         if (maker && cleanRawTitle.toLowerCase().startsWith(maker.toLowerCase())) {
@@ -570,7 +671,7 @@
         }
         return (details.matchPrefix ? `${details.matchPrefix} ${cleanRawTitle}` : details.fullTitle)
             .replace(/[\\/:*?"<>|]/g, '').replace(/\s+/g, ' ').trim();
-    };
+    }
 
     const renameArchivedBundle = async (details, cid, primaryFid) => {
         const req = getReq();
@@ -625,9 +726,18 @@
             grant.notify({ status: 'success', msg: `已同步重命名文件夹及 ${result.count} 个文件！` });
 
             // 同步刷新缓存，确保关闭小窗后主卡片读取到已改名的新文件。
-            await syncMatchCacheFromDirectory(details, cid);
-
             const itemDom = btn.closest('.zymatch-item-west');
+            const currentPath = itemDom?.querySelector('.x-match-pc-path')?.textContent?.trim() || '';
+            const renamedExt = (String(result.primaryName || '').match(/\.([^.]+)$/) || [])[1]?.toLowerCase() || '';
+            await syncMatchCacheFromDirectory(details, cid, [{
+                fid,
+                cid,
+                n: result.primaryName,
+                ico: renamedExt,
+                realPath: currentPath,
+                matchScore: 1000
+            }]);
+
             if (itemDom) {
                 const wideBtn = itemDom.querySelector('.x-match-btn-wide');
                 if (wideBtn) wideBtn.innerHTML = wideBtn.innerHTML.replace(oldName, `${result.primaryName} <span style="color:#28a745; font-size:12px; font-weight:bold;">[已改名]</span>`);
@@ -643,8 +753,12 @@
             const fileId = coverRes?.data?.fileid || coverRes?.data?.file_id || coverRes?.file_id || coverRes?.fileid;
             if (fileId) {
                 await req.filesEdit(cid, fileId);
-                const cachedVideos = window.PornDriveAPI.getMatchCache(realKey) || [];
-                window.PornDriveAPI.setMatchCache(realKey, cachedVideos.map(video => String(video.cid) === String(cid) ? { ...video, hasCover: true, coverDetectionVersion: 2 } : video));
+                let cachedVideos = window.PornDriveAPI.getMatchCache(realKey);
+                if (!cachedVideos?.length) cachedVideos = await syncMatchCacheFromDirectory(details, cid);
+                if (cachedVideos?.length) {
+                    window.PornDriveAPI.setMatchCache(realKey, cachedVideos.map(video => String(video.cid) === String(cid) ? { ...video, hasCover: true, coverDetectionVersion: 2 } : video));
+                }
+                notifyMatchCacheChanged(realKey);
                 btn.textContent = '已有封面'; btn.classList.add('has-cover'); grant.notify({ status: 'success', msg: '封面上传成功！' });
             }
             else { grant.notify({ status: 'error', msg: '封面设为专属可能失败' }); }
@@ -686,6 +800,7 @@
                 const playerWrap = doc.querySelector('.west-detail-player');
                 if (playerWrap) applyMatchTagState(playerWrap, cachedVideos);
             }
+            notifyMatchCacheChanged(realKey);
         }
     };
 
@@ -744,27 +859,13 @@
 
     // [ADD] 监听小窗关闭事件，打通 iframe 与主页面的缓存壁垒
     window.addEventListener('West_QuickView_Closed', (e) => {
-        const card = e.detail.card;
-        if (card && card.dataset.westMatchedId) {
-            const prefixKey = card.dataset.westMatchedId;
-            // 1. 强杀主页面内存锁，迫使下次读取物理硬盘（获取 iframe 刚刚更新的最新数据）
-            if (typeof window.PornDriveAPI !== 'undefined') window.PornDriveAPI.matchCache.delete(prefixKey);
-
-            // 2. 延迟 400ms 保证 iframe 内的硬盘写入（GM_setValue）已彻底落盘
-            setTimeout(() => {
-                const latestCache = window.PornDriveAPI.getMatchCache(prefixKey);
-                if (latestCache !== null) {
-                    if (typeof pornDispatcher !== 'undefined') pornDispatcher.applyMatchTagState(card, latestCache);
-                    else applyMatchTagState(card, latestCache);
-                    if (window.PornSubtitle) void window.PornSubtitle.refreshCardIndicator(card, latestCache, { force: true });
-                } else {
-                    // 小窗删除了最后一个资源时缓存会被销毁；不能立刻重搜，否则 115 的搜索索引延迟会把已删除的幽灵文件重新匹配出来。
-                    if (typeof pornDispatcher !== 'undefined') pornDispatcher.invalidate(prefixKey);
-                    applyMatchTagState(card, []);
-                }
-            }, 400);
-        }
-    })
+        const card = e.detail?.card;
+        const prefixKey = e.detail?.prefixKey || getCardMatchPrefix(card);
+        if (prefixKey) setTimeout(() => {
+            refreshCardsFromMatchCache(prefixKey, card, { allowEmpty: quickViewChangedPrefixes.has(prefixKey) });
+            quickViewChangedPrefixes.delete(prefixKey);
+        }, 400);
+    });
 
     // 小窗内完成字幕直传后，立即把同一张主页面卡片的字幕标识刷新出来。
     const refreshSubtitleIndicatorsForCid = (cid) => {
@@ -779,8 +880,14 @@
     };
     window.addEventListener('West_Subtitle_Uploaded', (e) => refreshSubtitleIndicatorsForCid(e.detail?.cid));
     window.addEventListener('message', (e) => {
-        if (e.origin !== location.origin || e.data?.type !== 'West_Subtitle_Uploaded') return;
-        refreshSubtitleIndicatorsForCid(e.data.detail?.cid);
+        if (e.origin !== location.origin) return;
+        if (e.data?.type === 'West_Subtitle_Uploaded') {
+            refreshSubtitleIndicatorsForCid(e.data.detail?.cid);
+        } else if (e.data?.type === 'West_MatchCache_Updated') {
+            const prefixKey = e.data.detail?.prefixKey;
+            if (prefixKey) quickViewChangedPrefixes.add(prefixKey);
+            refreshCardsFromMatchCache(prefixKey, null, { allowEmpty: true });
+        }
     });
 
     const bootDoc = (doc) => {
