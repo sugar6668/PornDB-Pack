@@ -286,7 +286,7 @@ window.PornMagnetUI = class PornMagnetUI {
         closeObserver.observe(frame);
         const prev = this.createPreviewNavButton('magnet-preview-prev', '上一张');
         const next = this.createPreviewNavButton('magnet-preview-next', '下一张');
-        stage.append(prev, next);
+        frame.append(prev, next);
         stage.addEventListener('click', (event) => { if (event.target === stage) cleanup(); });
         const caption = document.createElement('div');
         caption.className = 'magnet-preview-caption';
@@ -324,11 +324,16 @@ window.PornMagnetUI = class PornMagnetUI {
             lastWheelAt = now;
             show(index + (event.deltaY > 0 ? 1 : -1));
         }, { passive: false });
-        dialog.append(stage, caption, thumbs);
-        overlay.appendChild(dialog);
-        document.body.appendChild(overlay);
+        const mount = () => {
+            if (overlay.isConnected) return;
+            dialog.append(stage, caption, thumbs);
+            overlay.appendChild(dialog);
+            document.body.appendChild(overlay);
+            close.focus();
+        };
+        image.addEventListener('load', mount, { once: true });
+        image.addEventListener('error', mount, { once: true });
         show(0);
-        close.focus();
     }
 
     createPreviewNavButton(className, label) {
