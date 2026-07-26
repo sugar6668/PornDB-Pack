@@ -229,7 +229,6 @@ window.PornMagnetUI = class PornMagnetUI {
         close.className = 'magnet-preview-close';
         close.type = 'button';
         close.setAttribute('aria-label', '关闭预览');
-        dialog.appendChild(close);
         let index = 0;
         let show = () => {};
         let closeObserver;
@@ -247,13 +246,13 @@ window.PornMagnetUI = class PornMagnetUI {
         overlay.addEventListener('click', (event) => { if (event.target === overlay) cleanup(); });
         document.addEventListener('keydown', onKeyDown);
         if (!screenshots.length) {
+            dialog.classList.add('is-empty');
             const empty = document.createElement('p');
             empty.className = 'magnet-preview-empty';
             empty.textContent = error ? '预览加载失败，请稍后重试。' : '没有可用的预览图。';
             dialog.appendChild(empty);
             overlay.appendChild(dialog);
             document.body.appendChild(overlay);
-            close.focus();
             return;
         }
         const stage = document.createElement('div');
