@@ -384,11 +384,12 @@
                 .x-data18-card-badge{position:absolute;right:6px;bottom:6px;background:rgba(0,0,0,0.65);color:#fff;font-size:10px;font-weight:600;padding:2px 7px;border-radius:4px;pointer-events:none;line-height:1.4}
                 .x-data18-lightbox-loading{color:white;text-align:center;padding:40px;font-size:14px}
                 .x-data18-lightbox{position:fixed;inset:0;z-index:9999999;display:flex;align-items:center;justify-content:center;padding:60px 60px 28px;background:rgba(0,0,0,0.88)}
-                .x-data18-lightbox-close{position:absolute;top:16px;right:20px;z-index:10000000;width:38px;height:38px;border:0;border-radius:999px;font-size:24px;color:#fff;background:rgba(255,255,255,0.15);cursor:pointer;line-height:38px;text-align:center}
+                .x-data18-lightbox-close{position:absolute;top:10px;right:10px;z-index:3;width:38px;height:38px;border:0;border-radius:999px;font-size:24px;color:#fff;background:rgba(0,0,0,0.48);cursor:pointer;line-height:38px;text-align:center}
                 .x-data18-lightbox-close:hover,.x-data18-lightbox-prev:hover,.x-data18-lightbox-next:hover{background:rgba(255,255,255,0.3)!important}
-                .x-data18-lightbox-inner{max-width:min(96vw,1280px);max-height:92vh;display:flex;align-items:center;justify-content:center}
-                .x-data18-lightbox-img{max-width:96vw;max-height:92vh;object-fit:contain;border-radius:8px}
-                .x-data18-lightbox-video{max-width:96vw;max-height:92vh;background:#000;border-radius:8px}
+                .x-data18-lightbox-inner{position:relative;max-width:min(96vw,1280px);max-height:92vh;display:flex;align-items:center;justify-content:center}
+                .x-data18-lightbox-media{display:flex;align-items:center;justify-content:center;max-width:min(96vw,1280px);max-height:92vh}
+                .x-data18-lightbox-img{display:block;max-width:96vw;max-height:92vh;object-fit:contain;border-radius:8px}
+                .x-data18-lightbox-video{display:block;max-width:96vw;max-height:92vh;background:#000;border-radius:8px}
                 @keyframes x-data18-shimmer{0%{background-position:-200px 0}100%{background-position:calc(200px + 100%) 0}}
                 .x-data18-skeleton-strip{display:flex;gap:10px}
                 .x-data18-skeleton-card{flex:0 0 auto;width:200px;height:120px;border-radius:8px;background:#e8e8e8;position:relative;overflow:hidden}
@@ -1999,36 +2000,38 @@
             box.setAttribute("role", "dialog");
             box.setAttribute("aria-modal", "true");
             box.innerHTML = `
-                <button class="x-data18-lightbox-close" type="button" aria-label="关闭">&times;</button>
                 <button class="x-data18-lightbox-prev" type="button" style="position:absolute;left:16px;top:50%;transform:translateY(-50%);z-index:2;border:0;background:rgba(255,255,255,0.15);color:#fff;font-size:32px;width:44px;height:44px;border-radius:999px;cursor:pointer;line-height:44px;text-align:center;">&#8249;</button>
                 <button class="x-data18-lightbox-next" type="button" style="position:absolute;right:16px;top:50%;transform:translateY(-50%);z-index:2;border:0;background:rgba(255,255,255,0.15);color:#fff;font-size:32px;width:44px;height:44px;border-radius:999px;cursor:pointer;line-height:44px;text-align:center;">&#8250;</button>
-                <div class="x-data18-lightbox-inner"><div class="x-data18-lightbox-loading">加载中...</div></div>
+                <div class="x-data18-lightbox-inner">
+                    <div class="x-data18-lightbox-media"><div class="x-data18-lightbox-loading">加载中...</div></div>
+                    <button class="x-data18-lightbox-close" type="button" aria-label="关闭">&times;</button>
+                </div>
             `;
-            const inner = box.querySelector(".x-data18-lightbox-inner");
+            const media = box.querySelector(".x-data18-lightbox-media");
 
             let currentIdx = item.index || 0;
             const gallery = item.gallery || [{ type: item.type, src: item.src, rawSrc: item.rawSrc || item.src }];
 
             const loadItem = async (idx) => {
                 currentIdx = idx;
-                inner.innerHTML = '<div class="x-data18-lightbox-loading">加载中...</div>';
+                media.innerHTML = '<div class="x-data18-lightbox-loading">加载中...</div>';
                 const gi = gallery[idx];
                 if (!gi) return;
 
                 const blobUrl = gi.card ? gi.card.dataset.blobUrl : '';
                 if (blobUrl) {
                     const safeSrc = this.escapeAttr(blobUrl);
-                    inner.innerHTML = gi.type === "video"
+                    media.innerHTML = gi.type === "video"
                         ? `<video class="x-data18-lightbox-video" src="${safeSrc}" controls preload="metadata" playsinline autoplay></video>`
                         : `<img class="x-data18-lightbox-img" src="${safeSrc}">`;
                     return;
                 }
 
                 const blob = await this._fetchBlobWithReferer(gi.src);
-                if (!blob) { inner.innerHTML = '<div style="color:white;text-align:center;padding:40px;">加载失败</div>'; return; }
+                if (!blob) { media.innerHTML = '<div style="color:white;text-align:center;padding:40px;">加载失败</div>'; return; }
                 const newBlobUrl = URL.createObjectURL(blob);
                 const safeSrc = this.escapeAttr(newBlobUrl);
-                inner.innerHTML = gi.type === "video"
+                media.innerHTML = gi.type === "video"
                     ? `<video class="x-data18-lightbox-video" src="${safeSrc}" controls preload="metadata" playsinline autoplay></video>`
                     : `<img class="x-data18-lightbox-img" src="${safeSrc}">`;
             };

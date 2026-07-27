@@ -415,6 +415,11 @@ window.PornSubtitle = class PornSubtitle {
                 this.textContent = '获取中...';
                 this.style.opacity = '0.6';
 
+                if (action === 'preview') {
+                    container.querySelector('.pdb-sub-tr--previewing')?.classList.remove('pdb-sub-tr--previewing');
+                    this.closest('.pdb-sub-tr')?.classList.add('pdb-sub-tr--previewing');
+                }
+
                 try {
                     const url = await self.resolveSubtitleUrl(item);
                     if (!url) throw new Error('无效的字幕下载直链');
