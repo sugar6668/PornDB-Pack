@@ -113,7 +113,7 @@ window.PornDataManager = class PornDataManager {
 
     // --- 数据组装与恢复逻辑 ---
     static buildBackupData(checks) {
-        const backup = { version: '1.0', timestamp: Date.now(), core_data: {}, match_caches: {}, dir_caches: {} };
+        const backup = { version: '2.0', timestamp: Date.now(), core_data: {}, match_caches: {}, dir_caches: {} };
 
         if (checks.core) {
             this.CORE_KEYS.forEach(key => {
@@ -135,7 +135,7 @@ window.PornDataManager = class PornDataManager {
 
         const allKeys = GM_listValues();
         allKeys.forEach(key => {
-            if (checks.match && key.startsWith('pdb_v4_')) backup.match_caches[key] = GM_getValue(key);
+            if (checks.match && (key.startsWith('pdb_match_state_v5_') || key.startsWith('pdb_v4_'))) backup.match_caches[key] = GM_getValue(key);
             else if (checks.dir && key === 'pdb_dir_cache_v2') backup.dir_caches[key] = GM_getValue(key);
         });
 

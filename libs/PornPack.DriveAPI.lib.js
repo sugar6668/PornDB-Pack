@@ -15,6 +15,9 @@ window.PornDriveAPI = class PornDriveAPI {
     static dirCache = null;
 
     // --- 高频匹配缓冲池 ---
+    // v5 stores an explicit resolved state so misses remain durable too.
+    static MATCH_STATE_PREFIX = 'pdb_match_state_v5_';
+    static LEGACY_MATCH_PREFIX = 'pdb_v4_';
     static matchCache = new Map();
     static pendingDiskWrites = new Map();
     static cacheWriteTimer = null;
@@ -58,7 +61,7 @@ window.PornDriveAPI = class PornDriveAPI {
         if (!this.dirCache && typeof GM_getValue !== 'undefined') {
             this.dirCache = GM_getValue('pdb_dir_cache_v2', {});
             // [MOD] 性能优化：将全盘垃圾遍历操作延迟 10 秒执行，把宝贵的首屏性能还给用户
-            setTimeout(() => this.sweepOldWestCaches(), 10000);
+            // Match-state migration is lazy per key; do not scan all match records on startup.
         }
     }
 
@@ -112,52 +115,115 @@ window.PornDriveAPI = class PornDriveAPI {
     }
 
     // --- 影片匹配缓存读写中心 ---
-    static getMatchCache(key) {
-        if (this.matchCache.has(key)) return this.matchCache.get(key);
-        try {
-            const cache = GM_getValue('pdb_v4_' + key);
-            if (!cache || !cache.ts || Date.now() - cache.ts > ((cache.data && cache.data.length) ? 2592000000 : 1800000)) {
-                this.matchCache.set(key, null); // 记忆击穿
-                return null;
-            }
-            this.matchCache.set(key, cache.data);
-            return cache.data;
-        } catch (e) {
-            this.matchCache.set(key, null);
-            return null;
-        }
+    // --- Persistent match-state store (v5) ---
+    static matchStateKey(key) { return this.MATCH_STATE_PREFIX + String(key || '').trim(); }
+    static legacyMatchKey(key) { return this.LEGACY_MATCH_PREFIX + String(key || '').trim(); }
+
+    static isValidMatchState(value) {
+        return value
+            && (value.status === 'matched' || value.status === 'unmatched')
+            && Array.isArray(value.data)
+            && Number.isFinite(value.revision);
     }
 
-    static setMatchCache(key, data) {
-        this.matchCache.set(key, data);
-        this.pendingDiskWrites.set('pdb_v4_' + key, { ts: Date.now(), data });
-        // [MOD] 取消 1.5 秒的异步延迟写入，改为立即写入，防止小窗(iframe)提前关闭时导致内存数据未落盘而丢失
-        if (this.cacheWriteTimer) clearTimeout(this.cacheWriteTimer);
-        this.pendingDiskWrites.forEach((value, k) => GM_setValue(k, value));
-        this.pendingDiskWrites.clear();
+    static readMatchState(key) {
+        const normalizedKey = String(key || '').trim();
+        if (!normalizedKey) return null;
+        if (this.matchCache.has(normalizedKey)) return this.matchCache.get(normalizedKey);
+
+        try {
+            const current = GM_getValue(this.matchStateKey(normalizedKey));
+            if (this.isValidMatchState(current)) {
+                this.matchCache.set(normalizedKey, current);
+                return current;
+            }
+
+            // Lazy migration preserves old hit and miss records without a startup-wide GM_listValues scan.
+            const legacy = GM_getValue(this.legacyMatchKey(normalizedKey));
+            if (legacy && Array.isArray(legacy.data)) {
+                const migrated = {
+                    v: 5,
+                    status: legacy.data.length ? 'matched' : 'unmatched',
+                    data: legacy.data,
+                    revision: 1,
+                    updatedAt: legacy.ts || Date.now(),
+                    source: 'legacy',
+                    needsResolve: false,
+                };
+                GM_setValue(this.matchStateKey(normalizedKey), migrated);
+                this.matchCache.set(normalizedKey, migrated);
+                return migrated;
+            }
+        } catch (e) { console.warn('[PornDB-115] read match state failed', e); }
+
+        this.matchCache.set(normalizedKey, null);
+        return null;
     }
+
+    static getMatchState(key) { return this.readMatchState(key); }
+
+    static commitMatchState(key, patch = {}) {
+        const normalizedKey = String(key || '').trim();
+        if (!normalizedKey) return { committed: false, state: null };
+        const previous = this.readMatchState(normalizedKey);
+        const expectedRevision = patch.expectedRevision;
+        const previousRevision = previous?.revision || 0;
+        if (expectedRevision !== undefined && expectedRevision !== previousRevision) {
+            return { committed: false, state: previous };
+        }
+
+        const data = Array.isArray(patch.data) ? patch.data : (previous?.data || []);
+        const status = patch.status || (data.length ? 'matched' : 'unmatched');
+        const state = {
+            v: 5,
+            status,
+            data,
+            revision: previousRevision + 1,
+            updatedAt: Date.now(),
+            source: patch.source || previous?.source || 'search',
+            needsResolve: patch.needsResolve === undefined ? !!previous?.needsResolve : !!patch.needsResolve,
+        };
+        this.matchCache.set(normalizedKey, state);
+        GM_setValue(this.matchStateKey(normalizedKey), state);
+        return { committed: true, state };
+    }
+
+    static setMatchState(key, data, source = 'search', options = {}) {
+        return this.commitMatchState(key, {
+            data: Array.isArray(data) ? data : [],
+            status: options.status || (data?.length ? 'matched' : 'unmatched'),
+            source,
+            needsResolve: options.needsResolve ?? false,
+            expectedRevision: options.expectedRevision,
+        });
+    }
+
+    static markMatchNeedsResolve(key, source = 'offline') {
+        const previous = this.readMatchState(key);
+        return this.commitMatchState(key, {
+            data: previous?.data || [],
+            status: previous?.status || 'unmatched',
+            source,
+            needsResolve: true,
+        });
+    }
+
+    static clearMatchStateMemory(key) {
+        this.matchCache.delete(String(key || '').trim());
+    }
+
+    // Compatibility wrapper for callers that only need the matched video list.
+    static getMatchCache(key) { return this.readMatchState(key)?.data ?? null; }
+    static setMatchCache(key, data, source = 'search', options = {}) { return this.setMatchState(key, data, source, options).state; }
 
     static deleteMatchCache(key) {
-        this.matchCache.delete(key);
-        this.pendingDiskWrites.delete('pdb_v4_' + key);
-        GM_deleteValue('pdb_v4_' + key);
+        const normalizedKey = String(key || '').trim();
+        this.matchCache.delete(normalizedKey);
+        this.pendingDiskWrites.delete(this.matchStateKey(normalizedKey));
+        GM_deleteValue(this.matchStateKey(normalizedKey));
     }
 
-    // --- 影片匹配缓存的垃圾回收 ---
-    static sweepOldWestCaches() {
-        try {
-            const keys = GM_listValues().filter(k => k.startsWith('pdb_v4_'));
-            const now = Date.now();
-            let deletedCount = 0;
-            keys.forEach(key => {
-                const cache = GM_getValue(key);
-                const maxAge = (cache && cache.data && cache.data.length) ? 2592000000 : 1800000;
-                if (!cache || !cache.ts || now - cache.ts > maxAge) {
-                    GM_deleteValue(key);
-                    deletedCount++;
-                }
-            });
-            if (deletedCount > 0) console.log(`[PornDB-115] 缓存清理: 成功销毁 ${deletedCount} 条过期影片数据`);
-        } catch (e) { console.error("[PornDB-115] 缓存清理失败", e); }
-    }
+    // Retained for API compatibility. v5 has no TTL and no full-cache sweep.
+    static sweepOldWestCaches() { }
+
 };

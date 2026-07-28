@@ -191,13 +191,9 @@ window.PornArchiver = class PornArchiver {
 
         if (this.triggerAutoMatch) {
             setTimeout(() => {
-                // 用任务自身的数据构造 prefixKey，不依赖 document.WESTDETAILS
-                const prefixKey = (item.matchPrefix || item.baseAlpha || '') + (item.dateStr || '');
-                if (prefixKey) {
-                    // 同时清除 GM 持久层 + 内存层缓存
-                    if (typeof GMdeleteValue !== 'undefined') GMdeleteValue('pdbv4' + prefixKey);
-                    if (window.PornDriveAPI) window.PornDriveAPI.deleteMatchCache(prefixKey);
-                }
+                // Preserve the exact matching key supplied by the source scene.
+                const matchKey = item.matchKey || [item.baseAlpha, item.dateStr].filter(Boolean).join('.');
+                if (matchKey && window.PornDriveAPI) window.PornDriveAPI.markMatchNeedsResolve(matchKey, 'offline');
                 this.triggerAutoMatch();
             }, 3500);
         }

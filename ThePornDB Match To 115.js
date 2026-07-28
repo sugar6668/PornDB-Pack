@@ -167,7 +167,8 @@
         if (node.className !== newClass) node.className = newClass;
         if (node.title !== newTitle) node.title = newTitle;
         if (node.dataset.cid !== newCid) node.dataset.cid = newCid;
-        if (node.style.opacity !== (len ? '1' : '0')) node.style.opacity = len ? '1' : '0';
+        // Keep misses visible: left click redraws local state; right click forces a 115 refresh.
+        if (node.style.opacity !== (len ? '1' : '0.72')) node.style.opacity = len ? '1' : '0.72';
 
         const parentCard = item.closest('.w-scene-card') || item.closest('.west-detail-player');
         if (parentCard && parentCard.dataset.matchStatus !== status) {
@@ -182,6 +183,9 @@
     const pornDispatcher = new window.PornDispatcher({
         getReq,
         getWestCache: (k) => window.PornDriveAPI.getMatchCache(k),
+        getMatchState: (k) => window.PornDriveAPI.getMatchState(k),
+        commitMatchState: (k, patch) => window.PornDriveAPI.commitMatchState(k, patch),
+        onStateCommitted: (prefixKey) => refreshCardsFromMatchCache(prefixKey, null, { allowEmpty: true }),
         setWestCache: (k, v) => window.PornDriveAPI.setMatchCache(k, v),
         applyMatchTagState,
         sleep: window.PornDriveAPI.sleep
@@ -295,12 +299,44 @@
         return prefixKey;
     };
 
+    const getMatchHostDetails = (host) => {
+        if (!host) return null;
+        if (host.classList?.contains('west-detail-player')) return document.WESTDETAILS || null;
+        const cardId = host?.dataset?.westCardId || host?.querySelector('a[href*="/scenes/"]')?.getAttribute('href') || '';
+        return westFingerprintMap.get(cardId) || window.PornParser.parseWaterfallDetails(host);
+    };
+
+    // Match tags deliberately own their click surfaces: local redraw on left click,
+    // remote verification on right click. This also prevents unrelated card menus.
+    document.addEventListener('click', (event) => {
+        const tag = event.target.closest(`.${MATCHTAGCLASS}`);
+        if (!tag) return;
+        event.preventDefault();
+        event.stopPropagation();
+        event.stopImmediatePropagation();
+        const host = tag.closest('.w-scene-card, .west-detail-player');
+        const detailState = getMatchHostDetails(host);
+        const prefixKey = detailState?.matchPrefix || detailState?.dateStr || getCardMatchPrefix(host);
+        if (prefixKey) refreshCardsFromMatchCache(prefixKey, host, { allowEmpty: true });
+    }, true);
+
+    document.addEventListener('contextmenu', (event) => {
+        const tag = event.target.closest(`.${MATCHTAGCLASS}`);
+        if (!tag) return;
+        event.preventDefault();
+        event.stopPropagation();
+        event.stopImmediatePropagation();
+        const host = tag.closest('.w-scene-card, .west-detail-player');
+        const details = getMatchHostDetails(host);
+        if (host && details?.isValid) pornDispatcher.dispatch(host, details, true);
+    }, true);
+
     const quickViewChangedPrefixes = new Set();
 
     const notifyMatchCacheChanged = (prefixKey) => {
         if (!prefixKey) return;
         if (window.self !== window.top && window.parent) {
-            window.parent.postMessage({ type: 'West_MatchCache_Updated', detail: { prefixKey } }, location.origin);
+            window.parent.postMessage({ type: 'West_MatchState_Updated', detail: { prefixKey, revision: window.PornDriveAPI.getMatchState(prefixKey)?.revision || 0 } }, location.origin);
         }
     };
 
@@ -320,19 +356,15 @@
         });
         if (!cards.length) return;
 
-        window.PornDriveAPI.matchCache.delete(prefixKey);
-        const latestCache = window.PornDriveAPI.getMatchCache(prefixKey);
-        if (latestCache === null && !allowEmpty && !quickViewChangedPrefixes.has(prefixKey)) return;
+        window.PornDriveAPI.clearMatchStateMemory(prefixKey);
+        const latestState = window.PornDriveAPI.getMatchState(prefixKey);
+        if (!latestState && !allowEmpty) return;
+        const latestCache = latestState?.data || [];
 
         cards.forEach(card => {
-            if (latestCache !== null) {
-                if (typeof pornDispatcher !== 'undefined') pornDispatcher.applyMatchTagState(card, latestCache);
-                else applyMatchTagState(card, latestCache);
-                if (window.PornSubtitle) void window.PornSubtitle.refreshCardIndicator(card, latestCache, { force: true });
-            } else {
-                if (typeof pornDispatcher !== 'undefined') pornDispatcher.invalidate(prefixKey);
-                applyMatchTagState(card, []);
-            }
+            if (typeof pornDispatcher !== 'undefined') pornDispatcher.applyMatchTagState(card, latestCache);
+            else applyMatchTagState(card, latestCache);
+            if (window.PornSubtitle) void window.PornSubtitle.refreshCardIndicator(card, latestCache, { force: true });
         });
     };
 
@@ -347,11 +379,13 @@
         try {
             let videos = [];
             const cacheKey = details.matchPrefix || details.dateStr;
-            const cachedVideos = window.PornDriveAPI.getMatchCache(cacheKey);
+            const cachedState = window.PornDriveAPI.getMatchState(cacheKey);
+            const expectedRevision = cachedState?.revision || 0;
+            let searchedRemotely = !cachedState || cachedState.needsResolve;
 
-            // 1. 优先读取本地缓存
-            if (cachedVideos !== null) {
-                videos = cachedVideos;
+            // A resolved hit or miss is final for normal browsing. needsResolve is an internal offline repair flag.
+            if (!searchedRemotely) {
+                videos = cachedState.data;
             } else {
                 const tKw = details.titleKeyword || '';
                 const firstActor = (details.actors && details.actors.length > 0) ? details.actors[0] : (details.actor !== 'Unknown_Actor' ? details.actor.split('&')[0].trim() : '');
@@ -368,13 +402,27 @@
                 let cleanKw = safeKw(kw); // 使用极简净化
                 if (cleanKw.length < 3) continue;
                 
-                let { data = [] } = await req.filesSearchAllVideos(cleanKw);
-                videos = window.PornMatcher.getMatchedVideos(data, details);
+                const response = await req.filesSearchAllVideos(cleanKw);
+                if (response?.state === false) throw new Error(response.error_msg || '115 \u641c\u7d22\u63a5\u53e3\u5f02\u5e38');
+                videos = window.PornMatcher.getMatchedVideos(response?.data || [], details);
                 if (videos.length > 0) break;
             }
             }
 
             // [ADD] 开始：追加智能排序逻辑，强制将已经刮削归档的视频置顶第一位
+            if (searchedRemotely) {
+                const result = window.PornDriveAPI.commitMatchState(cacheKey, {
+                    data: videos,
+                    status: videos.length ? 'matched' : 'unmatched',
+                    source: 'search',
+                    needsResolve: false,
+                    expectedRevision,
+                });
+                // A newer offline/delete mutation wins over this older search response.
+                videos = result.state?.data || videos;
+                if (result.committed) notifyMatchCacheChanged(cacheKey);
+            }
+
             videos.sort((a, b) => {
                 const getArchiveScore = (item) => {
                     let score = 0;
@@ -441,7 +489,7 @@
                         // [MOD] 改为根据 fid（文件唯一ID）进行精确过滤，保护同目录下的其他文件
                         cachedVideos = cachedVideos.filter(v => String(v.fid) !== targetFid);
                         // [MOD] 直接调用新 API 进行保存，API 内部已经包揽了内存和异步落盘的处理
-                        window.PornDriveAPI.setMatchCache(cacheKey, cachedVideos);
+                        window.PornDriveAPI.setMatchCache(cacheKey, cachedVideos, 'clear');
                         notifyMatchCacheChanged(cacheKey);
                         // 同步局部变量 videos，确保后续渲染/循环使用最新数据
                         // [MOD] 同步修改寻找索引的依据
@@ -457,8 +505,7 @@
                         if (!cachedVideos.length) {
                             listNode.innerHTML = '';
                             // [MOD] 清除最后一条匹配时：只销毁缓存并同步主卡片，避免旧索引把刚清理的结果刷回卡片。
-                            window.PornDriveAPI.deleteMatchCache(cacheKey);
-                            if (typeof pornDispatcher !== 'undefined') pornDispatcher.invalidate(cacheKey);
+                            window.PornDriveAPI.setMatchCache(cacheKey, [], 'clear');
                             notifyMatchCacheChanged(cacheKey);
                             statusNode.innerHTML = `<span style="display: inline-flex; align-items: center; color: #dc3545;">${window.PornUIAssets.icons.fail14} 未找到相关影片</span>`;
                         } else {
@@ -467,7 +514,7 @@
                     });
                 });
 
-                if (!cachedVideos) window.PornDriveAPI.setMatchCache(cacheKey, videos);
+                // Remote outcomes were committed above; cached matched and unmatched states are both durable.
 
                 // 3. 后台串行队列：洗白污染数据，补齐缺失数据
                 (async () => {
@@ -524,7 +571,7 @@
                             const freshFids = new Set(freshCache.map(v => String(v.fid)));
                             videos = videos.filter(v => freshFids.has(String(v.fid)));
                         }
-                        window.PornDriveAPI.setMatchCache(cacheKey, videos);
+                        window.PornDriveAPI.setMatchCache(cacheKey, videos, 'search');
                         notifyMatchCacheChanged(cacheKey);
                     }
                 })();
@@ -585,8 +632,10 @@
             }));
         }
         if (videos.length) {
-            window.PornDriveAPI.setMatchCache(cacheKey, videos);
+            window.PornDriveAPI.setMatchCache(cacheKey, videos, 'offline');
             notifyMatchCacheChanged(cacheKey);
+        } else {
+            window.PornDriveAPI.markMatchNeedsResolve(cacheKey, 'offline');
         }
         return videos;
     };
@@ -756,7 +805,7 @@
                 let cachedVideos = window.PornDriveAPI.getMatchCache(realKey);
                 if (!cachedVideos?.length) cachedVideos = await syncMatchCacheFromDirectory(details, cid);
                 if (cachedVideos?.length) {
-                    window.PornDriveAPI.setMatchCache(realKey, cachedVideos.map(video => String(video.cid) === String(cid) ? { ...video, hasCover: true, coverDetectionVersion: 2 } : video));
+                    window.PornDriveAPI.setMatchCache(realKey, cachedVideos.map(video => String(video.cid) === String(cid) ? { ...video, hasCover: true, coverDetectionVersion: 2 } : video), 'cover');
                 }
                 notifyMatchCacheChanged(realKey);
                 btn.textContent = '已有封面'; btn.classList.add('has-cover'); grant.notify({ status: 'success', msg: '封面上传成功！' });
@@ -775,11 +824,7 @@
                 return true;
             });
 
-            if (typeof window.PornDriveAPI !== 'undefined') {
-                window.PornDriveAPI.matchCache.set(realKey, cachedVideos); // [MOD] 指向新的内存池
-                window.PornDriveAPI.pendingDiskWrites.delete('pdb_v4_' + realKey); // [MOD] 从缓冲队列中剔除
-            }
-            GM_setValue('pdb_v4_' + realKey, { ts: Date.now(), data: cachedVideos });
+            window.PornDriveAPI.setMatchCache(realKey, cachedVideos, 'delete');
             const itemDom = btn.closest('.zymatch-item-west');
             if (itemDom) {
                 const listNode = itemDom.parentElement;
@@ -792,7 +837,7 @@
                         statusNode.innerHTML = statusNode.innerHTML.replace(/找到 \d+ 个/, `找到 ${remainCount} 个`);
                     } else {
                         // [MOD] 列表清空时：仅销毁缓存，不要立刻触发重新搜索！防止 115 搜索索引延迟导致查出“幽灵文件”
-                        window.PornDriveAPI.deleteMatchCache(realKey);
+                        window.PornDriveAPI.setMatchCache(realKey, [], 'delete');
                         statusNode.innerHTML = `<span style="display: inline-flex; align-items: center; color: #dc3545;">${window.PornUIAssets.icons.fail14} 未找到相关影片</span>`;
                     }
                 }
@@ -883,8 +928,11 @@
         if (e.origin !== location.origin) return;
         if (e.data?.type === 'West_Subtitle_Uploaded') {
             refreshSubtitleIndicatorsForCid(e.data.detail?.cid);
-        } else if (e.data?.type === 'West_MatchCache_Updated') {
+        } else if (e.data?.type === 'West_MatchState_Updated' || e.data?.type === 'West_MatchCache_Updated') {
             const prefixKey = e.data.detail?.prefixKey;
+            const incomingRevision = Number(e.data.detail?.revision || 0);
+            const localRevision = window.PornDriveAPI.getMatchState(prefixKey)?.revision || 0;
+            if (incomingRevision && incomingRevision < localRevision) return;
             if (prefixKey) quickViewChangedPrefixes.add(prefixKey);
             refreshCardsFromMatchCache(prefixKey, null, { allowEmpty: true });
         }

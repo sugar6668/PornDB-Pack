@@ -1,128 +1,110 @@
 /**
  * @name         PornPack Dispatcher Library
- * @description  115 并发请求调度引擎（含请求合并、排队限流、DOM 批量渲染）
- * @version      1.0.0
+ * @description  Deduplicated 115 match dispatcher with durable hit/miss state.
+ * @version      1.1.0
  */
 
 window.PornDispatcher = class PornDispatcher {
     constructor(options) {
-        // 依赖注入：接收主脚本传来的上下文方法
         this.getReq = options.getReq;
         this.getWestCache = options.getWestCache;
-        this.setWestCache = options.setWestCache;
+        this.getMatchState = options.getMatchState || ((key) => {
+            const data = this.getWestCache(key);
+            return data === null ? null : { data, revision: 0, needsResolve: false };
+        });
+        this.commitMatchState = options.commitMatchState || ((key, patch) => ({
+            committed: true,
+            state: options.setWestCache(key, patch.data),
+        }));
         this.applyMatchTagState = options.applyMatchTagState;
+        this.onStateCommitted = options.onStateCommitted || null;
         this.sleep = options.sleep;
-
-        // 核心调度变量
-        this.waitMap = {};       // 字典：存放等待同一番号的多个影片卡片 (合并同类项)
-        this.searchQueue = [];   // 队列：存放需要查询的番号
+        this.waitMap = {};
+        this.searchQueue = [];
         this.isSearching = false;
-        this.lastReqTime = 0;    // [ADD] 记录上一次请求时间
-        this.invalidatedPrefixes = new Set(); // 已在小窗删除的结果不得被旧请求重新写回
     }
 
-    /**
-     * 统一派发器：接收新加载的影片卡片，分配处理策略
-     */
-    dispatch(item, details, skipCacheCheck) {
+    dispatch(item, details, force = false) {
         const prefix = details.matchPrefix || details.dateStr;
         if (!prefix) return;
-        this.invalidatedPrefixes.delete(prefix);
 
-        // 【P1 优化】调用方已检查过缓存时跳过二次检查
-        if (!skipCacheCheck) {
-            const cachedVideos = this.getWestCache(prefix);
-            if (cachedVideos && cachedVideos.length > 0) {  // ← 明确区分「有结果缓存」与「空结果」
-                this.applyMatchTagState(item, cachedVideos);
-                return;
-            }
+        const state = this.getMatchState(prefix);
+        if (!force && state && !state.needsResolve) {
+            this.applyMatchTagState(item, state.data);
+            return;
         }
 
-        // 查等待队列，合并同类项
         if (!this.waitMap[prefix]) this.waitMap[prefix] = [];
-        this.waitMap[prefix].push({ item, details });
-
-        // 加入查询队列并触发引擎
+        this.waitMap[prefix].push({ item, details, force });
         if (!this.searchQueue.includes(prefix)) {
             this.searchQueue.push(prefix);
-            this.processQueue();
+            void this.processQueue();
         }
     }
 
-    // 删除资源后取消仍在途的旧搜索结果，避免 115 索引延迟将幽灵匹配重新写回缓存。
-    invalidate(prefix) {
-        if (prefix) this.invalidatedPrefixes.add(prefix);
+    // Kept for existing callers. Revision checks, rather than a global invalidation set,
+    // reject stale remote responses after delete/offline/rename mutations.
+    invalidate() { }
+
+    async findVideos(sampleDetails) {
+        const req = this.getReq();
+        let res = await req.filesSearchAllVideos(sampleDetails.matchPrefix || sampleDetails.dateStr);
+        if (res?.state === false) throw new Error(res.error_msg || '115 \u641c\u7d22\u63a5\u53e3\u5f02\u5e38');
+        let videos = window.PornMatcher.getMatchedVideos(res?.data || [], sampleDetails);
+        if (videos.length) return videos;
+
+        const fullYear = sampleDetails.dateStr ? `20${sampleDetails.dateStr.split(/[-.]/)[0]}` : '';
+        const firstActor = sampleDetails.actors?.[0] || (sampleDetails.actor !== 'Unknown_Actor' ? String(sampleDetails.actor || '').split('&')[0].trim() : '');
+        const makerFirst = String(sampleDetails.maker || '').split(/[^a-zA-Z0-9]/)[0];
+        const titleKeyword = sampleDetails.titleKeyword || '';
+        const fallbacks = [
+            [firstActor, titleKeyword].filter(Boolean).join(' '),
+            [makerFirst, titleKeyword].filter(Boolean).join(' '),
+            titleKeyword,
+            [firstActor, fullYear].filter(Boolean).join(' '),
+        ];
+
+        for (const keyword of fallbacks) {
+            if (!keyword || keyword.trim().length < 3) continue;
+            res = await req.filesSearchAllVideos(keyword);
+            if (res?.state === false) throw new Error(res.error_msg || '115 \u641c\u7d22\u63a5\u53e3\u5f02\u5e38');
+            videos = window.PornMatcher.getMatchedVideos(res?.data || [], sampleDetails);
+            if (videos.length) break;
+        }
+        return videos;
     }
 
-    /**
-     * 极速处理引擎：使用安全稳健的 while 迭代代替危险的死递归
-     */
     async processQueue() {
         if (this.isSearching || !this.searchQueue.length) return;
         this.isSearching = true;
-
-        // [MOD] 使用 while 迭代代替异步死递归，彻底杜绝长时间挂机时的内存泄漏
-        while (this.searchQueue.length > 0) {
-            const prefix = this.searchQueue[0];
+        while (this.searchQueue.length) {
+            const prefix = this.searchQueue.shift();
             const pendingItems = this.waitMap[prefix] || [];
+            delete this.waitMap[prefix];
+            const sampleDetails = pendingItems[0]?.details;
+            const expectedRevision = this.getMatchState(prefix)?.revision || 0;
 
             try {
-                const sampleDetails = pendingItems[0]?.details;
-                if (sampleDetails) {
-                    const req = this.getReq();
-                    let res = await req.filesSearchAllVideos(prefix);
-                    // [ADD] 防止 115 接口风控(如 911 验证码)导致返回空数据，从而把空数组误写入全局缓存
-                    if (res && res.state === false) {
-                        throw new Error(res.error_msg || "115搜索接口异常");
-                    }
-                    let data = res.data || [];
-                    let videos = window.PornMatcher.getMatchedVideos(data, sampleDetails);
-
-                    // [MOD] 瀑布流同步更新高精度搜索组合
-                    if (!videos.length) {
-                        const fullYear = sampleDetails.dateStr ? "20" + sampleDetails.dateStr.split(/[-.]/)[0] : "";
-                        const firstActor = (sampleDetails.actors && sampleDetails.actors.length > 0) ? sampleDetails.actors[0] : (sampleDetails.actor !== 'Unknown_Actor' ? sampleDetails.actor.split('&')[0].trim() : '');
-                        const makerFirst = String(sampleDetails.maker || '').split(/[^a-zA-Z0-9]/)[0];
-                        const tKw = sampleDetails.titleKeyword || '';
-
-                        const fallbacks = [
-                            [firstActor, tKw].filter(Boolean).join(' '),
-                            [makerFirst, tKw].filter(Boolean).join(' '),
-                            tKw,
-                            [firstActor, fullYear].filter(Boolean).join(' ')
-                        ];
-
-                        for (let kw of fallbacks) {
-                            if (!kw || kw.trim().length < 3) continue;
-                            const fb = await req.filesSearchAllVideos(kw);
-                            // [ADD] 兜底搜索同样需要防止 115 接口风控
-                            if (fb && fb.state === false) throw new Error(fb.error_msg || "115搜索接口异常");
-                            videos = window.PornMatcher.getMatchedVideos(fb.data || [], sampleDetails);
-                            if (videos.length > 0) break;
-                        }
-                    }
-
-                    // 只在有结果时才写入缓存；空结果不缓存，保留下次重搜的机会
-                    const invalidated = this.invalidatedPrefixes.has(prefix);
-                    if (videos.length > 0 && !invalidated) {
-                        this.setWestCache(prefix, videos);
-                    }
-                    pendingItems.forEach(({ item }) => this.applyMatchTagState(item, invalidated ? [] : videos));
-                }
+                const videos = sampleDetails ? await this.findVideos(sampleDetails) : [];
+                const result = this.commitMatchState(prefix, {
+                    data: videos,
+                    status: videos.length ? 'matched' : 'unmatched',
+                    source: 'search',
+                    needsResolve: false,
+                    expectedRevision,
+                });
+                const state = result.state || this.getMatchState(prefix);
+                pendingItems.forEach(({ item }) => this.applyMatchTagState(item, state?.data || []));
+                if (result.committed && this.onStateCommitted) this.onStateCommitted(prefix, state);
             } catch (e) {
-                pendingItems.forEach(({ item }) => this.applyMatchTagState(item, []));
-            } finally {
-                delete this.waitMap[prefix]; // 处理完释放内存
+                // A failed 115 request never becomes a durable miss.
+                const current = this.getMatchState(prefix);
+                pendingItems.forEach(({ item }) => this.applyMatchTagState(item, current?.data || []));
+                console.warn('[PornDB-115] match search failed', e?.message || e);
             }
 
-            this.searchQueue.shift();
-
-            // 如果队列里还有任务，就等 300ms 再进入下一次循环，防止风控
-            if (this.searchQueue.length > 0) {
-                await this.sleep(300);
-            }
+            if (this.searchQueue.length) await this.sleep(300);
         }
-
         this.isSearching = false;
     }
 };

@@ -119,7 +119,7 @@ window.PornMagnetUI = class PornMagnetUI {
                         })();
 
                         self.pornArchiver.addTask({
-                            hash: realHash, newName: cleanNewName, rawTitle: item.title || '', cid: targetCid,
+                            hash: realHash, matchKey: details.matchPrefix || details.dateStr || '', newName: cleanNewName, rawTitle: item.title || '', cid: targetCid,
                             baseAlpha: details.baseAlpha || '', dateStr: details.dateStr || '',
                             actors: Array.isArray(details.actors) ? details.actors : (details.actor && details.actor !== 'UnknownActor' ? [details.actor] : []),
                                 finalDirArray: ['欧美演员', safeActor, cleanNewName], coverUrl: details.coverUrl, coverName: `${details.baseAlpha}.${details.dateStr}.cover.jpg`,
