@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         PornDB Data18 Media Bridge
 // @namespace    PornDB.Data18
-// @version      2.5.1
+// @version      2.6.5
 // @description  在PornDB详情页展示DATA18预告片和高清预览图
 // @icon         https://theporndb.net/favicon.ico
 // @match        *://theporndb.net/scenes/*
@@ -26,12 +26,16 @@
     const DATA18_ORIGIN = "https://www.data18.com";
     const MATCH_STATE_PREFIX = "pdb_data18_match_v1_";
     const MEDIA_CACHE_PREFIX = "pdb_data18_media_v1_";
-    const IMAGE_PROBE_MAX = 40;
+    // Data18 exposes the later BDN gallery images behind a CDN rule that
+    // returns 403 outside its own page flow. Keep the proven preview strip.
+    const IMAGE_PROBE_MAX = 8;
     const IMAGE_PROBE_CONCURRENCY = 4;
     const SEARCH_FAST_PAGE_MAX = 3;
     const SEARCH_DEEP_PAGE_MAX = 100;
     const STUDIO_SEARCH_PAGE_MAX = 12;
-    const MATCH_RULES_VERSION = 1;
+    const MATCH_RULES_VERSION = 2;
+    // v5 drops gallery URLs that Data18's BDN CDN rejects with HTTP 403.
+    const MEDIA_CACHE_VERSION = 5;
     const DEBUG = false;
 
     const safeString = (value) => String(value || "").replace(/\s+/g, " ").trim();
@@ -188,39 +192,25 @@
                         this.renderMedia(panel, cachedMedia);
                         return;
                     }
-                    this.setStatus(panel, '\u6b63\u5728\u52a0\u8f7d Data18 \u5a92\u4f53...');
+                    this.setStatus(panel, '\u5df2\u786e\u8ba4\u5339\u914d\uff0c\u6b63\u5728\u8bfb\u53d6 Data18 \u5a92\u4f53\u548c\u9884\u89c8\u56fe...');
                     const media = await this.hydrateConfirmedMedia(current, panel);
                     if (media) return;
                     this.setStatus(panel, 'Data18 \u5a92\u4f53\u91cd\u65b0\u5339\u914d');
                 }
 
-                this.setStatus(panel, '\u6b63\u5728\u5339\u914d Data18...');
+                this.setStatus(panel, '\u6b63\u5728\u641c\u7d22 Data18\uff1a\u4f7f\u7528\u5b8c\u6574\u6807\u9898\uff08\u4f18\u5148\u7b2c 1-3 \u9875\uff09...');
                 const searchId = `${Date.now()}_${Math.random().toString(36).slice(2)}`;
                 const started = this.commitMatchState(context, { status: 'searching', source: 'search', match: null, searchId });
                 if (!started.committed) return;
                 const expectedRevision = started.state.revision;
-                const details = { titlePart: rawTitle, cleanTitle, pageMeta };
+                const details = { titlePart: rawTitle, cleanTitle, pageMeta, actors: this.getPornDbSceneActors(doc) };
                 const onPartial = partial => {
                     if (partial && (partial.videoUrl || partial.images?.length)) this.renderMedia(panel, partial, true);
                 };
+                const onProgress = text => this.setStatus(panel, text);
 
-                let media = await this.findMedia(details, { fast: true, onPartial });
-                if (!media) media = await this.findMedia(details, { fast: false, onPartial });
-
-                if (!media) {
-                    const actors = this.getPornDbSceneActors(doc);
-                    for (const actor of actors.slice(0, 2)) {
-                        if (actor.length < 4) continue;
-                        media = await this.findMedia({ ...details, titlePart: actor, cleanTitle }, { fast: false, onPartial });
-                        if (media) break;
-                    }
-                }
-                if (!media) {
-                    const movieName = this.getPornDbMovieName(doc);
-                    if (movieName && movieName.length >= 3) {
-                        media = await this.findMedia({ ...details, titlePart: movieName, cleanTitle: movieName }, { fast: false, onPartial });
-                    }
-                }
+                let media = await this.findMedia(details, { fast: true, onPartial, onProgress });
+                if (!media) media = await this.findMedia(details, { fast: false, onPartial, onProgress });
 
                 if (!media) {
                     this.commitMatchState(context, { status: 'unmatched', source: 'search', match: null, expectedRevision, expectedSearchId: searchId });
@@ -233,7 +223,7 @@
                     status: 'confirmed', source: 'auto_exact', match: this.matchFromMedia(media), evidence: media.matchEvidence, expectedRevision, expectedSearchId: searchId
                 });
                 if (!result.committed) return;
-                this.setStatus(panel, 'Data18 matched, loading media...');
+                this.setStatus(panel, '\u5df2\u786e\u8ba4\u6b63\u786e\u5339\u914d\uff0c\u6b63\u5728\u89e3\u6790\u9884\u89c8\u56fe\u548c\u9884\u544a\u7247...');
                 const mediaTask = media.loadMedia ? media.loadMedia() : null;
                 if (mediaTask) {
                     void mediaTask.then(loaded => {
@@ -288,9 +278,11 @@
                         <span class="x-data18-title">Data18 预览</span>
                     </div>
                     <div class="x-data18-actions">
+                        <div class="x-data18-action-group">
+                            <button type="button" class="x-data18-action" data-action="rematch">\u91cd\u65b0\u5339\u914d</button>
+                            <button type="button" class="x-data18-action" data-action="clear-match">\u6e05\u9664\u5339\u914d</button>
+                        </div>
                         <span class="x-data18-status">\u51c6\u5907\u5339\u914d...</span>
-                        <button type="button" class="x-data18-action" data-action="rematch">\u91cd\u65b0\u5339\u914d</button>
-                        <button type="button" class="x-data18-action" data-action="clear-match">\u6e05\u9664\u5339\u914d</button>
                     </div>
                 </div>
                 <div class="x-data18-body">
@@ -298,15 +290,16 @@
                 </div>
                 <style>
                 .x-data18-wrap{background:#fff;border:1px solid #e4e7ed;border-radius:10px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.03);margin:8px 0 20px}
-                .x-data18-head{display:flex;align-items:center;justify-content:space-between;padding:12px 16px 8px}
-                .x-data18-head-left{display:flex;align-items:center;gap:8px}
-                .x-data18-actions{display:flex;align-items:center;gap:7px}
-                .x-data18-action{border:0;background:transparent;color:#7b5ea7;font-size:12px;cursor:pointer;padding:3px 2px}
+                .x-data18-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 16px 8px}
+                .x-data18-head-left{display:flex;align-items:center;gap:8px;min-width:0}
+                .x-data18-actions{display:flex;align-items:center;justify-content:flex-end;gap:7px;min-width:0}
+                .x-data18-action-group{display:flex;align-items:center;gap:5px}
+                .x-data18-action{border:0;background:#f4f0fa;color:#6b4d98;font-size:12px;cursor:pointer;padding:5px 7px;border-radius:6px;white-space:nowrap}
                 .x-data18-action:hover{text-decoration:underline}
+                .x-data18-status{font-size:12px;font-weight:500;line-height:1.35;color:#7b5ea7;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:390px}
                 .x-data18-icon{width:18px;height:18px;flex-shrink:0;color:#7b5ea7}
                 .x-data18-title{font-size:14px;font-weight:700;color:#303133}
                 .x-data18-title::before{content:'';display:inline-block;width:3px;height:14px;background:#7b5ea7;border-radius:2px;margin-right:8px;vertical-align:-2px}
-                .x-data18-status{display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:500;padding:2px 10px;border-radius:999px;background:#f4f0fa;color:#7b5ea7}
                 .x-data18-body{padding:0 16px 14px}
                 .x-data18-media-strip{display:flex;gap:10px;overflow-x:auto;overflow-y:hidden;padding:4px 2px 6px;scroll-snap-type:x proximity;-webkit-overflow-scrolling:touch}
                 .x-data18-media-strip::-webkit-scrollbar{height:4px}
@@ -548,43 +541,49 @@
 
         async findMedia(details, options = {}) {
             const fast = options.fast !== false;
-            const pageMeta = details.pageMeta || {};
+            const title = safeString(details.cleanTitle || this.cleanSearchTitle(details.titlePart || '', details.pageMeta));
+            if (!title) return null;
             const visitedSceneIds = new Set();
-            const keywords = this.buildSearchKeywords(details);
-            const fullKeyword = keywords[0] || this.cleanSearchTitle(details.titlePart || '');
-            if (!fullKeyword) return null;
-
-            // P0: Data18's own full-title query is the accuracy path. Validate
-            // every page immediately instead of collecting three pages first.
-            if (fast) {
-                return this._searchKeywordPages(fullKeyword, [1], 1, SEARCH_FAST_PAGE_MAX, details, options, visitedSceneIds);
-            }
-
-            // Continue the exact query from page 4 before using shorter variants.
-            let result = await this._searchKeywordPages(
-                fullKeyword, [1], SEARCH_FAST_PAGE_MAX + 1, SEARCH_DEEP_PAGE_MAX,
+            return this._searchKeywordPages(
+                title, [1], fast ? 1 : SEARCH_FAST_PAGE_MAX + 1,
+                fast ? SEARCH_FAST_PAGE_MAX : SEARCH_DEEP_PAGE_MAX,
                 details, options, visitedSceneIds
             );
-            if (result) return result;
+        },
 
-            // Preserve every generated keyword as a recall fallback; none is
-            // skipped, but they only run after the exact full-title path.
-            for (const keyword of keywords.slice(1)) {
-                result = await this._searchKeywordPages(
-                    keyword, [1, 2, 3], 1, SEARCH_DEEP_PAGE_MAX,
-                    details, options, visitedSceneIds
-                );
-                if (result) return result;
-            }
-            return this._findMediaFromStudio(pageMeta.studio, details, options);
+        _titleMatchInfo(candidateTitle, expectedTitle) {
+            const candidateNorm = this.normalizeTitle(candidateTitle);
+            const expectedNorm = this.normalizeTitle(expectedTitle);
+            if (!candidateNorm) return { kind: 'unknown', score: 0 };
+            if (candidateNorm === expectedNorm) return { kind: 'exact', score: 1 };
+            const a = [...new Set(expectedNorm.split(/\s+/).filter(word => word.length > 1))];
+            const b = [...new Set(candidateNorm.split(/\s+/).filter(word => word.length > 1))];
+            if (!a.length || !b.length) return { kind: 'none', score: 0 };
+            const overlap = a.filter(word => b.includes(word)).length;
+            const expectedCoverage = overlap / a.length;
+            const candidateCoverage = overlap / b.length;
+            const score = Math.min(expectedCoverage, candidateCoverage);
+            return { kind: expectedCoverage >= 0.85 && candidateCoverage >= 0.65 ? 'major' : 'none', score };
+        },
+
+        _candidateMetadataAllows(best, pageMeta, titleKind) {
+            if (titleKind === 'exact' || titleKind === 'unknown') return true;
+            const studioConflict = !!pageMeta.studio && !!best._resultStudio
+                && this._normalizeStudioName(pageMeta.studio) !== best._resultStudio;
+            const dateDistance = this._dateDistanceDays(pageMeta.date, best._resultDate);
+            const dateConflict = Number.isFinite(dateDistance) && dateDistance > 1;
+            // Missing card metadata is verified on the detail page; only an
+            // explicit conflict is discarded before that request.
+            return !studioConflict && !dateConflict;
         },
 
         async _searchKeywordPages(keyword, levels, startPage, endPage, details, options, visitedSceneIds) {
             const pageMeta = details.pageMeta || {};
-            const expectedTitle = this.normalizeTitle(details.cleanTitle || details.titlePart || '');
+            const expectedTitle = details.cleanTitle || details.titlePart || '';
             for (const level of levels) {
                 for (let page = startPage; page <= endPage; page++) {
                     try {
+                        options.onProgress?.(`\u6b63\u5728\u641c\u7d22 Data18\uff1a\u5b8c\u6574\u6807\u9898\uff0c\u7b2c ${page}/${endPage} \u9875...`);
                         if (page > 1) await this._advanceSearchPage(page);
                         const searchUrl = this.buildSearchUrl(keyword, level, page);
                         if (!searchUrl) break;
@@ -592,25 +591,34 @@
                             referer: `${DATA18_ORIGIN}/`, accept: 'text/html, */*; q=0.01', ajax: true
                         });
                         if (!searchHtml || searchHtml.length < 50 || this._isAgeGatePage(searchHtml)) break;
-
                         const pageResults = this.parseSearchResults(searchHtml, pageMeta);
                         if (!pageResults.length) break;
                         const newResults = pageResults.filter(item => !visitedSceneIds.has(item.sceneId));
                         newResults.forEach(item => visitedSceneIds.add(item.sceneId));
                         if (!newResults.length) break;
 
-                        const exact = this._scoreSearchResults(newResults, pageMeta)
-                            .filter(item => this.normalizeTitle(item.text) === expectedTitle);
-                        for (const best of exact.slice(0, 3)) {
-                            best._exactTitleCount = exact.length;
+                        const ranked = this._scoreSearchResults(newResults, pageMeta)
+                            .map(item => ({ ...item, ...this._titleMatchInfo(item.text, expectedTitle) }))
+                            .filter(item => this._candidateMetadataAllows(item, pageMeta, item.kind))
+                            .sort((a, b) => (b.kind === 'exact') - (a.kind === 'exact') || b.score - a.score || b._metaScore - a._metaScore);
+                        // A single card with an omitted title is still worth one
+                        // detail validation; it avoids a needless 100-page scan.
+                        const candidates = ranked.length ? ranked.slice(0, 3)
+                            : (newResults.length === 1 && !safeString(newResults[0].text) ? [newResults[0]] : []);
+                        const exactCount = ranked.filter(item => item.kind === 'exact').length;
+                        for (const best of candidates) {
+                            options.onProgress?.('\u5df2\u627e\u5230\u5019\u9009\u8bb0\u5f55\uff0c\u6b63\u5728\u6838\u5bf9\u6807\u9898\u3001\u5382\u724c\u3001\u65e5\u671f\u548c\u6f14\u5458...');
+                            best._titleKind = best.kind || 'unknown';
+                            best._titleScore = best.score || 0;
+                            best._exactTitleCount = exactCount || (newResults.length === 1 ? 1 : 0);
                             best._searchCandidateCount = newResults.length;
-                            best._requiresExactMeta = exact.length > 1;
+                            best._requiresExactMeta = exactCount > 1;
                             const result = await this._fetchDetailAndMedia(best, details, options);
                             if (result) return result;
                         }
                         if (pageResults.length < 5) break;
                     } catch (err) {
-                        this.debug('search page failed', { keyword, level, page, err: err?.message || err });
+                        this.debug('title search page failed', { keyword, level, page, err: err?.message || err });
                         break;
                     }
                 }
@@ -1007,16 +1015,31 @@
 
             const d18Meta = this._extractDetailPageMeta(dd);
             const titleExact = !!cleanNorm && cleanNorm === d18Norm;
+            const titleMajor = best._titleKind === 'major' && Number(best._titleScore || 0) >= 0.85;
             const studioExact = !!pageMeta.studio && !!d18Meta.studio
                 && this._normalizeStudioName(pageMeta.studio) === d18Meta.studio;
             const dateDistance = this._dateDistanceDays(pageMeta.date, d18Meta.date);
+            const dateNear = Number.isFinite(dateDistance) && dateDistance <= 1;
+            const detailActors = this._extractDetailPageActors(dd);
+            const actorOverlap = this._actorOverlap(details.actors || [], detailActors);
+            const actorCheckAvailable = (details.actors || []).length > 0 && detailActors.length > 0;
+            const actorExact = actorOverlap.length > 0;
             const uniqueExactTitle = titleExact && Number(best._exactTitleCount || 0) === 1;
+            const duplicateExactTitle = titleExact && Number(best._exactTitleCount || 0) > 1;
             const metadataContradiction = (!!pageMeta.studio && !!d18Meta.studio && !studioExact)
                 || (Number.isFinite(dateDistance) && dateDistance > 1);
-            // Long-lived records only accept an exact title plus a matching anchor,
-            // or a unique exact title without contradictory Data18 metadata.
-            if (!titleExact || metadataContradiction || !(studioExact || (Number.isFinite(dateDistance) && dateDistance <= 1) || uniqueExactTitle)) {
-                this.debug('rejected detail: persistence gate', { d18Title, titleExact, studioExact, dateDistance, uniqueExactTitle });
+            const exactAllowed = titleExact && !metadataContradiction
+                && (!duplicateExactTitle || ((studioExact || dateNear) && (!actorCheckAvailable || actorExact)));
+            // Majority-title candidates are accepted only with all available
+            // disambiguators: same studio, same/adjacent date, and actor overlap
+            // when both pages expose performers.
+            const majorAllowed = titleMajor && studioExact && dateNear
+                && (!actorCheckAvailable || actorExact);
+            if (!exactAllowed && !majorAllowed) {
+                this.debug('rejected detail: title/meta/actor gate', {
+                    d18Title, titleExact, titleMajor, studioExact, dateDistance,
+                    actorCheckAvailable, actorOverlap, uniqueExactTitle
+                });
                 return null;
             }
 
@@ -1024,16 +1047,44 @@
                 keyword: 'search', searchTitle: this.getSearchTitle(details),
                 sourceUrl: best.url, sceneId: best.sceneId, data18Title: d18Title,
                 data18Date: d18Meta.date || '', data18Studio: d18Meta.studio || '',
-                matchEvidence: { title: 'exact', studio: studioExact ? 'exact' : '', dateDistance, uniqueExactTitle },
+                matchEvidence: {
+                    title: titleExact ? 'exact' : 'major', studio: studioExact ? 'exact' : '',
+                    dateDistance, actors: actorOverlap, uniqueExactTitle
+                },
                 mediaId: this.extractMediaId(detailHtml, best.url, best.sceneId), videoUrl: '', images: []
             };
             // Match confirmation is a two-request operation (search + detail).
             // Media discovery stays off the critical path and updates the panel/cache
             // after the confirmed mapping has been written.
             match.loadMedia = () => this.collectMediaFromDetail(
-                detailHtml, best.url, best.sceneId, options.onPartial
+                detailHtml, best.url, best.sceneId, options.onPartial, options.onProgress
             );
             return match;
+        },
+
+        _actorKey(name) {
+            return this.normalizeTitle(name).replace(/\s+/g, '');
+        },
+
+        _extractDetailPageActors(doc) {
+            const actors = [];
+            try {
+                doc.querySelectorAll('a[href*="/name/"]').forEach(link => {
+                    const text = safeString(link.textContent || link.getAttribute('title') || '');
+                    if (text.length > 2 && text.length < 80) actors.push(text);
+                });
+            } catch (err) {}
+            return unique(actors);
+        },
+
+        _actorOverlap(pornDbActors, data18Actors) {
+            const expected = new Map((pornDbActors || []).map(name => [this._actorKey(name), name]).filter(([key]) => key));
+            const overlap = [];
+            (data18Actors || []).forEach(name => {
+                const key = this._actorKey(name);
+                if (expected.has(key)) overlap.push(expected.get(key));
+            });
+            return unique(overlap);
         },
 
         _dateDistanceDays(a, b) {
@@ -1197,23 +1248,27 @@
                 .trim();
         },
 
-        async collectMediaFromDetail(html, detailUrl, pageSceneId = "", onPartial = null) {
+        async collectMediaFromDetail(html, detailUrl, pageSceneId = "", onPartial = null, onProgress = null) {
+            onProgress?.('\u5df2\u786e\u8ba4\u5339\u914d\uff0c\u6b63\u5728\u89e3\u6790 Data18 \u8be6\u60c5\u9875...');
             const direct = this.extractMedia(html, detailUrl);
             this.debug("direct media", direct);
 
             const mediaId = this.extractMediaId(html, detailUrl, pageSceneId);
             this.debug("internal media id", mediaId);
 
-            const directSceneImages = mediaId
+            const directSceneImages = (mediaId
                 ? direct.images.filter(url => String(url).includes(`/${mediaId}.jpg`))
-                : direct.images.slice(0, 8);
+                : direct.images.slice(0, 8)
+            ).filter(url => !this.isSceneThumbnailUrl(url));
             if (typeof onPartial === 'function' && (direct.videos.length || directSceneImages.length)) {
                 onPartial({ mediaId, videoUrl: direct.videos[0] || '', images: this.sortImages(unique(directSceneImages)) });
             }
 
             const currentPhotoId = this.extractCurrentPhotoId(html, detailUrl);
             const photoIds = this.extractPhotoIds(html, detailUrl);
+            const movieId = this.extractMovieId(html);
             this.debug("photo ids", photoIds);
+            this.debug("movie id", movieId);
 
             const ids = this.extractNetworkSiteIds(html);
             this.debug("network/site ids", ids);
@@ -1221,6 +1276,7 @@
             const bdnCandidates = [];
             if (ids.network_id && ids.site_id && mediaId) {
                 const photoCount = Math.min(this.extractPhotoCount(html) || IMAGE_PROBE_MAX, IMAGE_PROBE_MAX);
+                onProgress?.(`\u6b63\u5728\u7ec4\u88c5 ${photoCount} \u5f20\u9ad8\u6e05\u9884\u89c8\u56fe\u5730\u5740...`);
                 for (let i = 1; i <= photoCount; i++) {
                     bdnCandidates.push(
                         `https://bdn.dt18.com/${ids.network_id}/${ids.site_id}/${mediaId}/t${String(i).padStart(2, "0")}.jpg`
@@ -1228,15 +1284,15 @@
                 }
             }
 
-            // Canonical URLs contain this scene's network/site/media identifiers.
-            // Once available, never merge generic gallery/search thumbnails into them.
+            // Data18's extended BDN gallery is present in the detail HTML but
+            // responds with 403 when loaded from PornDB.  Verify and retain
+            // only the first stable preview strip instead of rendering broken
+            // cards for inaccessible images.
             const bdnImages = bdnCandidates.length
                 ? await this.filterExistingImages(bdnCandidates, detailUrl)
                 : [];
-
-            const interfaceImages = mediaId && !bdnImages.length
-                ? await this.fetchPhotoInterfaceImages({ mediaId, photoIds, currentPhotoId, detailUrl, html })
-                : [];
+            const scenePhotoImages = [];
+            const interfaceImages = [];
 
             const interfaceVideo = mediaId
                 ? await this.fetchTrailerInterfaceVideo({ mediaId, currentPhotoId, detailUrl })
@@ -1255,9 +1311,7 @@
 
             const fullInterfaceImages = interfaceImages.filter(url => !this.isSceneThumbnailUrl(url));
             const fullDirectImages = matchedDirectImages.filter(url => !this.isSceneThumbnailUrl(url));
-            const allImages = bdnImages.length
-                ? bdnImages
-                : unique([...fullInterfaceImages, ...fullDirectImages]);
+            const allImages = unique([...bdnImages, ...fullInterfaceImages, ...fullDirectImages]);
 
             const fallbackImages = allImages.length
                 ? []
@@ -1285,6 +1339,7 @@
                 /\/images\/names\//i,
             ];
             const filteredImages = images.filter(url => !junkPatterns.some(pat => pat.test(url)));
+            onProgress?.(`\u9884\u89c8\u56fe\u89e3\u6790\u5b8c\u6210\uff1a${filteredImages.length} \u5f20\uff0c\u6b63\u5728\u6e32\u67d3...`);
 
             return { mediaId, videoUrl: videos[0] || "", images: filteredImages };
         },
@@ -1294,10 +1349,13 @@
             const ids = { network_id: "", site_id: "" };
 
             // network_id: 多个模式链式匹配
-            let m = source.match(/changepornstarnav\d+_studio_\d+_(\d{2,6})/i)
-                || source.match(/[?&]studio=(\d{2,6})(?:&|$|")/i)
-                || source.match(/\bstudio[=:]\s*(\d{2,6})\b/i)
-                || source.match(/\/sys\/nav_scenes\.php[^"']*?studio=(\d{2,6})/i);
+            // In the canonical BDN URL the first segment is Data18's network
+            // id. It is exposed as `network=...`; a visible studio id is not
+            // interchangeable with it.
+            let m = source.match(/[?&]network=(\d{2,6})(?:&|$|")/i)
+                || source.match(/\bnetwork[=:]\s*(\d{2,6})\b/i)
+                || source.match(/changepornstarnav\d+_studio_\d+_(\d{2,6})/i)
+                || source.match(/\/sys\/nav_scenes\.php[^"']*?network=(\d{2,6})/i);
             if (m) ids.network_id = m[1];
 
             // bdn URL 同时提供 network + site
@@ -1376,6 +1434,20 @@
             return chosen;
         },
 
+        extractMovieId(html) {
+            const source = this.normalizeHtml(html);
+            const patterns = [
+                /\/sys\/load_scenes_photos\.php\?[^"'<>\s]*\bmovie=(\d{5,})/i,
+                /\/sys\/(?:media_photos|media_thumbs|playlist_scenes)\.php\?[^"'<>\s]*\bmovie=(\d{5,})/i,
+                /\bmovie=(\d{5,})/i
+            ];
+            for (const pattern of patterns) {
+                const match = source.match(pattern);
+                if (match) return match[1];
+            }
+            return "";
+        },
+
         extractCurrentPhotoId(html, detailUrl) {
             const fromHash = String(detailUrl || "").match(/#image(\d+)/i);
             if (fromHash) return fromHash[1];
@@ -1430,6 +1502,23 @@
             return generic ? Number(generic[1]) : 0;
         },
 
+        async fetchScenePhotoList({ mediaId, movieId, detailUrl, onProgress = null }) {
+            if (!mediaId || !movieId) return [];
+            const url = `${DATA18_ORIGIN}/sys/load_scenes_photos.php?s=1&id=${encodeURIComponent(mediaId)}&movie=${encodeURIComponent(movieId)}&perms=0`;
+            try {
+                onProgress?.('\u6b63\u5728\u8bfb\u53d6 Data18 \u5b8c\u6574\u56fe\u5e93...');
+                const html = await this.fetchFromData18(url, {
+                    referer: detailUrl, accept: "text/html, */*; q=0.01", ajax: true, timeout: 20000
+                });
+                const images = this.extractMedia(html, url).images;
+                this.debug("scene photo list", { mediaId, movieId, count: images.length });
+                return this.sortImages(unique(images));
+            } catch (err) {
+                this.debug("scene photo list failed", { mediaId, movieId, err });
+                return [];
+            }
+        },
+
         async fetchPhotoInterfaceImages({ mediaId, photoIds, currentPhotoId, detailUrl, html }) {
             const ids = unique([...(photoIds || []), currentPhotoId].filter(Boolean));
             const images = [];
@@ -1445,11 +1534,9 @@
             });
             batches.forEach(batch => images.push(...(batch || [])));
 
-            const expectedCount = this.extractPhotoCount(html);
-            if (!ids.length || !expectedCount || images.length < expectedCount) {
-                images.push(...await this.fetchGalleryInterfaceImages(mediaId, detailUrl, ids));
-            }
-
+            // media_galleries.php exposes photo IDs that the initial detail page
+            // frequently truncates to eight preview cards.
+            images.push(...await this.fetchGalleryInterfaceImages(mediaId, detailUrl, ids));
             return this.sortImages(unique(images));
         },
 
@@ -1580,6 +1667,12 @@
                 });
                 dom.querySelectorAll("img[src]").forEach(node => {
                     const url = this.absoluteUrl(node.getAttribute("src"), baseUrl);
+                    if (this.isPreviewImageUrl(url)) images.push(url);
+                });
+                dom.querySelectorAll("a[href], [data-src], [data-full], [data-image], [data-url]").forEach(node => {
+                    const raw = node.getAttribute("href") || node.getAttribute("data-full")
+                        || node.getAttribute("data-image") || node.getAttribute("data-src") || node.getAttribute("data-url");
+                    const url = this.absoluteUrl(raw, baseUrl);
                     if (this.isPreviewImageUrl(url)) images.push(url);
                 });
             } catch (err) {
@@ -1832,6 +1925,8 @@
         renderMedia(panel, media, partial = false) {
             const body = panel.querySelector(".x-data18-body");
             if (!body) return;
+            const mediaReferer = media.sourceUrl || panel.dataset.data18SourceUrl || `${DATA18_ORIGIN}/`;
+            if (media.sourceUrl) panel.dataset.data18SourceUrl = media.sourceUrl;
 
             const items = [];
             if (media.videoUrl) items.push({ type: "video", src: media.videoUrl });
@@ -1847,13 +1942,15 @@
 
             const videoCount = media.videoUrl ? 1 : 0;
             const imageCount = Array.isArray(media.images) ? media.images.length : 0;
-            this.setStatus(panel, `已找到 ${videoCount} 个预告片 / ${imageCount} 张预览图`);
+            this.setStatus(panel, partial
+                ? `已确认匹配，正在继续加载预览图（当前 ${videoCount} 个预告片 / ${imageCount} 张）...`
+                : `Data18 加载完成：${videoCount} 个预告片 / ${imageCount} 张预览图`);
 
             // 清除骨架屏
             body.innerHTML = "";
             body.innerHTML = `
                 <div class="x-data18-media-strip" aria-label="Data18 预告片和预览图">
-                    ${items.map(item => this.renderMediaCard(item)).join("")}
+                    ${items.map(item => this.renderMediaCard(item, mediaReferer)).join("")}
                 </div>
             `;
 
@@ -1870,20 +1967,21 @@
             this.proxyLoadMediaCards(panel);
         },
 
-        renderMediaCard(item) {
+        renderMediaCard(item, referer = `${DATA18_ORIGIN}/`) {
             const src = this.escapeAttr(item.src);
+            const escapedReferer = this.escapeAttr(referer);
             const playSvg = '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-play-icon lucide-play"><path d="M5 5a2 2 0 0 1 3.008-1.728l11.997 6.998a2 2 0 0 1 .003 3.458l-12 7A2 2 0 0 1 5 19z"/></svg>';
 
             if (item.type === "video") {
-                return `<button class="x-data18-media-card" type="button" data-type="video" data-src="${src}">
-                    <div class="x-data18-thumb-placeholder x-data18-proxy-load" data-url="${src}" data-kind="video"></div>
+                return `<button class="x-data18-media-card" type="button" data-type="video" data-src="${src}" data-referer="${escapedReferer}">
+                    <div class="x-data18-thumb-placeholder x-data18-proxy-load" data-url="${src}" data-referer="${escapedReferer}" data-kind="video"></div>
                     <span class="x-data18-play-badge">${playSvg}</span>
                     <span class="x-data18-card-badge">预告片</span>
                 </button>`;
             }
 
-            return `<button class="x-data18-media-card" type="button" data-type="image" data-src="${src}">
-                <div class="x-data18-thumb-placeholder x-data18-proxy-load" data-url="${src}" data-kind="image"></div>
+            return `<button class="x-data18-media-card" type="button" data-type="image" data-src="${src}" data-referer="${escapedReferer}">
+                <div class="x-data18-thumb-placeholder x-data18-proxy-load" data-url="${src}" data-referer="${escapedReferer}" data-kind="image"></div>
             </button>`;
         },
 
@@ -1895,8 +1993,9 @@
         async _loadProxyCard(holder) {
             const url = holder.dataset.url;
             const kind = holder.dataset.kind;
+            const referer = holder.dataset.referer || `${DATA18_ORIGIN}/`;
             try {
-                const blob = await this._fetchBlobWithReferer(url);
+                const blob = await this._fetchBlobWithReferer(url, referer);
                 if (!blob) return;
                 const objUrl = URL.createObjectURL(blob);
                 if (kind === 'video') {
@@ -1927,14 +2026,13 @@
             }
         },
 
-        _fetchBlobWithReferer(url) {
+        _fetchBlobWithReferer(url, referer = `${DATA18_ORIGIN}/`) {
             return new Promise((resolve) => {
                 GM_xmlhttpRequest({
                     method: 'GET', url,
                     headers: {
-                        'Referer': `${DATA18_ORIGIN}/`,
-                        'User-Agent': navigator.userAgent,
-                        'Accept': '*/*'
+                        'Referer': referer,
+                        'Accept': 'image/avif,image/webp,image/apng,image/*,*/*;q=0.8'
                     },
                     timeout: 30000, responseType: 'arraybuffer',
                     anonymous: false, withCredentials: true,
@@ -1955,7 +2053,7 @@
         bindPreviewEvents(panel) {
             const allCards = [...panel.querySelectorAll(".x-data18-media-card")];
             const gallery = allCards.map(card => ({
-                type: card.dataset.type, src: card.dataset.src, card,
+                type: card.dataset.type, src: card.dataset.src, referer: card.dataset.referer, card,
             }));
 
             allCards.forEach((card, idx) => {
@@ -2006,7 +2104,7 @@
                     return;
                 }
 
-                const blob = await this._fetchBlobWithReferer(gi.src);
+                const blob = await this._fetchBlobWithReferer(gi.src, gi.referer || `${DATA18_ORIGIN}/`);
                 if (!blob) { media.innerHTML = '<div style="color:white;text-align:center;padding:40px;">加载失败</div>'; return; }
                 const newBlobUrl = URL.createObjectURL(blob);
                 const safeSrc = this.escapeAttr(newBlobUrl);
@@ -2104,7 +2202,8 @@
         isStateCompatible(state, context) {
             if (!state || !context || !state.input) return false;
             return String(state.input.pornDbSceneId || '') === String(context.pornDbSceneId || '')
-                && state.input.titleNorm === context.titleNorm;
+                && state.input.titleNorm === context.titleNorm
+                && (state.status === 'confirmed' || state.rulesVersion === MATCH_RULES_VERSION);
         },
 
         commitMatchState(context, patch = {}) {
@@ -2151,7 +2250,7 @@
             if (!key) return null;
             try {
                 const data = this.readSharedValue(key);
-                return data && data.v === 1 && String(data.sceneId || '') === String(data18SceneId) ? data : null;
+                return data && data.v === MEDIA_CACHE_VERSION && String(data.sceneId || '') === String(data18SceneId) ? data : null;
             } catch (err) { return null; }
         },
 
@@ -2159,7 +2258,7 @@
             if (!media || !media.sceneId) return;
             const key = this.mediaCacheKey(media.sceneId);
             this.writeSharedValue(key, {
-                v: 1, sceneId: String(media.sceneId), sourceUrl: media.sourceUrl || '', mediaId: media.mediaId || '',
+                v: MEDIA_CACHE_VERSION, sceneId: String(media.sceneId), sourceUrl: media.sourceUrl || '', mediaId: media.mediaId || '',
                 videoUrl: media.videoUrl || '', images: Array.isArray(media.images) ? media.images : [], updatedAt: Date.now()
             });
         },
