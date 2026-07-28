@@ -1,7 +1,7 @@
 /**
  * @name         PornPack UIAssets Library
  * @description  统一存放所有沉长的 SVG 图标与 HTML 模板字符串
- * @version      1.0.0
+ * @version      1.1.0
  */
 
  window.PornUIAssets = {
@@ -52,6 +52,14 @@
                         <label class="pdb-dm-checkbox-label">
                             <input type="checkbox" id="chk-dir"> 
                             <span><b>115目录树缓存</b> (底层加速用，换网盘账号会失效)</span>
+                        </label>
+                        <label class="pdb-dm-checkbox-label">
+                            <input type="checkbox" id="chk-data18-match" checked>
+                            <span><b>Data18 \u786e\u8ba4\u5339\u914d\u5e93</b> (\u957f\u671f\u4fdd\u5b58\u7684 PornDB \u573a\u666f\u4e0e Data18 \u573a\u666f\u6620\u5c04)</span>
+                        </label>
+                        <label class="pdb-dm-checkbox-label">
+                            <input type="checkbox" id="chk-data18-media">
+                            <span><b>Data18 \u5a92\u4f53\u7f13\u5b58</b> (\u9884\u544a\u4e0e\u9884\u89c8\u56fe\u5730\u5740\uff0c\u53ef\u72ec\u7acb\u91cd\u65b0\u751f\u6210)</span>
                         </label>
                     </div>
 

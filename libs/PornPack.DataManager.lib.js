@@ -1,7 +1,7 @@
 /**
  * @name         PornPack Data Manager Library
  * @description  数据备份、恢复与 WebDAV 云端同步模块
- * @version      1.0.0
+ * @version      1.1.0
  */
 
 window.PornDataManager = class PornDataManager {
@@ -86,7 +86,9 @@ window.PornDataManager = class PornDataManager {
         const getChecks = () => ({
             core: document.getElementById('chk-core').checked,
             match: document.getElementById('chk-match').checked,
-            dir: document.getElementById('chk-dir').checked
+            dir: document.getElementById('chk-dir').checked,
+            data18Match: document.getElementById('chk-data18-match').checked,
+            data18Media: document.getElementById('chk-data18-media').checked
         });
 
         document.getElementById('btn-export-local').onclick = () => this.exportLocal(getChecks());
@@ -112,24 +114,38 @@ window.PornDataManager = class PornDataManager {
     }
 
     // --- 数据组装与恢复逻辑 ---
+    static DATA18_MATCH_PREFIX = 'pdb_data18_match_v1_';
+    static DATA18_MEDIA_PREFIX = 'pdb_data18_media_v1_';
+
+    static readLocalJson(key) {
+        try { const raw = localStorage.getItem(key); return raw ? JSON.parse(raw) : null; } catch (e) { return null; }
+    }
+
+    static writeLocalJson(key, value) { localStorage.setItem(key, JSON.stringify(value)); }
+
+    static collectLocalByPrefix(prefix) {
+        const result = {};
+        Object.keys(localStorage).filter(key => key.startsWith(prefix)).forEach(key => {
+            const value = this.readLocalJson(key);
+            if (value) result[key] = value;
+        });
+        return result;
+    }
+
     static buildBackupData(checks) {
-        const backup = { version: '2.0', timestamp: Date.now(), core_data: {}, match_caches: {}, dir_caches: {} };
+        const backup = {
+            version: '2.1', timestamp: Date.now(), core_data: {}, match_caches: {}, dir_caches: {},
+            data18_match_states: {}, data18_media_caches: {}
+        };
 
         if (checks.core) {
             this.CORE_KEYS.forEach(key => {
                 let val = GM_getValue(key);
-                // [MOD] 终极防漏：如果油猴 API 里没存上，去网页原生缓存里找找看
                 if (val === undefined || val === null) {
                     const localVal = localStorage.getItem(key);
-                    if (localVal) {
-                        try { val = JSON.parse(localVal); }
-                        catch (e) { val = localVal; }
-                    }
+                    if (localVal) { try { val = JSON.parse(localVal); } catch (e) { val = localVal; } }
                 }
-
-                if (val !== undefined && val !== null) {
-                    backup.core_data[key] = val;
-                }
+                if (val !== undefined && val !== null) backup.core_data[key] = val;
             });
         }
 
@@ -138,37 +154,55 @@ window.PornDataManager = class PornDataManager {
             if (checks.match && (key.startsWith('pdb_match_state_v5_') || key.startsWith('pdb_v4_'))) backup.match_caches[key] = GM_getValue(key);
             else if (checks.dir && key === 'pdb_dir_cache_v2') backup.dir_caches[key] = GM_getValue(key);
         });
-
+        if (checks.data18Match) backup.data18_match_states = this.collectLocalByPrefix(this.DATA18_MATCH_PREFIX);
+        if (checks.data18Media) backup.data18_media_caches = this.collectLocalByPrefix(this.DATA18_MEDIA_PREFIX);
         return backup;
     }
 
+    static mergeData18State(local, incoming) {
+        if (!local) return incoming;
+        if (!incoming) return local;
+        const localId = local.match?.data18SceneId || '';
+        const incomingId = incoming.match?.data18SceneId || '';
+        if (local.status === 'confirmed' && incoming.status === 'confirmed' && localId && incomingId && localId !== incomingId) {
+            return {
+                v: 1, status: 'conflict', revision: Math.max(local.revision || 0, incoming.revision || 0) + 1,
+                updatedAt: Date.now(), source: 'import-conflict', rulesVersion: 1,
+                input: local.input || incoming.input || {}, match: null, evidence: null,
+                conflicts: [local, incoming]
+            };
+        }
+        if (local.status === 'confirmed' && incoming.status !== 'confirmed') return local;
+        if (incoming.status === 'confirmed' && local.status !== 'confirmed') return incoming;
+        return Number(incoming.updatedAt || 0) >= Number(local.updatedAt || 0) ? incoming : local;
+    }
+
     static restoreData(data) {
-        // 1. 恢复核心资产
         if (data.core_data) {
             Object.entries(data.core_data).forEach(([key, value]) => {
-                // 特殊处理：喜爱演员采取“合并（并集）”策略防丢
                 if (key === 'pdb_fav_performers') {
                     try {
                         const localArr = JSON.parse(GM_getValue(key, '[]'));
                         const cloudArr = JSON.parse(value || '[]');
-                        const mergedSet = new Set([...localArr, ...cloudArr]);
-                        GM_setValue(key, JSON.stringify([...mergedSet]));
+                        GM_setValue(key, JSON.stringify([...new Set([...localArr, ...cloudArr]) ]));
                     } catch (e) { }
-                } else {
-                    // 过滤器/白名单 直接覆盖
-                    GM_setValue(key, value);
-                }
+                } else GM_setValue(key, value);
             });
         }
-
-        // 2. 恢复匹配缓存 (直接覆盖)
-        if (data.match_caches) {
-            Object.entries(data.match_caches).forEach(([k, v]) => GM_setValue(k, v));
+        if (data.match_caches) Object.entries(data.match_caches).forEach(([k, v]) => GM_setValue(k, v));
+        if (data.dir_caches) Object.entries(data.dir_caches).forEach(([k, v]) => GM_setValue(k, v));
+        if (data.data18_match_states) {
+            Object.entries(data.data18_match_states).forEach(([key, incoming]) => {
+                if (!key.startsWith(this.DATA18_MATCH_PREFIX)) return;
+                this.writeLocalJson(key, this.mergeData18State(this.readLocalJson(key), incoming));
+            });
         }
-
-        // 3. 恢复目录缓存 (直接覆盖)
-        if (data.dir_caches) {
-            Object.entries(data.dir_caches).forEach(([k, v]) => GM_setValue(k, v));
+        if (data.data18_media_caches) {
+            Object.entries(data.data18_media_caches).forEach(([key, incoming]) => {
+                if (!key.startsWith(this.DATA18_MEDIA_PREFIX) || !incoming?.sceneId) return;
+                const local = this.readLocalJson(key);
+                this.writeLocalJson(key, !local || Number(incoming.updatedAt || 0) >= Number(local.updatedAt || 0) ? incoming : local);
+            });
         }
     }
 

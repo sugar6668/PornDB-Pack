@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         PornDB Data18 Media Bridge
 // @namespace    PornDB.Data18
-// @version      2.4.5
+// @version      2.5.1
 // @description  在PornDB详情页展示DATA18预告片和高清预览图
 // @icon         https://theporndb.net/favicon.ico
 // @match        *://theporndb.net/scenes/*
@@ -23,13 +23,16 @@
 (function() {
     "use strict";
 
-    const CACHE_PREFIX = "data18_media_v1_";
-    const CACHE_TTL = 7 * 24 * 60 * 60 * 1000;
     const DATA18_ORIGIN = "https://www.data18.com";
+    const MATCH_STATE_PREFIX = "pdb_data18_match_v1_";
+    const MEDIA_CACHE_PREFIX = "pdb_data18_media_v1_";
     const IMAGE_PROBE_MAX = 40;
-    const IMAGE_PROBE_STOP_MISSES = 5;
-    const SEARCH_PAGE_MAX = 100;
-    const DEBUG = true;
+    const IMAGE_PROBE_CONCURRENCY = 4;
+    const SEARCH_FAST_PAGE_MAX = 3;
+    const SEARCH_DEEP_PAGE_MAX = 100;
+    const STUDIO_SEARCH_PAGE_MAX = 12;
+    const MATCH_RULES_VERSION = 1;
+    const DEBUG = false;
 
     const safeString = (value) => String(value || "").replace(/\s+/g, " ").trim();
     const unique = (items) => [...new Set(items.filter(Boolean))];
@@ -139,25 +142,17 @@
 
         async ensurePanel(doc = document) {
             try {
-                if (!doc || !doc.querySelector) return;
-                if (!this.isScenePage(doc)) return;
-
+                if (!doc || !doc.querySelector || !this.isScenePage(doc)) return;
                 const rawTitle = this.getPornDbSceneTitle(doc);
                 if (!rawTitle || rawTitle.length < 3) return;
 
                 const pageMeta = this.getPornDbSceneMeta(doc);
-                this.debug("pageMeta", pageMeta);
-
                 const cleanTitle = this.cleanSearchTitle(rawTitle, pageMeta);
                 const titleNorm = this.normalizeTitle(cleanTitle);
                 const pageUrl = (doc.location && doc.location.href) || location.href;
                 const pornDbSceneId = (pageUrl.match(/\/scenes\/(\d+)/) || [])[1] || '';
-
-                this.debug("rawTitle", rawTitle);
-                this.debug("cleanTitle", cleanTitle);
-                this.debug("titleNorm", titleNorm);
-
-                const pageKey = safeString(`title_${cleanTitle || rawTitle}`);
+                const pageKey = safeString(`scene_${pornDbSceneId || titleNorm}`);
+                const context = { rawTitle, cleanTitle, titleNorm, pageUrl, pornDbSceneId, pageMeta, pageKey };
 
                 const oldPanel = doc.querySelector(".x-data18-wrap");
                 if (oldPanel) {
@@ -171,118 +166,89 @@
                     anchor.className = 'x-data18-anchor';
                     this._insertAnchor(doc, anchor);
                 }
-
                 const panel = this.createPanel(doc, pageKey);
                 anchor.appendChild(panel);
                 this._panel = panel;
+                this.bindPanelActions(panel, context);
 
-                this.setStatus(panel, "正在搜索 Data18...");
-
-                // 缓存查找
-                const cacheKeys = [
-                    CACHE_PREFIX + safeString(`scene_${pornDbSceneId}`),
-                    CACHE_PREFIX + safeString(`url_${pageUrl}`),
-                    CACHE_PREFIX + pageKey,
-                    CACHE_PREFIX + safeString(`title_${rawTitle}`),
-                ];
-
-                let cached = null;
-                for (const ck of cacheKeys) {
-                    const c = this.getCache(ck);
-                    if (c) { cached = c; break; }
-                }
-
-                if (cached && this._validateCache(cached, rawTitle, cleanTitle, titleNorm, pageUrl, pornDbSceneId)) {
-                    this.setCache(CACHE_PREFIX + pageKey, this._enrichCacheData(cached, rawTitle, cleanTitle, titleNorm, pageUrl, pornDbSceneId));
-                    this.renderMedia(panel, cached);
+                const current = this.readMatchState(context);
+                if (current && current.status === 'unmatched' && this.isStateCompatible(current, context)) {
+                    this.setStatus(panel, 'Data18 \u672a\u627e\u5230\u53ef\u4fe1\u5339\u914d');
+                    panel.querySelector('.x-data18-skeleton-strip')?.remove();
                     return;
                 }
-
-                // 缓存迁移（旧 key → 新 key）
-                const allKeys = typeof GM_listValues === 'function' ? GM_listValues().filter(k => k.startsWith(CACHE_PREFIX)) : [];
-                for (const ck of allKeys) {
-                    if (cacheKeys.includes(ck)) continue;
-                    const c = this.getCache(ck);
-                    if (!c) continue;
-                    if (this._validateCache(c, rawTitle, cleanTitle, titleNorm, pageUrl, pornDbSceneId) ||
-                        this._weakValidateCache(c, cleanTitle, titleNorm)) {
-                        const enriched = this._enrichCacheData(c, rawTitle, cleanTitle, titleNorm, pageUrl, pornDbSceneId);
-                        this._saveToAllKeys(enriched);
-                        this.renderMedia(panel, c);
+                if (current && current.status === 'conflict' && this.isStateCompatible(current, context)) {
+                    this.setStatus(panel, 'Data18 \u5339\u914d\u5b58\u5728\u51b2\u7a81\uff0c\u8bf7\u6e05\u9664\u540e\u91cd\u65b0\u5339\u914d');
+                    panel.querySelector('.x-data18-skeleton-strip')?.remove();
+                    return;
+                }
+                if (current && current.status === 'confirmed' && this.isStateCompatible(current, context)) {
+                    const cachedMedia = this.readMediaCache(current.match && current.match.data18SceneId);
+                    if (cachedMedia) {
+                        this.renderMedia(panel, cachedMedia);
                         return;
                     }
+                    this.setStatus(panel, '\u6b63\u5728\u52a0\u8f7d Data18 \u5a92\u4f53...');
+                    const media = await this.hydrateConfirmedMedia(current, panel);
+                    if (media) return;
+                    this.setStatus(panel, 'Data18 \u5a92\u4f53\u91cd\u65b0\u5339\u914d');
                 }
 
-                // 搜索 DATA18
+                this.setStatus(panel, '\u6b63\u5728\u5339\u914d Data18...');
+                const searchId = `${Date.now()}_${Math.random().toString(36).slice(2)}`;
+                const started = this.commitMatchState(context, { status: 'searching', source: 'search', match: null, searchId });
+                if (!started.committed) return;
+                const expectedRevision = started.state.revision;
                 const details = { titlePart: rawTitle, cleanTitle, pageMeta };
-                const media = await this.findMedia(details);
+                const onPartial = partial => {
+                    if (partial && (partial.videoUrl || partial.images?.length)) this.renderMedia(panel, partial, true);
+                };
+
+                let media = await this.findMedia(details, { fast: true, onPartial });
+                if (!media) media = await this.findMedia(details, { fast: false, onPartial });
+
                 if (!media) {
-                    // When the title+studio keywords fail, try actor-based search
-                    // as a fallback. Single-word titles like "Audition" get too
-                    // many results from Data18 live.php and the correct scene may
-                    // not appear in the first N pages. Actor names narrow it down.
                     const actors = this.getPornDbSceneActors(doc);
-                    if (actors.length) {
-                        this.debug("title search failed, trying actor search", actors);
-                        // First try each actor name standalone — Data18 returns a
-                        // /name/ page which lists all their scenes (now handled by
-                        // parseSearchResults + _fetchScenesFromNamePage).
-                        for (const actor of actors.slice(0, 3)) {
-                            if (actor.length < 4) continue;
-                            const actorDetails = { ...details, titlePart: actor, cleanTitle };
-                            const actorMedia = await this.findMedia(actorDetails);
-                            if (actorMedia) {
-                                const cacheData = this._enrichCacheData(actorMedia, rawTitle, cleanTitle, titleNorm, pageUrl, pornDbSceneId);
-                                this._saveToAllKeys(cacheData);
-                                this.renderMedia(panel, actorMedia);
-                                return;
-                            }
-                        }
-                        // Then try "ActorName Title" combination
-                        const actorKw = `${actors.slice(0, 2).join(' ')} ${cleanTitle}`;
-                        const actorDetails = { ...details, titlePart: actorKw, cleanTitle };
-                        const actorMedia = await this.findMedia(actorDetails);
-                        if (actorMedia) {
-                            const cacheData = this._enrichCacheData(actorMedia, rawTitle, cleanTitle, titleNorm, pageUrl, pornDbSceneId);
-                            this._saveToAllKeys(cacheData);
-                            this.renderMedia(panel, actorMedia);
-                            return;
-                        }
+                    for (const actor of actors.slice(0, 2)) {
+                        if (actor.length < 4) continue;
+                        media = await this.findMedia({ ...details, titlePart: actor, cleanTitle }, { fast: false, onPartial });
+                        if (media) break;
                     }
-                    // Also try the movie/series name from the PornDB page if available
+                }
+                if (!media) {
                     const movieName = this.getPornDbMovieName(doc);
                     if (movieName && movieName.length >= 3) {
-                        this.debug("title search failed, trying movie name", movieName);
-                        const movieDetails = { ...details, titlePart: movieName, cleanTitle: movieName };
-                        const movieMedia = await this.findMedia(movieDetails);
-                        if (movieMedia) {
-                            const cacheData = this._enrichCacheData(movieMedia, rawTitle, cleanTitle, titleNorm, pageUrl, pornDbSceneId);
-                            this._saveToAllKeys(cacheData);
-                            this.renderMedia(panel, movieMedia);
-                            return;
-                        }
+                        media = await this.findMedia({ ...details, titlePart: movieName, cleanTitle: movieName }, { fast: false, onPartial });
                     }
-                    this.setStatus(panel, "Data18 未找到匹配影片");
-                    const skel = panel.querySelector('.x-data18-skeleton-strip');
-                    if (skel) skel.remove();
+                }
+
+                if (!media) {
+                    this.commitMatchState(context, { status: 'unmatched', source: 'search', match: null, expectedRevision, expectedSearchId: searchId });
+                    this.setStatus(panel, 'Data18 \u672a\u627e\u5230\u53ef\u4fe1\u5339\u914d');
+                    panel.querySelector('.x-data18-skeleton-strip')?.remove();
                     return;
                 }
 
-                const cacheData = this._enrichCacheData(media, rawTitle, cleanTitle, titleNorm, pageUrl, pornDbSceneId);
-                this._saveToAllKeys(cacheData);
-                this.renderMedia(panel, media);
+                const result = this.commitMatchState(context, {
+                    status: 'confirmed', source: 'auto_exact', match: this.matchFromMedia(media), evidence: media.matchEvidence, expectedRevision, expectedSearchId: searchId
+                });
+                if (!result.committed) return;
+                this.setStatus(panel, 'Data18 matched, loading media...');
+                const mediaTask = media.loadMedia ? media.loadMedia() : null;
+                if (mediaTask) {
+                    void mediaTask.then(loaded => {
+                        const resolved = { ...media, ...loaded, loadMedia: undefined };
+                        const latest = this.readMatchState(context);
+                        if (latest?.status !== 'confirmed' || latest.match?.data18SceneId !== String(media.sceneId)) return;
+                        this.writeMediaCache(resolved);
+                        this.renderMedia(panel, resolved);
+                    }).catch(err => this.debug('media background load failed', err));
+                } else {
+                    this.renderMedia(panel, media);
+                }
             } catch (err) {
                 console.warn("[PornData18Media] ensurePanel failed:", err);
             }
-        },
-
-        _saveToAllKeys(data) {
-            const clean = data.cleanTitle || '';
-            const pageUrl = data.pageUrl || '';
-            const sceneId = data.pornDbSceneId || '';
-            if (clean) this.setCache(CACHE_PREFIX + safeString(`title_${clean}`), data);
-            if (pageUrl) this.setCache(CACHE_PREFIX + safeString(`url_${pageUrl}`), data);
-            if (sceneId) this.setCache(CACHE_PREFIX + safeString(`scene_${sceneId}`), data);
         },
 
         _insertAnchor(doc, anchor) {
@@ -305,40 +271,6 @@
             return false;
         },
 
-        _validateCache(cached, rawTitle, cleanTitle, titleNorm, pageUrl, pornDbSceneId) {
-            if (!cached) return false;
-            const cachedNorm = cached.titleNorm || '';
-            const cachedUrl = cached.pageUrl || '';
-            const cachedSceneId = cached.pornDbSceneId || '';
-            if (cachedNorm && cachedNorm === titleNorm) return true;
-            if (cachedUrl && cachedUrl === pageUrl) return true;
-            if (cachedSceneId && cachedSceneId === pornDbSceneId) return true;
-            return false;
-        },
-
-        _weakValidateCache(cached, cleanTitle, titleNorm) {
-            if (!cached || !cleanTitle) return false;
-            const searchTitle = cached.searchTitle || cached.keyword || '';
-            if (!searchTitle) return false;
-            const searchNorm = this.normalizeTitle(searchTitle);
-            if (!searchNorm) return false;
-            if (searchNorm === titleNorm) return true;
-            const words = titleNorm.split(/\s+/).filter(w => w.length > 2);
-            if (!words.length) return false;
-            return words.filter(w => searchNorm.includes(w)).length / words.length >= 0.85;
-        },
-
-        _enrichCacheData(data, rawTitle, cleanTitle, titleNorm, pageUrl, pornDbSceneId) {
-            return {
-                ...data,
-                rawTitle,
-                cleanTitle,
-                titleNorm: titleNorm || this.normalizeTitle(cleanTitle || ''),
-                pageUrl,
-                pornDbSceneId,
-                cacheVersion: 2,
-            };
-        },
 
         isScenePage(doc) {
             const href = (doc.location && doc.location.href) || location.href;
@@ -355,7 +287,11 @@
                         <svg class="x-data18-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m22 8-6 4 6 4V8Z"/><rect x="2" y="6" width="14" height="12" rx="2" ry="2"/></svg>
                         <span class="x-data18-title">Data18 预览</span>
                     </div>
-                    <span class="x-data18-status">准备搜索...</span>
+                    <div class="x-data18-actions">
+                        <span class="x-data18-status">\u51c6\u5907\u5339\u914d...</span>
+                        <button type="button" class="x-data18-action" data-action="rematch">\u91cd\u65b0\u5339\u914d</button>
+                        <button type="button" class="x-data18-action" data-action="clear-match">\u6e05\u9664\u5339\u914d</button>
+                    </div>
                 </div>
                 <div class="x-data18-body">
                     <div class="x-data18-skeleton-strip"><div class="x-data18-skeleton-card"></div><div class="x-data18-skeleton-card"></div><div class="x-data18-skeleton-card"></div></div>
@@ -364,6 +300,9 @@
                 .x-data18-wrap{background:#fff;border:1px solid #e4e7ed;border-radius:10px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.03);margin:8px 0 20px}
                 .x-data18-head{display:flex;align-items:center;justify-content:space-between;padding:12px 16px 8px}
                 .x-data18-head-left{display:flex;align-items:center;gap:8px}
+                .x-data18-actions{display:flex;align-items:center;gap:7px}
+                .x-data18-action{border:0;background:transparent;color:#7b5ea7;font-size:12px;cursor:pointer;padding:3px 2px}
+                .x-data18-action:hover{text-decoration:underline}
                 .x-data18-icon{width:18px;height:18px;flex-shrink:0;color:#7b5ea7}
                 .x-data18-title{font-size:14px;font-weight:700;color:#303133}
                 .x-data18-title::before{content:'';display:inline-block;width:3px;height:14px;background:#7b5ea7;border-radius:2px;margin-right:8px;vertical-align:-2px}
@@ -607,90 +546,76 @@
             });
         },
 
-        async findMedia(details) {
-            const keywords = this.buildSearchKeywords(details);
-            this.debug("search keywords", keywords);
-            const visitedSceneIds = new Set();
+        async findMedia(details, options = {}) {
+            const fast = options.fast !== false;
             const pageMeta = details.pageMeta || {};
+            const visitedSceneIds = new Set();
+            const keywords = this.buildSearchKeywords(details);
+            const fullKeyword = keywords[0] || this.cleanSearchTitle(details.titlePart || '');
+            if (!fullKeyword) return null;
 
-            for (const keyword of keywords) {
-                for (let level = 1; level <= 3; level++) {
+            // P0: Data18's own full-title query is the accuracy path. Validate
+            // every page immediately instead of collecting three pages first.
+            if (fast) {
+                return this._searchKeywordPages(fullKeyword, [1], 1, SEARCH_FAST_PAGE_MAX, details, options, visitedSceneIds);
+            }
+
+            // Continue the exact query from page 4 before using shorter variants.
+            let result = await this._searchKeywordPages(
+                fullKeyword, [1], SEARCH_FAST_PAGE_MAX + 1, SEARCH_DEEP_PAGE_MAX,
+                details, options, visitedSceneIds
+            );
+            if (result) return result;
+
+            // Preserve every generated keyword as a recall fallback; none is
+            // skipped, but they only run after the exact full-title path.
+            for (const keyword of keywords.slice(1)) {
+                result = await this._searchKeywordPages(
+                    keyword, [1, 2, 3], 1, SEARCH_DEEP_PAGE_MAX,
+                    details, options, visitedSceneIds
+                );
+                if (result) return result;
+            }
+            return this._findMediaFromStudio(pageMeta.studio, details, options);
+        },
+
+        async _searchKeywordPages(keyword, levels, startPage, endPage, details, options, visitedSceneIds) {
+            const pageMeta = details.pageMeta || {};
+            const expectedTitle = this.normalizeTitle(details.cleanTitle || details.titlePart || '');
+            for (const level of levels) {
+                for (let page = startPage; page <= endPage; page++) {
                     try {
-                        const allResults = [];
-                        // Data18 stores its pagination cursor in the session. Advance it
-                        // for every batch; reusing pagesearch=2 repeats the same five rows.
-                        for (let page = 1; page <= SEARCH_PAGE_MAX; page++) {
-                            if (page > 1) {
-                                try { await this._advanceSearchPage(page); } catch (e) {
-                                    this.debug(`advanceSearchPage failed for page ${page}`, e);
-                                    break;
-                                }
-                            }
+                        if (page > 1) await this._advanceSearchPage(page);
+                        const searchUrl = this.buildSearchUrl(keyword, level, page);
+                        if (!searchUrl) break;
+                        const searchHtml = await this.fetchFromData18(searchUrl, {
+                            referer: `${DATA18_ORIGIN}/`, accept: 'text/html, */*; q=0.01', ajax: true
+                        });
+                        if (!searchHtml || searchHtml.length < 50 || this._isAgeGatePage(searchHtml)) break;
 
-                            const searchUrl = this.buildSearchUrl(keyword, level, page);
-                            if (!searchUrl) break;
-                            this.debug(`search url (level ${level}, page ${page})`, searchUrl);
+                        const pageResults = this.parseSearchResults(searchHtml, pageMeta);
+                        if (!pageResults.length) break;
+                        const newResults = pageResults.filter(item => !visitedSceneIds.has(item.sceneId));
+                        newResults.forEach(item => visitedSceneIds.add(item.sceneId));
+                        if (!newResults.length) break;
 
-                            const searchHtml = await this.fetchFromData18(searchUrl, {
-                                referer: `${DATA18_ORIGIN}/`,
-                                accept: "text/html, */*; q=0.01",
-                                ajax: true
-                            });
-
-                            if (!searchHtml || searchHtml.length < 50) break;
-                            if (this._isAgeGatePage(searchHtml)) {
-                                this.debug("age gate page returned");
-                                if (page === 1) this.setStatus(this._panel || document.querySelector('.x-data18-wrap'), "Data18 年龄验证未通过");
-                                break;
-                            }
-
-                            const pageResults = this.parseSearchResults(searchHtml, pageMeta);
-                            if (!pageResults.length) break;
-
-                            const newResults = pageResults.filter(r => !visitedSceneIds.has(r.sceneId));
-                            newResults.forEach(r => visitedSceneIds.add(r.sceneId));
-                            // A repeated full page means the server cursor did not advance.
-                            if (!newResults.length) break;
-                            allResults.push(...newResults);
-                            if (pageResults.length < 5) break;
-                        }
-
-                        this.debug(`search results (level ${level})`, { count: allResults.length, items: allResults });
-
-                        if (!allResults.length) continue;
-
-                        const sorted = this._scoreSearchResults(allResults, pageMeta);
-                        const expectedTitle = this.normalizeTitle(details.cleanTitle || details.titlePart || '');
-                        const exactTitleCount = expectedTitle
-                            ? sorted.filter(item => this.normalizeTitle(item.text) === expectedTitle).length
-                            : 0;
-                        // The search endpoint can return only studio cards for a
-                        // short title.  Do not walk hundreds of unrelated pages:
-                        // switch immediately to that studio's own scene index.
-                        if (!exactTitleCount && pageMeta.studio) {
-                            const studioResult = await this._findMediaFromStudio(pageMeta.studio, details);
-                            if (studioResult) return studioResult;
-                        }
-                        for (const best of sorted) {
-                            // Date/studio are a disambiguator only when Data18 has
-                            // several records with the same title.  A unique title
-                            // must not be discarded merely because one site omits
-                            // or labels a metadata field differently.
-                            best._requiresExactMeta = exactTitleCount > 1
-                                && this.normalizeTitle(best.text) === expectedTitle;
-                            this.debug("trying result", { url: best.url, text: best.text, sceneId: best.sceneId, metaScore: best._metaScore });
-                            const result = await this._fetchDetailAndMedia(best, details);
+                        const exact = this._scoreSearchResults(newResults, pageMeta)
+                            .filter(item => this.normalizeTitle(item.text) === expectedTitle);
+                        for (const best of exact.slice(0, 3)) {
+                            best._exactTitleCount = exact.length;
+                            best._searchCandidateCount = newResults.length;
+                            best._requiresExactMeta = exact.length > 1;
+                            const result = await this._fetchDetailAndMedia(best, details, options);
                             if (result) return result;
                         }
+                        if (pageResults.length < 5) break;
                     } catch (err) {
-                        console.warn(`[PornData18Media] search failed:`, err?.message || err);
+                        this.debug('search page failed', { keyword, level, page, err: err?.message || err });
+                        break;
                     }
                 }
             }
-            // Data18's free-text endpoint often returns a studio card instead of
-            // old scenes ("Audition" under Deeper is one example).  Search the
-            // PornDB studio's dedicated scene index as a final, scoped fallback.
-            return this._findMediaFromStudio(pageMeta.studio, details);
+            return null;
         },
 
         _studioSlug(studio) {
@@ -721,7 +646,7 @@
             return scenes;
         },
 
-        async _findMediaFromStudio(studio, details) {
+        async _findMediaFromStudio(studio, details, options = {}) {
             const slug = this._studioSlug(studio);
             const expectedTitle = this.normalizeTitle(details.cleanTitle || details.titlePart || '');
             if (!slug || !expectedTitle) return null;
@@ -744,7 +669,7 @@
                 const pageCount = total ? Math.ceil(total / 30) : 1;
                 const allMatches = [];
 
-                for (let page = 1; page <= pageCount; page++) {
+                for (let page = 1; page <= Math.min(pageCount, STUDIO_SEARCH_PAGE_MAX); page++) {
                     const html = page === 1 ? firstHtml : await this.fetchFromData18(
                         `${DATA18_ORIGIN}/sys/page.php?t=3&b=2&o=0&html=${encodeURIComponent(slug)}&html2=&total=${total}&doquery=1&spage=${page}&dopage=1`,
                         { referer: studioUrl, accept: 'text/html, */*; q=0.01', ajax: true }
@@ -759,7 +684,8 @@
                 });
                 for (const scene of allMatches) {
                     scene._requiresExactMeta = allMatches.length > 1;
-                    const result = await this._fetchDetailAndMedia(scene, details);
+                    scene._exactTitleCount = allMatches.length;
+                    const result = await this._fetchDetailAndMedia(scene, details, options);
                     if (result) return result;
                 }
             } catch (err) {
@@ -996,7 +922,7 @@
             }
         },
 
-        async _fetchDetailAndMedia(best, details) {
+        async _fetchDetailAndMedia(best, details, options = {}) {
             // If the search result points to a /movies/ page instead of a /scenes/
             // page, first collect individual scenes from the movie page.
             const isMovieUrl = /\/movies\//i.test(best.url);
@@ -1007,13 +933,14 @@
                 const resolved = await this._resolveMovieToScene(best, details);
                 if (resolved) {
                     this.debug("resolved movie to scene via similarity", { url: resolved.url, sceneId: resolved.sceneId, text: resolved.text });
-                    const result = await this._fetchDetailAndMedia(resolved, details);
+                    const result = await this._fetchDetailAndMedia(resolved, details, options);
                     if (result) return result;
                 }
                 const movieScenes = await this._fetchScenesFromMoviePage(best.url, details);
                 for (const scene of movieScenes) {
                     this.debug("trying movie scene (bulk)", { url: scene.url, sceneId: scene.sceneId });
-                    const result = await this._fetchDetailAndMedia(scene, details);
+                    scene._exactTitleCount = allMatches.length;
+                    const result = await this._fetchDetailAndMedia(scene, details, options);
                     if (result) return result;
                 }
                 return null;
@@ -1026,7 +953,8 @@
                 const nameScenes = await this._fetchScenesFromNamePage(best.url, details);
                 for (const scene of nameScenes) {
                     this.debug("trying name scene", { url: scene.url, sceneId: scene.sceneId });
-                    const result = await this._fetchDetailAndMedia(scene, details);
+                    scene._exactTitleCount = allMatches.length;
+                    const result = await this._fetchDetailAndMedia(scene, details, options);
                     if (result) return result;
                 }
                 return null;
@@ -1077,15 +1005,41 @@
                 }
             }
 
-            const media = await this.collectMediaFromDetail(detailHtml, best.url, best.sceneId);
-            if (media.videoUrl || media.images.length) {
-                return {
-                    keyword: 'search', searchTitle: this.getSearchTitle(details),
-                    sourceUrl: best.url, sceneId: best.sceneId,
-                    mediaId: media.mediaId, videoUrl: media.videoUrl, images: media.images
-                };
+            const d18Meta = this._extractDetailPageMeta(dd);
+            const titleExact = !!cleanNorm && cleanNorm === d18Norm;
+            const studioExact = !!pageMeta.studio && !!d18Meta.studio
+                && this._normalizeStudioName(pageMeta.studio) === d18Meta.studio;
+            const dateDistance = this._dateDistanceDays(pageMeta.date, d18Meta.date);
+            const uniqueExactTitle = titleExact && Number(best._exactTitleCount || 0) === 1;
+            const metadataContradiction = (!!pageMeta.studio && !!d18Meta.studio && !studioExact)
+                || (Number.isFinite(dateDistance) && dateDistance > 1);
+            // Long-lived records only accept an exact title plus a matching anchor,
+            // or a unique exact title without contradictory Data18 metadata.
+            if (!titleExact || metadataContradiction || !(studioExact || (Number.isFinite(dateDistance) && dateDistance <= 1) || uniqueExactTitle)) {
+                this.debug('rejected detail: persistence gate', { d18Title, titleExact, studioExact, dateDistance, uniqueExactTitle });
+                return null;
             }
-            return null;
+
+            const match = {
+                keyword: 'search', searchTitle: this.getSearchTitle(details),
+                sourceUrl: best.url, sceneId: best.sceneId, data18Title: d18Title,
+                data18Date: d18Meta.date || '', data18Studio: d18Meta.studio || '',
+                matchEvidence: { title: 'exact', studio: studioExact ? 'exact' : '', dateDistance, uniqueExactTitle },
+                mediaId: this.extractMediaId(detailHtml, best.url, best.sceneId), videoUrl: '', images: []
+            };
+            // Match confirmation is a two-request operation (search + detail).
+            // Media discovery stays off the critical path and updates the panel/cache
+            // after the confirmed mapping has been written.
+            match.loadMedia = () => this.collectMediaFromDetail(
+                detailHtml, best.url, best.sceneId, options.onPartial
+            );
+            return match;
+        },
+
+        _dateDistanceDays(a, b) {
+            if (!a || !b) return NaN;
+            const ta = Date.parse(`${a}T00:00:00Z`), tb = Date.parse(`${b}T00:00:00Z`);
+            return Number.isFinite(ta) && Number.isFinite(tb) ? Math.abs(ta - tb) / 86400000 : NaN;
         },
 
         _extractDetailPageMeta(doc) {
@@ -1243,12 +1197,19 @@
                 .trim();
         },
 
-        async collectMediaFromDetail(html, detailUrl, pageSceneId = "") {
+        async collectMediaFromDetail(html, detailUrl, pageSceneId = "", onPartial = null) {
             const direct = this.extractMedia(html, detailUrl);
             this.debug("direct media", direct);
 
             const mediaId = this.extractMediaId(html, detailUrl, pageSceneId);
             this.debug("internal media id", mediaId);
+
+            const directSceneImages = mediaId
+                ? direct.images.filter(url => String(url).includes(`/${mediaId}.jpg`))
+                : direct.images.slice(0, 8);
+            if (typeof onPartial === 'function' && (direct.videos.length || directSceneImages.length)) {
+                onPartial({ mediaId, videoUrl: direct.videos[0] || '', images: this.sortImages(unique(directSceneImages)) });
+            }
 
             const currentPhotoId = this.extractCurrentPhotoId(html, detailUrl);
             const photoIds = this.extractPhotoIds(html, detailUrl);
@@ -1259,7 +1220,7 @@
 
             const bdnCandidates = [];
             if (ids.network_id && ids.site_id && mediaId) {
-                const photoCount = Math.min(this.extractPhotoCount(html) || 8, IMAGE_PROBE_MAX);
+                const photoCount = Math.min(this.extractPhotoCount(html) || IMAGE_PROBE_MAX, IMAGE_PROBE_MAX);
                 for (let i = 1; i <= photoCount; i++) {
                     bdnCandidates.push(
                         `https://bdn.dt18.com/${ids.network_id}/${ids.site_id}/${mediaId}/t${String(i).padStart(2, "0")}.jpg`
@@ -1292,13 +1253,19 @@
                   })
                 : [];
 
+            const fullInterfaceImages = interfaceImages.filter(url => !this.isSceneThumbnailUrl(url));
+            const fullDirectImages = matchedDirectImages.filter(url => !this.isSceneThumbnailUrl(url));
             const allImages = bdnImages.length
                 ? bdnImages
-                : unique([...interfaceImages, ...matchedDirectImages]);
+                : unique([...fullInterfaceImages, ...fullDirectImages]);
 
             const fallbackImages = allImages.length
                 ? []
-                : await this.filterExistingImages(this.buildImageCandidates([...direct.images, ...lazyMedia.images]), detailUrl);
+                : await this.filterExistingImages(
+                    this.buildImageCandidates([...direct.images, ...lazyMedia.images])
+                        .filter(url => !this.isSceneThumbnailUrl(url)),
+                    detailUrl
+                );
 
             const videos = unique([interfaceVideo, ...direct.videos, ...lazyMedia.videos]);
             const images = this.sortImages(unique([...allImages, ...fallbackImages]));
@@ -1346,6 +1313,13 @@
                 || source.match(/\bsite=(\d{2,6})\b/i);
             if (m) ids.site_id = ids.site_id || m[1];
 
+            // Data18 often exposes only a /media/t/{size}/scenes/... thumbnail
+            // on the detail page. It still contains the canonical network/site IDs.
+            const thumbIds = source.match(/\/media\/t\/\d+\/scenes\/(\d+)\/(\d+)\/\d+\.(?:jpg|png|webp)/i);
+            if (thumbIds) {
+                ids.network_id = ids.network_id || thumbIds[1];
+                ids.site_id = ids.site_id || thumbIds[2];
+            }
             return ids;
         },
 
@@ -1450,28 +1424,29 @@
             const photos = source.match(/Photos\s*\[\s*(\d+)\s*\]/i);
             if (photos) return Number(photos[1]);
             const imageOf = source.match(/Image\s+\d+\s+of\s+(\d+)/i);
-            return imageOf ? Number(imageOf[1]) : 0;
+            if (imageOf) return Number(imageOf[1]);
+            const generic = source.match(/(?:photos?|images?)\s*[:(\[]?\s*(\d{1,3})\s*(?:[)\]]|photos?|images?)/i)
+                || source.match(/(?:total|count)\s*[:=]\s*["']?(\d{1,3})/i);
+            return generic ? Number(generic[1]) : 0;
         },
 
         async fetchPhotoInterfaceImages({ mediaId, photoIds, currentPhotoId, detailUrl, html }) {
             const ids = unique([...(photoIds || []), currentPhotoId].filter(Boolean));
             const images = [];
 
-            for (const pic of ids) {
+            const batches = await this.mapWithConcurrency(ids, IMAGE_PROBE_CONCURRENCY, async pic => {
                 const url = this.buildPhotoInterfaceUrl(mediaId, pic);
                 try {
                     const responseHtml = await this.fetchFromData18(url, {
-                        referer: detailUrl, accept: "text/html, */*; q=0.01",
-                        ajax: true, timeout: 15000
+                        referer: detailUrl, accept: "text/html, */*; q=0.01", ajax: true, timeout: 15000
                     });
-                    images.push(...this.extractMedia(responseHtml, url).images);
-                } catch (err) {
-                    console.warn("[PornData18Media] photo interface failed:", url, err);
-                }
-            }
+                    return this.extractMedia(responseHtml, url).images;
+                } catch (err) { return []; }
+            });
+            batches.forEach(batch => images.push(...(batch || [])));
 
             const expectedCount = this.extractPhotoCount(html);
-            if (expectedCount && images.length < expectedCount) {
+            if (!ids.length || !expectedCount || images.length < expectedCount) {
                 images.push(...await this.fetchGalleryInterfaceImages(mediaId, detailUrl, ids));
             }
 
@@ -1659,22 +1634,26 @@
             return this.sortImages([...candidates]);
         },
 
-        async filterExistingImages(candidates, referer) {
-            const existing = [];
-            let consecutiveMisses = 0;
-
-            for (const url of this.sortImages(unique(candidates))) {
-                const exists = await this.imageExists(url, referer);
-                if (exists) {
-                    existing.push(url);
-                    consecutiveMisses = 0;
-                } else {
-                    consecutiveMisses++;
-                    if (existing.length && consecutiveMisses >= IMAGE_PROBE_STOP_MISSES) break;
+        async mapWithConcurrency(items, limit, mapper) {
+            const source = [...items];
+            const results = new Array(source.length);
+            let cursor = 0;
+            const workers = Array.from({ length: Math.min(limit, source.length) }, async () => {
+                while (cursor < source.length) {
+                    const index = cursor++;
+                    try { results[index] = await mapper(source[index], index); }
+                    catch (err) { results[index] = null; }
                 }
-            }
+            });
+            await Promise.all(workers);
+            return results;
+        },
 
-            return this.sortImages(unique(existing));
+        async filterExistingImages(candidates, referer) {
+            const urls = this.sortImages(unique(candidates));
+            const checked = await this.mapWithConcurrency(urls, IMAGE_PROBE_CONCURRENCY,
+                url => this.imageExists(url, referer).then(exists => exists ? url : ''));
+            return this.sortImages(unique(checked));
         },
 
         async imageExists(url, referer) {
@@ -1728,19 +1707,15 @@
             const videos = [];
             const images = [];
 
-            for (const url of urls.slice(0, 12)) {
+            const batches = await this.mapWithConcurrency(urls.slice(0, 12), IMAGE_PROBE_CONCURRENCY, async url => {
                 try {
                     const html = await this.fetchFromData18(url, {
-                        referer, accept: "text/html,application/json,*/*;q=0.8",
-                        ajax: true, timeout: 15000
+                        referer, accept: "text/html,application/json,*/*;q=0.8", ajax: true, timeout: 15000
                     });
-                    const media = this.extractMedia(html, url);
-                    videos.push(...media.videos);
-                    images.push(...media.images);
-                } catch (err) {
-                    console.warn("[PornData18Media] lazy request failed:", url, err);
-                }
-            }
+                    return this.extractMedia(html, url);
+                } catch (err) { return { videos: [], images: [] }; }
+            });
+            batches.forEach(media => { videos.push(...(media?.videos || [])); images.push(...(media?.images || [])); });
 
             return { videos: unique(videos), images: this.sortImages(unique(images)) };
         },
@@ -1766,6 +1741,10 @@
             } catch (err) {
                 return false;
             }
+        },
+
+        isSceneThumbnailUrl(url) {
+            return /\/media\/t\/\d+\/scenes\//i.test(String(url || ''));
         },
 
         isPreviewImageUrl(url) {
@@ -1850,7 +1829,7 @@
             }
         },
 
-        renderMedia(panel, media) {
+        renderMedia(panel, media, partial = false) {
             const body = panel.querySelector(".x-data18-body");
             if (!body) return;
 
@@ -2085,32 +2064,157 @@
             old.remove();
         },
 
-        getCache(key) {
-            if (typeof GM_getValue !== "function") return null;
-            const data = GM_getValue(key, null);
-            if (!data || !data.ts) return null;
-            if (Date.now() - data.ts > CACHE_TTL) {
-                if (typeof GM_deleteValue === "function") GM_deleteValue(key);
-                return null;
-            }
-            return data;
+        matchStateKey(context) {
+            return MATCH_STATE_PREFIX + safeString(context && (context.pornDbSceneId || context.titleNorm || context.pageKey));
         },
 
-        setCache(key, data) {
-            if (typeof GM_setValue !== "function") return;
-            GM_setValue(key, { ...data, ts: Date.now() });
+        mediaCacheKey(data18SceneId) {
+            return data18SceneId ? MEDIA_CACHE_PREFIX + safeString(data18SceneId) : '';
+        },
+
+        readSharedValue(key) {
+            try {
+                const raw = localStorage.getItem(key);
+                return raw ? JSON.parse(raw) : null;
+            } catch (err) { return null; }
+        },
+
+        writeSharedValue(key, value) {
+            localStorage.setItem(key, JSON.stringify(value));
+            try { GM_setValue(key, value); } catch (err) {}
+        },
+
+        deleteSharedValue(key) {
+            localStorage.removeItem(key);
+            try { GM_deleteValue(key); } catch (err) {}
+        },
+
+        isValidMatchState(state) {
+            return state && state.v === 1 && ['confirmed', 'unmatched', 'conflict', 'searching'].includes(state.status)
+                && Number.isFinite(state.revision) && Number.isFinite(state.updatedAt);
+        },
+
+        readMatchState(context) {
+            try {
+                const state = this.readSharedValue(this.matchStateKey(context));
+                return this.isValidMatchState(state) ? state : null;
+            } catch (err) { return null; }
+        },
+
+        isStateCompatible(state, context) {
+            if (!state || !context || !state.input) return false;
+            return String(state.input.pornDbSceneId || '') === String(context.pornDbSceneId || '')
+                && state.input.titleNorm === context.titleNorm;
+        },
+
+        commitMatchState(context, patch = {}) {
+            const key = this.matchStateKey(context);
+            if (!key) return { committed: false, state: null };
+            const previous = this.readMatchState(context);
+            const expectedRevision = patch.expectedRevision;
+            const previousRevision = previous?.revision || 0;
+            if (expectedRevision !== undefined && expectedRevision !== previousRevision) {
+                return { committed: false, state: previous };
+            }
+            if (patch.expectedSearchId !== undefined && previous?.searchId !== patch.expectedSearchId) {
+                return { committed: false, state: previous };
+            }
+            const state = {
+                v: 1,
+                status: patch.status || previous?.status || 'unmatched',
+                revision: previousRevision + 1,
+                updatedAt: Date.now(),
+                source: patch.source || previous?.source || 'search',
+                searchId: patch.searchId === undefined ? previous?.searchId || '' : patch.searchId,
+                rulesVersion: MATCH_RULES_VERSION,
+                input: {
+                    pornDbSceneId: context.pornDbSceneId || '', titleNorm: context.titleNorm || '',
+                    date: context.pageMeta?.date || '', studio: context.pageMeta?.studio || ''
+                },
+                match: patch.match === undefined ? previous?.match || null : patch.match,
+                evidence: patch.evidence === undefined ? previous?.evidence || null : patch.evidence,
+            };
+            this.writeSharedValue(key, state);
+            return { committed: true, state };
+        },
+
+        matchFromMedia(media) {
+            return {
+                data18SceneId: String(media.sceneId || ''), sourceUrl: media.sourceUrl || '',
+                title: media.data18Title || '', date: media.data18Date || '', studio: media.data18Studio || '',
+                mediaId: media.mediaId || ''
+            };
+        },
+
+        readMediaCache(data18SceneId) {
+            const key = this.mediaCacheKey(data18SceneId);
+            if (!key) return null;
+            try {
+                const data = this.readSharedValue(key);
+                return data && data.v === 1 && String(data.sceneId || '') === String(data18SceneId) ? data : null;
+            } catch (err) { return null; }
+        },
+
+        writeMediaCache(media) {
+            if (!media || !media.sceneId) return;
+            const key = this.mediaCacheKey(media.sceneId);
+            this.writeSharedValue(key, {
+                v: 1, sceneId: String(media.sceneId), sourceUrl: media.sourceUrl || '', mediaId: media.mediaId || '',
+                videoUrl: media.videoUrl || '', images: Array.isArray(media.images) ? media.images : [], updatedAt: Date.now()
+            });
+        },
+
+        async hydrateConfirmedMedia(state, panel) {
+            const match = state && state.match;
+            if (!match?.sourceUrl) return null;
+            try {
+                const detailHtml = await this.fetchFromData18(match.sourceUrl, {
+                    referer: DATA18_ORIGIN, accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
+                });
+                const media = await this.collectMediaFromDetail(detailHtml, match.sourceUrl, match.data18SceneId, partial => {
+                    if (partial && (partial.videoUrl || partial.images?.length)) this.renderMedia(panel, partial, true);
+                });
+                if (!media.videoUrl && !media.images.length) return null;
+                const resolved = { ...media, sceneId: match.data18SceneId, sourceUrl: match.sourceUrl };
+                this.writeMediaCache(resolved);
+                this.renderMedia(panel, resolved);
+                return resolved;
+            } catch (err) {
+                this.debug('confirmed media hydration failed', err);
+                return null;
+            }
+        },
+
+        bindPanelActions(panel, context) {
+            panel.querySelector('[data-action="rematch"]')?.addEventListener('click', async () => {
+                const state = this.readMatchState(context);
+                const oldMediaId = state?.match?.data18SceneId;
+                this.deleteMatchState(context, oldMediaId);
+                panel.remove();
+                await this.ensurePanel(document);
+            });
+            panel.querySelector('[data-action="clear-match"]')?.addEventListener('click', () => {
+                const state = this.readMatchState(context);
+                this.deleteMatchState(context, state?.match?.data18SceneId);
+                this.setStatus(panel, '\u5df2\u6e05\u9664\u5f53\u524d\u5339\u914d');
+                panel.querySelector('.x-data18-body').innerHTML = '';
+            });
+        },
+
+        deleteMatchState(context, data18SceneId = '') {
+            try {
+                this.deleteSharedValue(this.matchStateKey(context));
+                const mediaKey = this.mediaCacheKey(data18SceneId);
+                if (mediaKey) this.deleteSharedValue(mediaKey);
+            } catch (err) {}
         },
 
         clearData18Cache() {
-            if (typeof GM_listValues !== "function" || typeof GM_deleteValue !== "function") {
-                console.warn("[PornData18Media] GM cache APIs are unavailable");
-                return 0;
-            }
-
-            const keys = GM_listValues().filter(key => String(key).startsWith(CACHE_PREFIX));
-            keys.forEach(key => GM_deleteValue(key));
-            console.info(`[PornData18Media] cleared ${keys.length} Data18 cache item(s)`);
-            return keys.length;
+            if (typeof GM_listValues !== 'function' || typeof GM_deleteValue !== 'function') return 0;
+            const keys = new Set(GM_listValues().filter(key => String(key).startsWith(MATCH_STATE_PREFIX) || String(key).startsWith(MEDIA_CACHE_PREFIX)));
+            Object.keys(localStorage).filter(key => key.startsWith(MATCH_STATE_PREFIX) || key.startsWith(MEDIA_CACHE_PREFIX)).forEach(key => keys.add(key));
+            keys.forEach(key => this.deleteSharedValue(key));
+            return keys.size;
         },
 
         debug(label, payload) {
@@ -2143,7 +2247,7 @@
     }
 
     function boot() {
-        setTimeout(processPage, 2000);
+        setTimeout(processPage, 0);
     }
 
     if (document.readyState === 'complete') boot();
@@ -2178,7 +2282,7 @@
 
             // 延迟锚点：west 出现但 wrap 尚未创建
             if (!hasWrap && hasWest) {
-                setTimeout(processPage, 1000);
+                setTimeout(processPage, 200);
                 return;
             }
 
@@ -2188,7 +2292,7 @@
             const t = h2.textContent.trim();
             if (t && t !== lastTitle && !hasWrap) {
                 lastTitle = t;
-                setTimeout(processPage, 1000);
+                setTimeout(processPage, 200);
             }
         }
     }).observe(document.documentElement, { subtree: true, childList: true });
