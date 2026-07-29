@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         PornDB Data18 Media Bridge
 // @namespace    PornDB.Data18
-// @version      2.6.17
+// @version      2.6.18
 // @description  在PornDB详情页展示DATA18预告片和高清预览图
 // @icon         https://theporndb.net/favicon.ico
 // @match        *://theporndb.net/scenes/*
@@ -33,9 +33,9 @@
     const SEARCH_FAST_PAGE_MAX = 3;
     const SEARCH_DEEP_PAGE_MAX = 8;
     const STUDIO_SEARCH_PAGE_MAX = 24;
-    // v12 uses Data18's stateless studio catalogue as the reliable P1 fallback
-    // after the three-page title search.
-    const MATCH_RULES_VERSION = 12;
+    // v13 adds a controlled fallback for terminal episode/catalogue labels,
+    // such as "E707", while preserving the full title as the primary query.
+    const MATCH_RULES_VERSION = 13;
     // v5 drops gallery URLs that Data18's BDN CDN rejects with HTTP 403.
     const MEDIA_CACHE_VERSION = 5;
     const DEBUG = false;
@@ -220,7 +220,14 @@
                 let media = await this.findMedia(details, { fast: true, onPartial, onProgress });
                 if (!media && pageMeta.studio) {
                     this.setStatus(panel, `完整标题前三页未命中，正在 Data18 ${pageMeta.studio} 目录按完整标题查找...`);
-                    media = await this._findMediaFromStudio(pageMeta.studio, details, { onPartial, onProgress });
+                    for (const searchTitle of this.getTitleSearchVariants(cleanTitle)) {
+                        const variantDetails = searchTitle === cleanTitle ? details : { ...details, cleanTitle: searchTitle };
+                        if (searchTitle !== cleanTitle) {
+                            this.setStatus(panel, `正在 Data18 ${pageMeta.studio} 目录使用移除尾部标号的标题查找...`);
+                        }
+                        media = await this._findMediaFromStudio(pageMeta.studio, variantDetails, { onPartial, onProgress });
+                        if (media) break;
+                    }
                 }
                 if (!media) media = await this.findMedia(details, { fast: false, onPartial, onProgress });
                 if (!media && runOptions.extendedSearch) {
@@ -406,6 +413,20 @@
             return details && details.cleanTitle ? details.cleanTitle : this.cleanSearchTitle(raw);
         },
 
+        // PornDB occasionally appends a catalogue/episode code that Data18 does
+        // not store in the scene title: "The Pregnant Glow Part 2 E707" →
+        // "The Pregnant Glow Part 2".  Keep the original as the first attempt;
+        // only then try this narrow terminal-label variant.
+        getTitleSearchVariants(title) {
+            const full = safeString(title);
+            if (!full) return [];
+            const withoutTerminalCode = full.replace(
+                /\s+(?:(?:e|ep|episode)\s*[-.]?\s*\d{1,5}[a-z]?|s\d{1,2}e\d{1,3})\s*$/i,
+                ''
+            ).trim();
+            return unique([full, withoutTerminalCode.length >= 3 ? withoutTerminalCode : '']);
+        },
+
         // Generate progressively shorter keyword queries (longest first).
         // Stop words like "scene", "from", "the", "and", "in", "with" are skipped
         // when they appear as leading/trailing filler so the first keyword is the
@@ -577,18 +598,27 @@
             const fast = options.fast !== false;
             const title = safeString(details.cleanTitle || this.cleanSearchTitle(details.titlePart || '', details.pageMeta));
             if (!title) return null;
-            const visitedSceneIds = new Set();
             // The deep pass deliberately initializes the same search again at
             // page 1. Data18 retains its result cursor server-side; starting a
             // new function call at page 4 assumes that cursor survived every
             // XMLHttpRequest, which is not reliable. Replaying pages 1-3 only
             // happens after the fast pass has failed, then page 4+ is reached
             // through the exact native next-page sequence.
-            return this._searchKeywordPages(
-                title, [1], 1,
-                fast ? SEARCH_FAST_PAGE_MAX : SEARCH_DEEP_PAGE_MAX,
-                details, options, visitedSceneIds
-            );
+            const variants = this.getTitleSearchVariants(title);
+            for (const searchTitle of variants) {
+                const usingFallbackTitle = searchTitle !== title;
+                if (usingFallbackTitle) {
+                    options.onProgress?.('完整标题未命中，正在使用移除尾部标号的标题搜索 Data18...');
+                }
+                const result = await this._searchKeywordPages(
+                    searchTitle, [1], 1,
+                    fast ? SEARCH_FAST_PAGE_MAX : SEARCH_DEEP_PAGE_MAX,
+                    usingFallbackTitle ? { ...details, cleanTitle: searchTitle } : details,
+                    options, new Set()
+                );
+                if (result) return result;
+            }
+            return null;
         },
 
         _titleMatchInfo(candidateTitle, expectedTitle) {

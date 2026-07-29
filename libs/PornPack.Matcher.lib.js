@@ -29,7 +29,9 @@ window.PornMatcher = class PornMatcher {
         const nClean = n.replace(this.REGEX_NON_ALPHANUM, '');
 
         // 【优化】厂牌识别：严格边界校验
-        const hasMaker = (details.makerRegex && details.makerRegex.test(n)) || false;
+        const hasMaker = (details.makerRegexes && details.makerRegexes.some(regex => regex.test(n)))
+            || (details.makerRegex && details.makerRegex.test(n))
+            || false;
 
         // 【优化】年份识别：不仅找 2021，还要找括号内或单独的数字
         const yearMatch = n.match(/(?:^|[^0-9])(20\d{2})(?:$|[^0-9])/);
@@ -85,11 +87,17 @@ window.PornMatcher = class PornMatcher {
         const actorsClean = (details.actors || []).map(a => String(a).toLowerCase().replace(this.REGEX_NON_ALPHANUM, '')).filter(Boolean);
 
         // [MOD] 构建 makerRegex 时优先使用包含空格的 maker，防止 "Reality Kings" 被压缩成 "RealityKings" 导致正则匹配失效
-        const makerRegex = this.buildExactRegex(details.maker || details.baseAlpha || '');
+        const makerNames = [...new Set([
+            details.maker,
+            details.baseAlpha,
+            ...(details.makerAliases || []),
+        ].filter(Boolean))];
+        const makerRegexes = makerNames.map(name => this.buildExactRegex(name)).filter(Boolean);
+        const makerRegex = makerRegexes[0] || null;
         const actorRegexes = (details.actors || []).map(a => this.buildExactRegex(a)).filter(Boolean);
 
         // [MOD] 将 fullTitleClean 一并注入向下传递
-        const cleanedDetails = { ...details, makerClean, titleClean, fullTitleClean, actorsClean, makerRegex, actorRegexes };
+        const cleanedDetails = { ...details, makerClean, titleClean, fullTitleClean, actorsClean, makerRegex, makerRegexes, actorRegexes };
 
         return dataArray
             .map(it => {

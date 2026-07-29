@@ -20,7 +20,7 @@ window.PornMagnetUI = class PornMagnetUI {
     }
 
     buildSmartKeyword(details) {
-        let maker = (details.maker || '').trim().replace(/[\s.]+/g, '');
+        let maker = (details.baseAlpha || details.maker || '').trim().replace(/[\s.]+/g, '');
         let dateStr = '';
         if (details.dateStr) {
             let parts = details.dateStr.split(/[-.]/);

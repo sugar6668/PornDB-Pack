@@ -391,10 +391,14 @@
                 const firstActor = (details.actors && details.actors.length > 0) ? details.actors[0] : (details.actor !== 'Unknown_Actor' ? details.actor.split('&')[0].trim() : '');
                 
                 // [MOD] 精确组合策略：优先匹配标准格式，匹配失败则用“演员+标题”降级搜
-                const searchStrategies = [
-                    details.matchPrefix, // 1. 厂牌+日期 
-                    [firstActor, tKw].filter(Boolean).join(' ') // 2. 演员+标题 
-                ];
+                const aliasPrefixes = (details.makerAliases || [])
+                    .map(alias => details.dateStr ? `${alias}.${details.dateStr}` : alias)
+                    .filter(alias => alias && alias.toLowerCase() !== String(details.matchPrefix || '').toLowerCase());
+                const searchStrategies = [...new Set([
+                    details.matchPrefix, // 1. 厂牌+日期
+                    ...aliasPrefixes, // 2. 厂牌别名+日期
+                    [firstActor, tKw].filter(Boolean).join(' ') // 3. 演员+标题
+                ])];
                 const safeKw = (str) => String(str || '').replace(/[^a-zA-Z0-9\u4e00-\u9fa5\s]/g, ' ').replace(/\s+/g, ' ').trim();
 
                 for (let kw of searchStrategies) {

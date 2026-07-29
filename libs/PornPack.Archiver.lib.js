@@ -214,7 +214,7 @@ window.PornArchiver = class PornArchiver {
             const safeSearchKw = (kw) => (kw || '').replace(/[^a-zA-Z0-9\u4e00-\u9fa5\s]/g, ' ').replace(/\s+/g, ' ').trim();
             const fullYear = details.dateStr ? "20" + details.dateStr.split(/[-.]/)[0] : "";
             const firstActor = (details.actors && details.actors.length > 0) ? details.actors[0] : (details.actor !== 'Unknown_Actor' ? details.actor.split('&')[0].trim() : '');
-            const makerFirst = String(details.maker || '').split(/[^a-zA-Z0-9]/)[0];
+                const makerFirst = String(details.baseAlpha || details.maker || '').split(/[^a-zA-Z0-9]/)[0];
             const tKw = details.titleKeyword || '';
 
             // [MOD] 归档系统同步更新高精度搜索组合

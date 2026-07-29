@@ -48,10 +48,18 @@ window.PornDispatcher = class PornDispatcher {
 
     async findVideos(sampleDetails) {
         const req = this.getReq();
-        let res = await req.filesSearchAllVideos(sampleDetails.matchPrefix || sampleDetails.dateStr);
-        if (res?.state === false) throw new Error(res.error_msg || '115 \u641c\u7d22\u63a5\u53e3\u5f02\u5e38');
-        let videos = window.PornMatcher.getMatchedVideos(res?.data || [], sampleDetails);
-        if (videos.length) return videos;
+        const queryPrefix = sampleDetails.matchPrefix || sampleDetails.dateStr;
+        const prefixAliases = (sampleDetails.makerAliases || [])
+            .map(alias => sampleDetails.dateStr ? `${alias}.${sampleDetails.dateStr}` : alias)
+            .filter(alias => alias && alias.toLowerCase() !== String(queryPrefix).toLowerCase());
+        const prefixQueries = [...new Set([queryPrefix, ...prefixAliases].filter(Boolean))];
+        let res, videos = [];
+        for (const keyword of prefixQueries) {
+            res = await req.filesSearchAllVideos(keyword);
+            if (res?.state === false) throw new Error(res.error_msg || '115 \u641c\u7d22\u63a5\u53e3\u5f02\u5e38');
+            videos = window.PornMatcher.getMatchedVideos(res?.data || [], sampleDetails);
+            if (videos.length) return videos;
+        }
 
         const fullYear = sampleDetails.dateStr ? `20${sampleDetails.dateStr.split(/[-.]/)[0]}` : '';
         const firstActor = sampleDetails.actors?.[0] || (sampleDetails.actor !== 'Unknown_Actor' ? String(sampleDetails.actor || '').split('&')[0].trim() : '');

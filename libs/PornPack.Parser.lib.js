@@ -8,6 +8,25 @@ window.PornParser = class PornParser {
     // 静态正则常量
     static REGEX_ILLEGAL_PATH = /[\\/:*?"<>|]/g;
     static REGEX_MULTI_SPACE = /\s+/g;
+    // ThePornDB and release names occasionally use different studio labels.
+    // `maker` remains the source label for display/NFO; baseAlpha is the
+    // canonical release name used by matching, archive names, and covers.
+    static STUDIO_CANONICAL_NAMES = {
+        privatestars: 'private',
+    };
+
+    static getCanonicalStudioName(maker = '') {
+        const normalized = String(maker).toLowerCase().replace(/[\s.]+/g, '');
+        return this.STUDIO_CANONICAL_NAMES[normalized] || normalized;
+    }
+
+    static getStudioMatchAliases(maker = '') {
+        const normalized = String(maker).toLowerCase().replace(/[\s.]+/g, '');
+        const canonical = this.getCanonicalStudioName(maker);
+        // Search the canonical release name first, then retain old files that
+        // were archived with ThePornDB's source label.
+        return [...new Set([canonical, normalized].filter(Boolean))];
+    }
 
     /**
      * 清理字符串，用于生成合法文件名
@@ -51,7 +70,8 @@ window.PornParser = class PornParser {
                 if (txtMatch) details.maker = txtMatch[0];
             }
             details.maker = details.maker.replace(/\n/g, '').replace(/\s+/g, ' ').trim();
-            details.baseAlpha = details.maker.replace(/[\s.]+/g, '');
+            details.baseAlpha = this.getCanonicalStudioName(details.maker);
+            details.makerAliases = this.getStudioMatchAliases(details.maker);
 
             if (details.dateStr && details.titlePart) details.isValid = true;
 
@@ -189,7 +209,8 @@ window.PornParser = class PornParser {
                 }
             }
             details.maker = details.maker.replace(/\n/g, '').replace(/\s+/g, ' ').trim();
-            details.baseAlpha = details.maker.replace(/[\s.]+/g, '');
+            details.baseAlpha = this.getCanonicalStudioName(details.maker);
+            details.makerAliases = this.getStudioMatchAliases(details.maker);
 
             details.actors = [];
             const maleBlacklist = ['mick blue', 'keiran lee', 'manuel ferrara', 'jordi el nino polla', 'rocco siffredi', 'steve holmes', 'markus dupree', 'charles dera', 'damon dice', 'isiah maxwell', 'christian clay', 'oliver flynn', 'luke hardy', 'vince karter', 'tommy pistol', 'xander corvus', 'ryan driller', 'logan pierce', 'james deen', 'danny d', 'ramon nomar', 'johnny sins', 'seth gamble', 'alex adams', 'ricky johnson', 'quinton james', 'michael vegas'];
