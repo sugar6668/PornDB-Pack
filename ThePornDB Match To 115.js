@@ -472,9 +472,12 @@
                     let chnPath = !isFakePath ? item.realPath : (item.t || item.pc || '正在排队获取精确目录...');
                     let coverBtnText = item.hasCover ? '已有封面' : '传封面';
                     let coverBtnClass = item.hasCover ? 'is-cover has-cover' : 'is-cover';
+                    const renameBaseName = buildStandardizedArchiveName(details);
+                    const renameExt = (String(item.n || '').match(/\.([^.]+)$/) || [])[1]?.toLowerCase() || String(item.ico || 'mp4').replace(/^\./, '').toLowerCase();
+                    const renameTip = renameBaseName ? `重命名后：${renameBaseName}.${renameExt}` : '重命名为标准刮削格式';
 
                     const tip = formatTip(item);
-                    htmlFragments.push(window.PornUIAssets.templates.smartConsoleItem(item, tip, chnPath, targetDir, coverBtnClass, coverBtnText));
+                    htmlFragments.push(window.PornUIAssets.templates.smartConsoleItem(item, tip, chnPath, targetDir, coverBtnClass, coverBtnText, renameTip));
                 }
                 listNode.innerHTML = htmlFragments.join('');
 
@@ -640,6 +643,22 @@
         return videos;
     };
 
+    const resolveRenamedDirectoryPath = async (cid, baseName, previousPath = '') => {
+        const previousParts = String(previousPath).split('/').filter(Boolean);
+        const predictedPath = previousParts.length
+            ? [...previousParts.slice(0, -1), baseName].join('/')
+            : baseName;
+        if (typeof window.PornDriveAPI.fetchRealChinesePath !== 'function') return predictedPath;
+        const sleep = window.PornDriveAPI.sleep || (ms => new Promise(resolve => setTimeout(resolve, ms)));
+
+        for (let attempt = 0; attempt < 6; attempt++) {
+            const realPath = await window.PornDriveAPI.fetchRealChinesePath?.(cid);
+            if (realPath && realPath.split('/').filter(Boolean).at(-1) === baseName) return realPath;
+            if (attempt < 5) await sleep(700);
+        }
+        return predictedPath;
+    };
+
     const buildOfflineFallbackVideos = (details, cid, directVideo, dir) => {
         if (!directVideo?.fid) return [];
         const baseName = buildStandardizedArchiveName(details);
@@ -763,7 +782,7 @@
     const executeMatch = async (details, btn, doc) => {
         const req = getReq(), grant = getGrant();
         if (!req || !grant || !details) return;
-        const action = btn.dataset.action, cid = btn.dataset.cid, fid = btn.dataset.fid, oldName = btn.dataset.n;
+        const action = btn.dataset.action, cid = btn.dataset.cid, fid = btn.dataset.fid;
 
         // [MOD] 修复双重前缀Bug：这里只提取最纯净的 key，不加 'pdb_v4_'，交由底层 set/get 函数去加
         const realKey = details.matchPrefix || details.dateStr;
@@ -778,20 +797,33 @@
             const itemDom = btn.closest('.zymatch-item-west');
             const currentPath = itemDom?.querySelector('.x-match-pc-path')?.textContent?.trim() || '';
             const renamedExt = (String(result.primaryName || '').match(/\.([^.]+)$/) || [])[1]?.toLowerCase() || '';
-            await syncMatchCacheFromDirectory(details, cid, [{
+            const renamedPath = await resolveRenamedDirectoryPath(cid, result.baseName, currentPath);
+            const syncedVideos = await syncMatchCacheFromDirectory(details, cid, [{
                 fid,
                 cid,
                 n: result.primaryName,
                 ico: renamedExt,
-                realPath: currentPath,
+                realPath: renamedPath,
                 matchScore: 1000
             }]);
+            const refreshedVideos = (syncedVideos.length ? syncedVideos : [{ fid, cid, n: result.primaryName, ico: renamedExt }]).map(video => {
+                if (String(video.cid) !== String(cid)) return video;
+                return {
+                    ...video,
+                    realPath: renamedPath,
+                    ...(String(video.fid) === String(fid) ? { n: result.primaryName, ico: renamedExt } : {})
+                };
+            });
+            window.PornDriveAPI.setMatchCache(realKey, refreshedVideos, 'rename');
+            notifyMatchCacheChanged(realKey);
 
             if (itemDom) {
                 const wideBtn = itemDom.querySelector('.x-match-btn-wide');
-                if (wideBtn) wideBtn.innerHTML = wideBtn.innerHTML.replace(oldName, `${result.primaryName} <span style="color:#28a745; font-size:12px; font-weight:bold;">[已改名]</span>`);
-                btn.textContent = '已改名';
-                btn.style.pointerEvents = 'none';
+                if (wideBtn) {
+                    wideBtn.title = formatTip({ n: result.primaryName, realPath: renamedPath });
+                    wideBtn.innerHTML = `${result.primaryName} <span style="color:#28a745; font-size:12px; font-weight:bold;">[已改名]</span><div class="x-match-pc-path">${renamedPath}</div>`;
+                }
+                btn.title = `重命名后：${result.primaryName}\n目录：${renamedPath}`;
                 btn.style.background = '#28a745';
                 btn.style.borderColor = '#28a745';
             }
