@@ -459,7 +459,9 @@
             const playerWrap = doc.querySelector('video:not(.x-data18-thumb-video)')?.parentElement;
             if (playerWrap) { playerWrap.classList.add('west-detail-player'); applyMatchTagState(playerWrap, videos); }
 
-            const targetDir = `欧美演员/${details.actor}/${details.fullTitle}`;
+            // Use the canonical archive name rather than the source-provider
+            // label in the button hint and the actual offline destination.
+            const targetDir = `欧美演员/${details.actor}/${buildStandardizedArchiveName(details)}`;
 
             if (videos.length) {
                 statusNode.innerHTML = `<span style="display: inline-flex; align-items: center; color: #28a745;">${window.PornUIAssets.icons.success14} 找到 ${videos.length} 个影片</span>`;
@@ -713,7 +715,7 @@
                 const wideBtn = itemDom.querySelector('.x-match-btn-wide');
                 if (wideBtn) {
                     wideBtn.innerHTML = `
-                        ${details.fullTitle} <span style="color:#28a745; font-size:12px; font-weight:bold;">[归档成功]</span>
+                        ${buildStandardizedArchiveName(details)} <span style="color:#28a745; font-size:12px; font-weight:bold;">[归档成功]</span>
                         <div class="x-match-pc-path" style="color:#28a745; font-weight:bold;">${dir.join('/')}</div>
                     `;
                 }

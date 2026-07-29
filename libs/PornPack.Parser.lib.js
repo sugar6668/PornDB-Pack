@@ -12,12 +12,16 @@ window.PornParser = class PornParser {
     // `maker` remains the source label for display/NFO; baseAlpha is the
     // canonical release name used by matching, archive names, and covers.
     static STUDIO_CANONICAL_NAMES = {
-        privatestars: 'private',
+        privatestars: 'Private',
     };
 
     static getCanonicalStudioName(maker = '') {
-        const normalized = String(maker).toLowerCase().replace(/[\s.]+/g, '');
-        return this.STUDIO_CANONICAL_NAMES[normalized] || normalized;
+        const compact = String(maker).replace(/[\s.]+/g, '');
+        const normalized = compact.toLowerCase();
+        const canonical = this.STUDIO_CANONICAL_NAMES[normalized] || compact;
+        // Keep original inner capitalization (for example, OnlyFans), while
+        // making every generated archive prefix start with an uppercase letter.
+        return canonical ? canonical.charAt(0).toUpperCase() + canonical.slice(1) : '';
     }
 
     static getStudioMatchAliases(maker = '') {
