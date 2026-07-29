@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         PornDB Data18 Media Bridge
 // @namespace    PornDB.Data18
-// @version      2.6.5
+// @version      2.6.9
 // @description  在PornDB详情页展示DATA18预告片和高清预览图
 // @icon         https://theporndb.net/favicon.ico
 // @match        *://theporndb.net/scenes/*
@@ -33,7 +33,8 @@
     const SEARCH_FAST_PAGE_MAX = 3;
     const SEARCH_DEEP_PAGE_MAX = 100;
     const STUDIO_SEARCH_PAGE_MAX = 12;
-    const MATCH_RULES_VERSION = 2;
+    // v6 prefers a complete Data18 h1 over its document-title cast suffix.
+    const MATCH_RULES_VERSION = 6;
     // v5 drops gallery URLs that Data18's BDN CDN rejects with HTTP 403.
     const MEDIA_CACHE_VERSION = 5;
     const DEBUG = false;
@@ -355,6 +356,15 @@
             title = title.replace(/^[\w\s]+\s+\d{2}\s+\d{2}\s+\d{2}\s+/, "");
             // Studio - xx.xx.xx - or Studio - xx.xx.xx.xx -
             title = title.replace(/^[\w\s]+\s*-\s*\d{2}\.\d{2}\.\d{2}(?:\.\d{2})?\s*-\s*/, "");
+            // PornDB also uses a trailing source stamp, for example
+            // "New Obsession Part 3 Vixen.24.07.26".  Data18 does not index
+            // that stamp as part of the scene title.
+            if (studioName) {
+                const esc = studioName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                const suffixRe = new RegExp(`\\s+${esc}\\s*\\.\\s*\\d{2}\\.\\d{2}\\.\\d{2}\\s*$`, 'i');
+                title = title.replace(suffixRe, "");
+            }
+            title = title.replace(/\s+[a-z][\w-]{1,40}\s*\.\s*\d{2}\.\d{2}\.\d{2}\s*$/i, "");
             // Trailing (year) or year
             title = title.replace(/\s*\(\d{4}\)\s*$/, "");
             title = title.replace(/\s+\d{4}$/, "");
@@ -976,8 +986,7 @@
             if (!detailHtml || detailHtml.length < 100) return null;
 
             const dd = new DOMParser().parseFromString(this.normalizeHtml(detailHtml), 'text/html');
-            const d18h1 = dd.querySelector('h1');
-            const d18Title = d18h1 ? d18h1.textContent.trim() : '';
+            const d18Title = this.extractDetailTitle(dd);
             const cleanNorm = this.normalizeTitle(details.cleanTitle || '');
             const d18Norm = this.normalizeTitle(d18Title);
             const sim = this._calcSimilarity(cleanNorm, d18Norm);
@@ -1060,6 +1069,31 @@
                 detailHtml, best.url, best.sceneId, options.onPartial, options.onProgress
             );
             return match;
+        },
+
+        extractDetailTitle(doc) {
+            if (!doc) return '';
+            const metaTitles = [
+                doc.querySelector('meta[property="og:title"]')?.getAttribute('content'),
+                doc.querySelector('meta[name="twitter:title"]')?.getAttribute('content')
+            ];
+            const h1Title = doc.querySelector('h1')?.textContent;
+            // Data18 document titles can append a cast suffix, for example
+            // `New Obsession Part 3, w/ Kelly Collins | DATA18`.  A complete
+            // h1 is the canonical scene title and must win over that title.
+            const documentTitle = safeString(doc.title)
+                .replace(/\s*\|\s*DATA18(?:\.com)?\s*$/i, '')
+                .replace(/,?\s*w\/\s+.+$/i, '');
+            const candidates = [...metaTitles, h1Title, documentTitle];
+            for (const raw of candidates) {
+                const title = safeString(raw)
+                    .replace(/\s*\|\s*DATA18(?:\.com)?\s*$/i, '')
+                    .replace(/^Scene:\s*/i, '');
+                // The visual h1 is frequently shortened with `...`; the
+                // metadata/document title carries the canonical full title.
+                if (title && !/\.\.\.$/.test(title)) return title;
+            }
+            return safeString(candidates.find(Boolean) || '').replace(/^Scene:\s*/i, '');
         },
 
         _actorKey(name) {
@@ -1172,9 +1206,14 @@
                     seen.add(sid[1]);
                     const gen11 = card.querySelector('.gen11');
                     const gen12 = card.querySelector('.gen12.bold') || card.querySelector('.gen12');
+                    // Search cards visually clamp long titles with an ellipsis.
+                    // The enclosing link retains Data18's full canonical title
+                    // and must take precedence for exact-title validation.
+                    const linkTitle = safeString(parentLink ? parentLink.getAttribute('title') : '');
                     const titleEl = (gen12 && gen12.textContent.trim().length > 2)
                         ? gen12
-                        : (parentLink ? parentLink.getAttribute('title') : '');
+                        : '';
+                    const resultTitle = linkTitle || safeString(typeof titleEl === 'string' ? titleEl : titleEl.textContent);
 
                     let _resultDate = '', _resultStudio = '';
                     if (gen11) {
@@ -1188,7 +1227,7 @@
                     results.push({
                         url: new URL(clean, DATA18_ORIGIN).href,
                         sceneId: sid[1],  // movie slug when isMovieFallback
-                        text: safeString(typeof titleEl === 'string' ? titleEl : titleEl.textContent),
+                        text: resultTitle,
                         _resultDate, _resultStudio,
                         _resultStudioId: '',
                         _isMovieResult: isMovieFallback,

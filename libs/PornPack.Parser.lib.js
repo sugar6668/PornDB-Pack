@@ -125,11 +125,17 @@ window.PornParser = class PornParser {
                 const match = infoWrap.textContent.match(/\b(\d+)\s*min/i);
                 if (match) details.runtime = match[1];
             }
-            // 优先从页面 h1 获取最纯净的原始标题 (对齐瀑布流逻辑)
-            const h1 = doc.querySelector('h1');
-            if (h1) {
-                const t = h1.textContent.trim();
-                if (t && t.toLowerCase() !== 'similar scenes') details.titlePart = t;
+            // 场景标题位于详情头部的 h2.text-3xl；页面首个 h1 可能只是 Movie(s) 等栏目标题。
+            const sceneTitle = doc.querySelector('h2.text-3xl') || doc.querySelector('h2[class*="text-3xl"]');
+            if (sceneTitle) {
+                const t = sceneTitle.textContent.trim();
+                if (t) details.titlePart = t;
+            }
+            // 保留 h1 兜底，但过滤已知的通用栏目名。
+            if (!details.titlePart) {
+                const h1 = doc.querySelector('h1');
+                const t = h1?.textContent.trim() || '';
+                if (t && !/^(?:similar scenes|movie\(s\)|movies|scenes)$/i.test(t)) details.titlePart = t;
             }
             // 如果 h1 抓取失败，降级使用 og:title，并强行切除演员名污染
             if (!details.titlePart) {
