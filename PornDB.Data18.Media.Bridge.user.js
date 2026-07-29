@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         PornDB Data18 Media Bridge
 // @namespace    PornDB.Data18
-// @version      2.6.9
+// @version      2.6.17
 // @description  在PornDB详情页展示DATA18预告片和高清预览图
 // @icon         https://theporndb.net/favicon.ico
 // @match        *://theporndb.net/scenes/*
@@ -31,10 +31,11 @@
     const IMAGE_PROBE_MAX = 8;
     const IMAGE_PROBE_CONCURRENCY = 4;
     const SEARCH_FAST_PAGE_MAX = 3;
-    const SEARCH_DEEP_PAGE_MAX = 100;
-    const STUDIO_SEARCH_PAGE_MAX = 12;
-    // v6 prefers a complete Data18 h1 over its document-title cast suffix.
-    const MATCH_RULES_VERSION = 6;
+    const SEARCH_DEEP_PAGE_MAX = 8;
+    const STUDIO_SEARCH_PAGE_MAX = 24;
+    // v12 uses Data18's stateless studio catalogue as the reliable P1 fallback
+    // after the three-page title search.
+    const MATCH_RULES_VERSION = 12;
     // v5 drops gallery URLs that Data18's BDN CDN rejects with HTTP 403.
     const MEDIA_CACHE_VERSION = 5;
     const DEBUG = false;
@@ -50,12 +51,14 @@
             const h2 = doc.querySelector('h2.text-3xl') || doc.querySelector('h2[class*="text-3xl"]');
             if (h2) {
                 const t = h2.textContent.trim();
-                if (t.length > 5) return t;
+                // Some valid scene titles are short (for example, "Caves").
+                // The former > 5 guard skipped the whole matching pipeline.
+                if (t.length >= 3) return t;
             }
             const h1 = doc.querySelector('h1');
             if (h1) {
                 const t = h1.textContent.trim();
-                if (t.length > 5) return t;
+                if (t.length >= 3) return t;
             }
             return '';
         },
@@ -64,7 +67,7 @@
             const actors = [];
             try {
                 // PornDB pages show actors as links to /models/ or /pornstars/
-                const actorLinks = doc.querySelectorAll('a[href*="/models/"], a[href*="/pornstars/"]');
+                const actorLinks = doc.querySelectorAll('a[href*="/models/"], a[href*="/pornstars/"], a[href*="/performers/"]');
                 for (const a of actorLinks) {
                     const name = a.textContent.trim();
                     if (name.length > 2 && name !== 'Unknown Model') actors.push(name);
@@ -145,7 +148,7 @@
             return safeString(name).toLowerCase().replace(/\s+/g, '');
         },
 
-        async ensurePanel(doc = document) {
+        async ensurePanel(doc = document, runOptions = {}) {
             try {
                 if (!doc || !doc.querySelector || !this.isScenePage(doc)) return;
                 const rawTitle = this.getPornDbSceneTitle(doc);
@@ -204,14 +207,26 @@
                 const started = this.commitMatchState(context, { status: 'searching', source: 'search', match: null, searchId });
                 if (!started.committed) return;
                 const expectedRevision = started.state.revision;
-                const details = { titlePart: rawTitle, cleanTitle, pageMeta, actors: this.getPornDbSceneActors(doc) };
+                const details = {
+                    titlePart: rawTitle, cleanTitle, pageMeta,
+                    actors: this.getPornDbSceneActors(doc),
+                    movieName: this.getPornDbMovieName(doc)
+                };
                 const onPartial = partial => {
                     if (partial && (partial.videoUrl || partial.images?.length)) this.renderMedia(panel, partial, true);
                 };
                 const onProgress = text => this.setStatus(panel, text);
 
                 let media = await this.findMedia(details, { fast: true, onPartial, onProgress });
+                if (!media && pageMeta.studio) {
+                    this.setStatus(panel, `完整标题前三页未命中，正在 Data18 ${pageMeta.studio} 目录按完整标题查找...`);
+                    media = await this._findMediaFromStudio(pageMeta.studio, details, { onPartial, onProgress });
+                }
                 if (!media) media = await this.findMedia(details, { fast: false, onPartial, onProgress });
+                if (!media && runOptions.extendedSearch) {
+                    this.setStatus(panel, '\u6807\u9898\u672a\u547d\u4e2d\uff0c\u6b63\u5728\u4f7f\u7528\u5382\u724c\u3001\u6f14\u5458\u548c\u5408\u96c6\u4ea4\u53c9\u9a8c\u8bc1...');
+                    media = await this.findManualCrossMatch(details, { onPartial, onProgress });
+                }
 
                 if (!media) {
                     this.commitMatchState(context, { status: 'unmatched', source: 'search', match: null, expectedRevision, expectedSearchId: searchId });
@@ -466,15 +481,24 @@
             const keyfullEnc = this._encodeSearchKeyfull(queryKw);
 
             if (page > 1) {
-                return `${DATA18_ORIGIN}/sys/live.php?live=1&key=${keyEnc}&key2=${keyEnc}&keyfull=${keyfullEnc}&t=${t}&b=1&change=1&next=1&page=1`;
+                // positionsearch is part of Data18's own next-page request.
+                // Keep it at zero so no result-card keyboard selection leaks
+                // into pagination. keyfull is deliberately absent here: Data18
+                // only sends it for the initial query; retaining it makes later
+                // pages restart instead of advancing.
+                return `${DATA18_ORIGIN}/sys/live.php?live=1&key=${keyEnc}&key2=${keyEnc}&t=${t}&b=1&change=1&next=1&page=1&positionsearch=0`;
             }
 
             return `${DATA18_ORIGIN}/sys/live.php?index=&key=${keyEnc}&key2=${keyEnc}&keyfull=${keyfullEnc}&t=${t}&b=1&page=1`;
         },
 
-        _advanceSearchPage(page) {
+        _advanceSearchPage() {
+            // This endpoint is an action, not an absolute page selector.  Data18's
+            // own "next page" handler always sends pagesearch=2; the server keeps
+            // the current result page in its session.  Sending 3/4/... resets or
+            // advances unpredictably, so page-four matches were never inspected.
             return this.fetchFromData18(
-                `${DATA18_ORIGIN}/sys/user.php?pagesearch=${page}`,
+                `${DATA18_ORIGIN}/sys/user.php?pagesearch=2`,
                 { referer: `${DATA18_ORIGIN}/`, accept: "text/html, */*; q=0.01", ajax: true }
             );
         },
@@ -554,8 +578,14 @@
             const title = safeString(details.cleanTitle || this.cleanSearchTitle(details.titlePart || '', details.pageMeta));
             if (!title) return null;
             const visitedSceneIds = new Set();
+            // The deep pass deliberately initializes the same search again at
+            // page 1. Data18 retains its result cursor server-side; starting a
+            // new function call at page 4 assumes that cursor survived every
+            // XMLHttpRequest, which is not reliable. Replaying pages 1-3 only
+            // happens after the fast pass has failed, then page 4+ is reached
+            // through the exact native next-page sequence.
             return this._searchKeywordPages(
-                title, [1], fast ? 1 : SEARCH_FAST_PAGE_MAX + 1,
+                title, [1], 1,
                 fast ? SEARCH_FAST_PAGE_MAX : SEARCH_DEEP_PAGE_MAX,
                 details, options, visitedSceneIds
             );
@@ -594,7 +624,7 @@
                 for (let page = startPage; page <= endPage; page++) {
                     try {
                         options.onProgress?.(`\u6b63\u5728\u641c\u7d22 Data18\uff1a\u5b8c\u6574\u6807\u9898\uff0c\u7b2c ${page}/${endPage} \u9875...`);
-                        if (page > 1) await this._advanceSearchPage(page);
+                        if (page > 1) await this._advanceSearchPage();
                         const searchUrl = this.buildSearchUrl(keyword, level, page);
                         if (!searchUrl) break;
                         const searchHtml = await this.fetchFromData18(searchUrl, {
@@ -603,7 +633,18 @@
                         if (!searchHtml || searchHtml.length < 50 || this._isAgeGatePage(searchHtml)) break;
                         const pageResults = this.parseSearchResults(searchHtml, pageMeta);
                         if (!pageResults.length) break;
-                        const newResults = pageResults.filter(item => !visitedSceneIds.has(item.sceneId));
+                        // A full-title PornDB scene match must be validated against
+                        // a Data18 scene. Search pages also mix in movies and people:
+                        // for example, "Deep Tissue" starts with two unrelated movie
+                        // cards. Expanding those cards can throw or consume the whole
+                        // pass before page 4 is reached. They belong only to the
+                        // explicit actor/studio manual fallback.
+                        const sceneResults = pageResults.filter(item => !item._isMovieResult && !item._isNameResult);
+                        if (!sceneResults.length) {
+                            if (pageResults.length < 5) break;
+                            continue;
+                        }
+                        const newResults = sceneResults.filter(item => !visitedSceneIds.has(item.sceneId));
                         newResults.forEach(item => visitedSceneIds.add(item.sceneId));
                         if (!newResults.length) break;
 
@@ -940,6 +981,102 @@
             }
         },
 
+        _studioAliasKey(value) {
+            return this.normalizeTitle(value)
+                .split(/\s+/)
+                .filter(token => token && !/^\d+$/.test(token)
+                    && !/^(?:stars|media|network|networks|official|site|studio|studios)$/.test(token))
+                .join('');
+        },
+
+        _studioAliasMatches(a, b) {
+            const left = this._studioAliasKey(a);
+            const right = this._studioAliasKey(b);
+            return !!left && !!right && (left === right || left.includes(right) || right.includes(left));
+        },
+
+        _movieKey(value) {
+            return this.normalizeTitle(value).replace(/\b(?:vol|volume)\b/g, '').replace(/\s+/g, ' ').trim();
+        },
+
+        _sameYearMonth(date, bodyText) {
+            const expected = String(date || '').match(/^(\d{4})-(\d{2})/);
+            if (!expected) return false;
+            const month = {
+                january: '01', february: '02', march: '03', april: '04', may: '05', june: '06',
+                july: '07', august: '08', september: '09', october: '10', november: '11', december: '12'
+            };
+            const found = String(bodyText || '').match(/Release date:\s*([A-Za-z]+)[^\n]*?(\d{4})/i);
+            return !!found && found[2] === expected[1] && month[found[1].toLowerCase()] === expected[2];
+        },
+
+        async findManualCrossMatch(details, options = {}) {
+            const actors = unique(details.actors || []).filter(name => name.length >= 3);
+            const studio = safeString(details.pageMeta?.studio);
+            if (!actors.length || !studio) return null;
+
+            const actor = actors[0];
+            try {
+                options.onProgress?.(`\u6b63\u5728\u4f7f\u7528\u6f14\u5458 ${actor} \u548c\u5382\u724c ${studio} \u67e5\u627e\u5019\u9009...`);
+                const searchUrl = this.buildSearchUrl(actor, 1, 1);
+                const searchHtml = await this.fetchFromData18(searchUrl, {
+                    referer: `${DATA18_ORIGIN}/`, accept: 'text/html, */*; q=0.01', ajax: true
+                });
+                const nameResult = this.parseSearchResults(searchHtml, {}).find(item => item._isNameResult);
+                if (!nameResult?.url) return null;
+
+                const nameHtml = await this.fetchFromData18(nameResult.url, {
+                    referer: `${DATA18_ORIGIN}/`, accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
+                });
+                const nameDom = new DOMParser().parseFromString(this.normalizeHtml(nameHtml), 'text/html');
+                const studioUrls = unique([...nameDom.querySelectorAll('a[href*="/name/"][href*="/studios-"]')]
+                    .filter(link => this._studioAliasMatches(studio, link.textContent || link.getAttribute('title') || link.getAttribute('href')))
+                    .map(link => this.absoluteUrl(link.getAttribute('href'), nameResult.url)));
+
+                for (const studioUrl of studioUrls.slice(0, 3)) {
+                    options.onProgress?.('\u6807\u9898\u672a\u547d\u4e2d\uff0c\u6b63\u5728\u6838\u5bf9\u6f14\u5458\u5382\u724c\u9875\u7684\u573a\u666f...');
+                    const scenes = await this._fetchScenesFromNamePage(studioUrl, details);
+                    for (const scene of scenes.slice(0, 12)) {
+                        const match = await this._fetchManualCrossDetail(scene, details, options);
+                        if (match) return match;
+                    }
+                }
+            } catch (err) {
+                this.debug('manual cross-match failed', err);
+            }
+            return null;
+        },
+
+        async _fetchManualCrossDetail(scene, details, options = {}) {
+            const html = await this.fetchFromData18(scene.url, {
+                referer: `${DATA18_ORIGIN}/`, accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
+            });
+            if (!html || html.length < 200) return null;
+            const doc = new DOMParser().parseFromString(this.normalizeHtml(html), 'text/html');
+            const bodyText = safeString(doc.body?.textContent);
+            const d18Studio = (bodyText.match(/Studio:\s*([^\n|]+?)(?:\s*-\s*\d|\n|$)/i) || [])[1] || '';
+            const d18Movie = (bodyText.match(/Movie:\s*([^\n|]+?)(?:\s*-\s*\d|\n|$)/i) || [])[1] || '';
+            const actorOverlap = this._actorOverlap(details.actors || [], this._extractDetailPageActors(doc));
+            const actorCount = unique(details.actors || []).length;
+            const actorsMatch = actorCount > 0 && actorOverlap.length >= Math.min(actorCount, 2);
+            const studioMatch = this._studioAliasMatches(details.pageMeta?.studio, d18Studio);
+            const movieMatch = !!details.movieName && this._movieKey(details.movieName) === this._movieKey(d18Movie);
+            const monthMatch = this._sameYearMonth(details.pageMeta?.date, bodyText);
+            if (!studioMatch || !actorsMatch || (!movieMatch && !monthMatch)) return null;
+
+            const data18Title = this.extractDetailTitle(doc);
+            options.onProgress?.('\u4ea4\u53c9\u9a8c\u8bc1\u6210\u529f\uff0c\u6b63\u5728\u89e3\u6790 Data18 \u5a92\u4f53...');
+            const match = {
+                keyword: 'manual-cross', searchTitle: this.getSearchTitle(details),
+                sourceUrl: scene.url, sceneId: scene.sceneId, data18Title,
+                data18Date: '', data18Studio: safeString(d18Studio),
+                matchEvidence: { title: 'actor-studio-movie', studio: 'alias', actors: actorOverlap, movieMatch, monthMatch },
+                mediaId: this.extractMediaId(html, scene.url, scene.sceneId), videoUrl: '', images: []
+            };
+            match.loadMedia = () => this.collectMediaFromDetail(html, scene.url, scene.sceneId, options.onPartial, options.onProgress);
+            return match;
+        },
+
         async _fetchDetailAndMedia(best, details, options = {}) {
             // If the search result points to a /movies/ page instead of a /scenes/
             // page, first collect individual scenes from the movie page.
@@ -957,7 +1094,8 @@
                 const movieScenes = await this._fetchScenesFromMoviePage(best.url, details);
                 for (const scene of movieScenes) {
                     this.debug("trying movie scene (bulk)", { url: scene.url, sceneId: scene.sceneId });
-                    scene._exactTitleCount = allMatches.length;
+                    scene._exactTitleCount = movieScenes.length;
+                    scene._requiresExactMeta = movieScenes.length > 1;
                     const result = await this._fetchDetailAndMedia(scene, details, options);
                     if (result) return result;
                 }
@@ -971,7 +1109,8 @@
                 const nameScenes = await this._fetchScenesFromNamePage(best.url, details);
                 for (const scene of nameScenes) {
                     this.debug("trying name scene", { url: scene.url, sceneId: scene.sceneId });
-                    scene._exactTitleCount = allMatches.length;
+                    scene._exactTitleCount = nameScenes.length;
+                    scene._requiresExactMeta = nameScenes.length > 1;
                     const result = await this._fetchDetailAndMedia(scene, details, options);
                     if (result) return result;
                 }
@@ -2329,7 +2468,7 @@
                 const oldMediaId = state?.match?.data18SceneId;
                 this.deleteMatchState(context, oldMediaId);
                 panel.remove();
-                await this.ensurePanel(document);
+            await this.ensurePanel(document, { extendedSearch: true });
             });
             panel.querySelector('[data-action="clear-match"]')?.addEventListener('click', () => {
                 const state = this.readMatchState(context);

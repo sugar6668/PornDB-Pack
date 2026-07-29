@@ -988,7 +988,10 @@
         }
         if (typeof quickView !== 'undefined' && quickView) quickView.ensureButtons(doc);
         // [ADD] 将过滤面板唤起按钮挂载至网页顶部
-        if (pornFilter) pornFilter.ensureTopButton(doc);
+        if (pornFilter) {
+            pornFilter.refreshScope();
+            pornFilter.ensureTopButton(doc);
+        }
         if (window.PornDataManager) window.PornDataManager.ensureButtonExists(doc);
     };
 
@@ -1037,7 +1040,10 @@
                 window.PornFavorites.ensureIcons(document);
             }
             if (typeof quickView !== 'undefined' && quickView) quickView.ensureButtons(document);
-            if (typeof pornFilter !== 'undefined' && pornFilter) pornFilter.ensureTopButton(document);
+            if (typeof pornFilter !== 'undefined' && pornFilter) {
+                pornFilter.refreshScope();
+                pornFilter.ensureTopButton(document);
+            }
             if (window.PornDataManager) window.PornDataManager.ensureButtonExists(document);
         }, 300);
     }).observe(document.body, { childList: true, subtree: true });    // 8. 扩展：初始化书签导出模块

@@ -20,7 +20,7 @@ window.PornFilter = class PornFilter {
         else if (typeof this.createModal === 'function') this.createModal();
         else if (typeof this.initUI === 'function') this.initUI();
 
-        this.startFastTagger();
+        this.refreshScope();
     }
 
     loadWhitelist(defaultList) {
@@ -56,10 +56,38 @@ window.PornFilter = class PornFilter {
         try { localStorage.setItem(this.storageKey, jsonStr); } catch (e) { }
     }
 
+    isPerformerWorkListPage() {
+        return location.pathname.includes('/performers/') || location.pathname.includes('/performer-sites/');
+    }
+
+    clearFilterMarks(root = document) {
+        root.querySelectorAll('.grid-cols-scene-card .w-scene-card[data-studio-checked], .grid-cols-scene-card .w-scene-card[data-studio-hidden]').forEach(card => {
+            delete card.dataset.studioChecked;
+            delete card.dataset.studioHidden;
+            delete card.dataset.studioName;
+        });
+    }
+
+    stopFastTagger() {
+        if (this.taggerObserver) {
+            this.taggerObserver.disconnect();
+            this.taggerObserver = null;
+        }
+        this.clearFilterMarks();
+    }
+
+    refreshScope() {
+        if (this.isPerformerWorkListPage()) this.startFastTagger();
+        else this.stopFastTagger();
+    }
+
     startFastTagger() {
-        if (!location.href.includes('/performers/') && !location.href.includes('/performer-sites/')) return;
+        if (!this.isPerformerWorkListPage() || this.taggerObserver) return;
 
         const checkCard = (card) => {
+            // ThePornDB is an SPA.  The observer survives a route change, so
+            // re-check the active route before tagging any newly rendered cards.
+            if (!this.isPerformerWorkListPage()) return;
             if (card.dataset.studioChecked) return;
             card.dataset.studioChecked = '1';
 
@@ -77,7 +105,11 @@ window.PornFilter = class PornFilter {
 
         document.querySelectorAll('.grid-cols-scene-card .w-scene-card:not([data-studio-checked="1"])').forEach(checkCard);
 
-        new MutationObserver((mutations) => {
+        this.taggerObserver = new MutationObserver((mutations) => {
+            if (!this.isPerformerWorkListPage()) {
+                this.stopFastTagger();
+                return;
+            }
             for (let m of mutations) {
                 if (m.addedNodes.length) {
                     for (let node of m.addedNodes) {
@@ -92,7 +124,8 @@ window.PornFilter = class PornFilter {
                     }
                 }
             }
-        }).observe(document.body, { childList: true, subtree: true });
+        });
+        this.taggerObserver.observe(document.body, { childList: true, subtree: true });
     }
 
     initUI() {
