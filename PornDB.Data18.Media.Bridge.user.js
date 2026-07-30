@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         PornDB Data18 Media Bridge
 // @namespace    PornDB.Data18
-// @version      2.6.18
+// @version      2.6.29
 // @description  在PornDB详情页展示DATA18预告片和高清预览图
 // @icon         https://theporndb.net/favicon.ico
 // @match        *://theporndb.net/scenes/*
@@ -26,18 +26,20 @@
     const DATA18_ORIGIN = "https://www.data18.com";
     const MATCH_STATE_PREFIX = "pdb_data18_match_v1_";
     const MEDIA_CACHE_PREFIX = "pdb_data18_media_v1_";
+    const STUDIO_CONTEXT_PREFIX = "pdb_data18_studio_context_v1_";
+    const STUDIO_CONTEXT_TTL = 30 * 24 * 60 * 60 * 1000;
     // Data18 exposes the later BDN gallery images behind a CDN rule that
     // returns 403 outside its own page flow. Keep the proven preview strip.
     const IMAGE_PROBE_MAX = 8;
     const IMAGE_PROBE_CONCURRENCY = 4;
-    const SEARCH_FAST_PAGE_MAX = 3;
+    const SEARCH_FAST_PAGE_MAX = 1;
     const SEARCH_DEEP_PAGE_MAX = 8;
     const STUDIO_SEARCH_PAGE_MAX = 24;
-    // v13 adds a controlled fallback for terminal episode/catalogue labels,
-    // such as "E707", while preserving the full title as the primary query.
-    const MATCH_RULES_VERSION = 13;
+    // v14 starts with Data18's studio-scoped search, then falls back to one
+    // global title-result page. Terminal-label variants remain controlled.
+    const MATCH_RULES_VERSION = 19;
     // v5 drops gallery URLs that Data18's BDN CDN rejects with HTTP 403.
-    const MEDIA_CACHE_VERSION = 5;
+    const MEDIA_CACHE_VERSION = 7;
     const DEBUG = false;
 
     const safeString = (value) => String(value || "").replace(/\s+/g, " ").trim();
@@ -202,7 +204,9 @@
                     this.setStatus(panel, 'Data18 \u5a92\u4f53\u91cd\u65b0\u5339\u914d');
                 }
 
-                this.setStatus(panel, '\u6b63\u5728\u641c\u7d22 Data18\uff1a\u4f7f\u7528\u5b8c\u6574\u6807\u9898\uff08\u4f18\u5148\u7b2c 1-3 \u9875\uff09...');
+                this.setStatus(panel, pageMeta.studio
+                    ? `[\u5382\u724c P0] \u51c6\u5907 ${pageMeta.studio} \u5382\u724c\u5185\u6807\u9898\u68c0\u7d22...`
+                    : '[\u5168\u7ad9 P1] \u51c6\u5907\u5b8c\u6574\u6807\u9898\u68c0\u7d22...');
                 const searchId = `${Date.now()}_${Math.random().toString(36).slice(2)}`;
                 const started = this.commitMatchState(context, { status: 'searching', source: 'search', match: null, searchId });
                 if (!started.committed) return;
@@ -217,19 +221,22 @@
                 };
                 const onProgress = text => this.setStatus(panel, text);
 
-                let media = await this.findMedia(details, { fast: true, onPartial, onProgress });
+                let media = pageMeta.studio
+                    ? await this.findMediaInStudio(pageMeta.studio, details, { onPartial, onProgress })
+                    : null;
                 if (!media && pageMeta.studio) {
-                    this.setStatus(panel, `完整标题前三页未命中，正在 Data18 ${pageMeta.studio} 目录按完整标题查找...`);
-                    for (const searchTitle of this.getTitleSearchVariants(cleanTitle)) {
-                        const variantDetails = searchTitle === cleanTitle ? details : { ...details, cleanTitle: searchTitle };
-                        if (searchTitle !== cleanTitle) {
-                            this.setStatus(panel, `正在 Data18 ${pageMeta.studio} 目录使用移除尾部标号的标题查找...`);
-                        }
-                        media = await this._findMediaFromStudio(pageMeta.studio, variantDetails, { onPartial, onProgress });
-                        if (media) break;
-                    }
+                    this.setStatus(panel, '[\u5382\u724c P0] \u6b63\u5728\u4f7f\u7528\u5382\u724c + \u5b8c\u6574\u6807\u9898\u68c0\u7d22...');
+                    media = await this.findMediaWithStudioTitle(details, { onPartial, onProgress });
                 }
-                if (!media) media = await this.findMedia(details, { fast: false, onPartial, onProgress });
+                if (!media) {
+                    this.setStatus(panel, '[\u5168\u7ad9 P1] \u5382\u724c\u5185\u672a\u547d\u4e2d\uff0c\u6b63\u5728\u68c0\u7d22\u5b8c\u6574\u6807\u9898\u7b2c 1 \u9875...');
+                    media = await this.findMedia(details, { fast: true, onPartial, onProgress });
+                }
+                if (!media && runOptions.extendedSearch) {
+                    this.setStatus(panel, '[\u624b\u52a8\u6269\u5c55] \u5168\u7ad9\u7b2c 1 \u9875\u672a\u547d\u4e2d\uff0c\u6b63\u5728\u7ee7\u7eed\u68c0\u7d22...');
+                    media = await this.findMedia(details, { fast: false, onPartial, onProgress });
+                }
+
                 if (!media && runOptions.extendedSearch) {
                     this.setStatus(panel, '\u6807\u9898\u672a\u547d\u4e2d\uff0c\u6b63\u5728\u4f7f\u7528\u5382\u724c\u3001\u6f14\u5458\u548c\u5408\u96c6\u4ea4\u53c9\u9a8c\u8bc1...');
                     media = await this.findManualCrossMatch(details, { onPartial, onProgress });
@@ -356,7 +363,11 @@
 
         setStatus(panel, text) {
             const node = panel && panel.querySelector ? panel.querySelector(".x-data18-status") : null;
-            if (node) node.textContent = text;
+            if (node) {
+                node.textContent = text;
+                node.title = text;
+                node.setAttribute("aria-label", text);
+            }
         },
 
         // Remove any studio+date prefix from the title before keyword generation.
@@ -617,6 +628,134 @@
                     options, new Set()
                 );
                 if (result) return result;
+            }
+            return null;
+        },
+
+        studioContextKey(zone) {
+            return STUDIO_CONTEXT_PREFIX + safeString(zone);
+        },
+
+        readStudioSearchContext(zone) {
+            const cached = this.readSharedValue(this.studioContextKey(zone));
+            if (!cached || cached.v !== 2 || cached.zone !== zone || !Array.isArray(cached.ids) || !cached.ids.length) return null;
+            if (Date.now() - Number(cached.updatedAt || 0) > STUDIO_CONTEXT_TTL) return null;
+            return cached;
+        },
+
+        writeStudioSearchContext(context) {
+            if (!context?.zone || !Array.isArray(context.ids) || !context.ids.length) return;
+            this.writeSharedValue(this.studioContextKey(context.zone), {
+                v: 2, zone: context.zone, ids: unique(context.ids.map(String)), studioUrl: context.studioUrl, updatedAt: Date.now()
+            });
+        },
+
+        async findMediaWithStudioTitle(details, options = {}) {
+            const studio = safeString(details?.pageMeta?.studio);
+            const title = safeString(details?.cleanTitle || details?.titlePart);
+            if (!studio || !title) return null;
+            // Data18's visible studio search serializes this as "studio + title"
+            // in its global result bar. Keep title validation on the original title.
+            return this._searchKeywordPages(`${studio} + ${title}`, [1], 1, 1, details, options, new Set());
+        },
+        async _getStudioSearchContext(studio) {
+            const zone = this._studioSlug(studio);
+            if (!zone) return null;
+            const cached = this.readStudioSearchContext(zone);
+            if (cached) return cached;
+            const studioUrl = `${DATA18_ORIGIN}/studios/${zone}/scenes`;
+            try {
+                const html = await this.fetchFromData18(studioUrl, {
+                    referer: `${DATA18_ORIGIN}/`,
+                    accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
+                });
+                // A studio page can embed several search handlers.  The former
+                // first-match lookup picked a related studio ID for Tushy, so its
+                // real "Party Girl" result was queried through the wrong scope.
+                const ids = unique([...String(html || '').matchAll(/studio=1(?:&zone=[^&"'\s]+)?&s=1&id=(\d+)/gi)]
+                    .map(match => match[1])).slice(0, 8);
+                if (!ids.length) return null;
+                const context = { zone, ids, studioUrl };
+                this.writeStudioSearchContext(context);
+                return context;
+            } catch (err) {
+                this.debug('studio search context failed', { studio, err: err?.message || err });
+                return null;
+            }
+        },
+
+        async findMediaInStudio(studio, details, options = {}) {
+            options.onProgress?.(`[\u5382\u724c P0] \u6b63\u5728\u8bfb\u53d6 ${studio} \u5382\u724c\u5185\u68c0\u7d22\u4fe1\u606f...`);
+            const context = await this._getStudioSearchContext(studio);
+            if (!context) return null;
+            const fullTitle = safeString(details.cleanTitle || details.titlePart || '');
+            const searchContexts = context.ids.map(id => ({ ...context, id }));
+            for (const searchTitle of this.getTitleSearchVariants(fullTitle)) {
+                const usingFallbackTitle = searchTitle !== fullTitle;
+                const variantDetails = usingFallbackTitle ? { ...details, cleanTitle: searchTitle } : details;
+                for (let index = 0; index < searchContexts.length; index++) {
+                    const scopedContext = searchContexts[index];
+                    const scopeLabel = searchContexts.length > 1 ? ` (\u5165\u53e3 ${index + 1}/${searchContexts.length})` : '';
+                    options.onProgress?.(usingFallbackTitle
+                        ? `[\u5382\u724c P0] ${studio} \u79fb\u9664\u5c3e\u90e8\u6807\u53f7\u540e\u68c0\u7d22${scopeLabel}...`
+                        : `[\u5382\u724c P0] ${studio} \u6b63\u5728\u6309\u5b8c\u6574\u6807\u9898\u68c0\u7d22${scopeLabel}...`);
+                    const result = await this._searchStudioTitle(scopedContext, searchTitle, variantDetails, options);
+                    if (result) {
+                        this.writeStudioSearchContext({ ...context, ids: [scopedContext.id, ...context.ids.filter(id => id !== scopedContext.id)] });
+                        return result;
+                    }
+                }
+            }
+            return null;
+        },
+
+        async _searchStudioTitle(context, title, details, options = {}) {
+            const key = this.normalizeTitle(title).replace(/\s+/g, '');
+            const key2 = this._encodeSearchKeyfull(title);
+            if (!key || !key2) return null;
+            const url = `${DATA18_ORIGIN}/sys/live.php?profile=1&live=1&studio=1&zone=${encodeURIComponent(context.zone)}&s=1&id=${encodeURIComponent(context.id)}&key=${encodeURIComponent(key)}&key2=${encodeURIComponent(key2)}`;
+            try {
+                const html = await this.fetchFromData18(url, {
+                    referer: context.studioUrl,
+                    accept: 'text/html, */*; q=0.01', ajax: true
+                });
+                if (!html || html.length < 50 || this._isAgeGatePage(html)) return null;
+                const pageMeta = details.pageMeta || {};
+                const expectedTitle = details.cleanTitle || details.titlePart || '';
+                // Within a studio scope, an exact-title movie card can bridge
+                // to a contained scene. Global search keeps excluding movies to
+                // avoid broad-result false positives.
+                const parsedResults = this.parseSearchResults(html, pageMeta)
+                    .filter(item => !item._isNameResult);
+                // Studio live-search markup differs from the global result cards
+                // for some networks. Merge its scene links so an exact result is
+                // still evaluated when .searchdivs is absent.
+                const sceneResults = [...new Map([...this._extractSceneLinks(html), ...parsedResults]
+                    .map(item => [item.sceneId, item])).values()];
+                if (!sceneResults.length) return null;
+                const ranked = this._scoreSearchResults(sceneResults, pageMeta)
+                    .map(item => ({ ...item, ...this._titleMatchInfo(item.text, expectedTitle) }))
+                    .filter(item => this._candidateMetadataAllows(item, pageMeta, item.kind))
+                    .sort((a, b) => (b.kind === 'exact') - (a.kind === 'exact') || b.score - a.score || b._metaScore - a._metaScore);
+                // A single result from Data18's studio-scoped lookup is safe to
+                // detail-validate even when its card text contains cast metadata.
+                // "Party Girl" is exactly this shape: one result, with the title
+                // followed by "Scene w/ Mazzy Grace, Mick Blue" in the card.
+                const candidates = ranked.length ? ranked.slice(0, 3)
+                    : (sceneResults.length === 1 ? [sceneResults[0]] : []);
+                const exactCount = ranked.filter(item => item.kind === 'exact').length;
+                for (const best of candidates) {
+                    options.onProgress?.('\u5382\u724c\u5185\u5df2\u627e\u5230\u5019\u9009\u8bb0\u5f55\uff0c\u6b63\u5728\u6838\u5bf9\u6807\u9898\u3001\u5382\u724c\u3001\u65e5\u671f\u548c\u6f14\u5458...');
+                    best._titleKind = best.kind || 'unknown';
+                    best._titleScore = best.score || 0;
+                    best._exactTitleCount = exactCount || (sceneResults.length === 1 ? 1 : 0);
+                    best._searchCandidateCount = sceneResults.length;
+                    best._requiresExactMeta = exactCount > 1;
+                    const result = await this._fetchDetailAndMedia(best, details, options);
+                    if (result) return result;
+                }
+            } catch (err) {
+                this.debug('studio title search failed', { context, title, err: err?.message || err });
             }
             return null;
         },
@@ -1204,9 +1343,11 @@
             const actorExact = actorOverlap.length > 0;
             const uniqueExactTitle = titleExact && Number(best._exactTitleCount || 0) === 1;
             const duplicateExactTitle = titleExact && Number(best._exactTitleCount || 0) > 1;
-            const metadataContradiction = (!!pageMeta.studio && !!d18Meta.studio && !studioExact)
-                || (Number.isFinite(dateDistance) && dateDistance > 1);
-            const exactAllowed = titleExact && !metadataContradiction
+            const studioContradiction = !!pageMeta.studio && !!d18Meta.studio && !studioExact;
+            // A single exact title is authoritative. PornDB and Data18 often use
+            // different release/catalogue dates; retain date+actor checks only
+            // when the exact title is duplicated.
+            const exactAllowed = titleExact && !studioContradiction
                 && (!duplicateExactTitle || ((studioExact || dateNear) && (!actorCheckAvailable || actorExact)));
             // Majority-title candidates are accepted only with all available
             // disambiguators: same studio, same/adjacent date, and actor overlap
@@ -1467,11 +1608,7 @@
             const directSceneImages = (mediaId
                 ? direct.images.filter(url => String(url).includes(`/${mediaId}.jpg`))
                 : direct.images.slice(0, 8)
-            ).filter(url => !this.isSceneThumbnailUrl(url));
-            if (typeof onPartial === 'function' && (direct.videos.length || directSceneImages.length)) {
-                onPartial({ mediaId, videoUrl: direct.videos[0] || '', images: this.sortImages(unique(directSceneImages)) });
-            }
-
+            );
             const currentPhotoId = this.extractCurrentPhotoId(html, detailUrl);
             const photoIds = this.extractPhotoIds(html, detailUrl);
             const movieId = this.extractMovieId(html);
@@ -1481,33 +1618,34 @@
             const ids = this.extractNetworkSiteIds(html);
             this.debug("network/site ids", ids);
 
+            // These are the same eight high-resolution preview URLs Data18
+            // supplies for the detail-page strip.  Render them directly through
+            // the existing referer-aware proxy instead of doing a separate probe.
             const bdnCandidates = [];
             if (ids.network_id && ids.site_id && mediaId) {
                 const photoCount = Math.min(this.extractPhotoCount(html) || IMAGE_PROBE_MAX, IMAGE_PROBE_MAX);
-                onProgress?.(`\u6b63\u5728\u7ec4\u88c5 ${photoCount} \u5f20\u9ad8\u6e05\u9884\u89c8\u56fe\u5730\u5740...`);
+                onProgress?.(`\u6b63\u5728\u7ec4\u88c5 ${photoCount} \u5f20\u9ad8\u6e05\u9884\u89c8\u56fe...`);
                 for (let i = 1; i <= photoCount; i++) {
-                    bdnCandidates.push(
-                        `https://bdn.dt18.com/${ids.network_id}/${ids.site_id}/${mediaId}/t${String(i).padStart(2, "0")}.jpg`
-                    );
+                    bdnCandidates.push(`https://bdn.dt18.com/${ids.network_id}/${ids.site_id}/${mediaId}/t${String(i).padStart(2, "0")}.jpg`);
                 }
             }
-
-            // Data18's extended BDN gallery is present in the detail HTML but
-            // responds with 403 when loaded from PornDB.  Verify and retain
-            // only the first stable preview strip instead of rendering broken
-            // cards for inaccessible images.
-            const bdnImages = bdnCandidates.length
-                ? await this.filterExistingImages(bdnCandidates, detailUrl)
-                : [];
+            const bdnImages = bdnCandidates;
             const scenePhotoImages = [];
             const interfaceImages = [];
+            const previewImages = bdnImages.length ? bdnImages : directSceneImages;
+            if (typeof onPartial === 'function' && (direct.videos.length || previewImages.length)) {
+                onPartial({ mediaId, videoUrl: direct.videos[0] || '', images: this.sortImages(unique(previewImages)) });
+            }
+            const hasDirectMedia = Boolean(direct.videos[0] || previewImages.length);
 
-            const interfaceVideo = mediaId
-                ? await this.fetchTrailerInterfaceVideo({ mediaId, currentPhotoId, detailUrl })
+            const interfaceVideo = mediaId && !direct.videos[0]
+                ? (onProgress?.('\u6b63\u5728\u8bfb\u53d6 Data18 \u9884\u544a\u7247...'), await this.fetchTrailerInterfaceVideo({ mediaId, currentPhotoId, detailUrl }))
                 : "";
 
-            const lazyUrls = this.extractLazyUrls(html, detailUrl);
-            const lazyMedia = await this.fetchLazyMedia(lazyUrls, detailUrl);
+            const lazyUrls = hasDirectMedia ? [] : this.extractLazyUrls(html, detailUrl);
+            const lazyMedia = lazyUrls.length
+                ? (onProgress?.('\u6b63\u5728\u8865\u5145 Data18 \u5a92\u4f53\u4fe1\u606f...'), await this.fetchLazyMedia(lazyUrls, detailUrl))
+                : { videos: [], images: [] };
 
             // Include CDN thumbnails whose media ID matches this scene
             const matchedDirectImages = mediaId
@@ -1518,8 +1656,12 @@
                 : [];
 
             const fullInterfaceImages = interfaceImages.filter(url => !this.isSceneThumbnailUrl(url));
-            const fullDirectImages = matchedDirectImages.filter(url => !this.isSceneThumbnailUrl(url));
-            const allImages = unique([...bdnImages, ...fullInterfaceImages, ...fullDirectImages]);
+            // Detail-page thumbnails remain the fallback when Data18 does not
+            // expose the eight BDN preview URLs for this particular scene.
+            const fullDirectImages = unique([...matchedDirectImages, ...directSceneImages]);
+            const allImages = bdnImages.length
+                ? bdnImages
+                : unique([...fullInterfaceImages, ...fullDirectImages]);
 
             const fallbackImages = allImages.length
                 ? []
@@ -2480,7 +2622,7 @@
                 });
                 const media = await this.collectMediaFromDetail(detailHtml, match.sourceUrl, match.data18SceneId, partial => {
                     if (partial && (partial.videoUrl || partial.images?.length)) this.renderMedia(panel, partial, true);
-                });
+                }, text => this.setStatus(panel, text));
                 if (!media.videoUrl && !media.images.length) return null;
                 const resolved = { ...media, sceneId: match.data18SceneId, sourceUrl: match.sourceUrl };
                 this.writeMediaCache(resolved);
